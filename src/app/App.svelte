@@ -8,6 +8,8 @@
     Download01Icon,
     FocusIcon,
     CherryIcon,
+    CopyLinkIcon,
+    Tick02Icon,
     FlowerIcon,
     Leaf01Icon,
     PlayIcon,
@@ -21,6 +23,7 @@
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, presets } from './params.svelte';
+  import { shareUrl, takeIncomingState } from './share';
   import Section from './components/Section.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -151,6 +154,23 @@
     studio?.setGrowth(value);
   }
 
+  let linkCopied = $state(false);
+  let linkTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl(params));
+    } catch {
+      // Clipboard access can be refused; the link is still in the address bar
+      // for anyone who wants to copy it by hand.
+      window.location.hash = shareUrl(params).split('#')[1] ?? '';
+      return;
+    }
+    linkCopied = true;
+    clearTimeout(linkTimer);
+    linkTimer = setTimeout(() => (linkCopied = false), 1600);
+  }
+
   async function screenshot() {
     if (!studio) return;
     const url = await studio.capture();
@@ -165,6 +185,11 @@
       unsupported = true;
       return;
     }
+
+    // A shared link wins over the default preset, and is consumed on arrival so
+    // that a reload does not undo whatever the visitor changed afterwards.
+    const shared = takeIncomingState();
+    if (shared) Object.assign(params, shared);
 
     const s = new TreeStudio(canvas!);
     studio = s;
@@ -189,7 +214,22 @@
     const observer = new ResizeObserver(() => s.resize());
     if (stage) observer.observe(stage);
 
+    // A link pasted into the address bar of an already-open tab changes the
+    // hash without reloading, and going back after copying a link should
+    // return you to what you were looking at.
+    const onHashChange = () => {
+      const next = takeIncomingState();
+      if (!next) return;
+      Object.assign(params, next);
+      axiomDraft = params.axiom;
+      rulesDraft = params.rules;
+      s.applyPalette(getPreset(params.presetId).palette);
+      doRebuild(true);
+    };
+    window.addEventListener('hashchange', onHashChange);
+
     return () => {
+      window.removeEventListener('hashchange', onHashChange);
       observer.disconnect();
       clearTimeout(skyTimer);
       s.dispose();
@@ -328,6 +368,15 @@
         </button>
         <button class="icon" onclick={screenshot} title="Save PNG" aria-label="Save PNG">
           <HugeiconsIcon icon={Download01Icon} size={16} strokeWidth={1.8} />
+        </button>
+        <button
+          class="icon"
+          class:done={linkCopied}
+          onclick={copyLink}
+          title="Copy a link to this tree"
+          aria-label="Copy a link to this tree"
+        >
+          <HugeiconsIcon icon={linkCopied ? Tick02Icon : CopyLinkIcon} size={16} strokeWidth={1.8} />
         </button>
         <span class="divider"></span>
         <button class="icon" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
@@ -576,6 +625,13 @@
 
   .readout .warn {
     color: #ffb057;
+  }
+
+  /* The copy-link button briefly becomes a tick. Confirming in place beats a
+     toast: the feedback appears exactly where the user is already looking. */
+  .transport .icon.done {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
   }
 
   /* -------------------------------------------------------- transport */

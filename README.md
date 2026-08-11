@@ -263,6 +263,24 @@ Drag to orbit, scroll to zoom. <kbd>R</kbd> redraws, <kbd>space</kbd> replays th
 growth animation. The buttons under the timeline redraw, replay, reframe the
 camera, and save a PNG.
 
+### Sharing
+
+The link button in the transport bar copies a URL that reproduces exactly what
+is on screen. What goes in it is the preset id plus only the fields that differ
+from that preset's defaults — an untouched Oak is fifteen characters, an Oak
+with a new seed and more wind is under eighty, and only someone who has actually
+rewritten the productions pays for carrying them.
+
+It is deliberately uncompressed. `CompressionStream` would shrink an edited
+grammar considerably, but it is asynchronous, and an async decode means the app
+cannot build its first tree until a promise settles. A long URL in the rare case
+beats a slower start in every case.
+
+Incoming links are treated as untrusted input: unknown keys are dropped rather
+than merged, values whose type does not match the default are ignored, and an
+unrecognised preset id rejects the whole token rather than silently falling back
+to a different tree.
+
 ### Live vs. redraw
 
 Only the controls marked ↻ re-derive the grammar; everything else applies
