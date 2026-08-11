@@ -35,7 +35,7 @@ const HORIZON_WARM = new Color(0xffb367);
 const HORIZON_COOL = new Color(0xa8bcd8);
 const GROUND_HAZE = new Color(0x5a4a38);
 
-const SUN_LOW = new Color(0xff6a1f);
+const SUN_LOW = new Color(0xff9a52);
 const SUN_HIGH = new Color(0xfff2e0);
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);

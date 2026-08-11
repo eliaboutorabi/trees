@@ -39,9 +39,9 @@ export function paramsFromPreset(id: string): AppParams {
     wind: 0.35 * p.windiness,
     windSpeed: 1,
     windDirection: 35,
-    sunElevation: 9,
+    sunElevation: 17,
     sunAzimuth: 140,
-    haze: 0.42,
+    haze: 0.26,
     exposure: 1,
 
     bloom: 0.5,

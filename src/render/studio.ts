@@ -370,7 +370,7 @@ export class TreeStudio {
     this.sky.update(settings);
     this.scene.background = this.sky.texture;
     this.scene.environment = this.sky.texture;
-    this.scene.environmentIntensity = 0.42;
+    this.scene.environmentIntensity = 0.85;
 
     sunDirection(settings, this.sunDir);
     sunColorFor(settings, this.sunTint);
@@ -388,9 +388,9 @@ export class TreeStudio {
     // Tie the haze and ground horizon to the sky so nothing looks pasted on.
     const horizon = this.sunTint.clone().lerp(new Color(0xcfd8e6), 0.26).multiplyScalar(0.8);
     this.fog.color.copy(horizon);
-    this.fog.density = 0.004 + params.haze * 0.013;
+    this.fog.density = 0.0025 + params.haze * 0.009;
     this.groundUniforms.horizon.value.copy(horizon);
-    this.fill.intensity = 0.25 + params.haze * 0.3;
+    this.fill.intensity = 0.55 + params.haze * 0.35;
   }
 
   // --------------------------------------------------------------- growth

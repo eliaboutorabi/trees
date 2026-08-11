@@ -142,7 +142,11 @@ function buildTerrainGeometry(opts: LandscapeOptions): BufferGeometry {
     for (let j = 0; j < sectors; j++) {
       const a = i * (sectors + 1) + j;
       const b = a + sectors + 1;
-      indices.push(a, b, a + 1, a + 1, b, b + 1);
+      // Counter-clockwise seen from above. Radius grows with `i` and angle with
+      // `j`, so (a, b, a+1) spans +x then +z and its normal is x̂ × ẑ = -ŷ —
+      // the whole terrain faces down, and all you see is the sky showing
+      // through where the ground should be.
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
 
@@ -253,7 +257,7 @@ export function createLandscape(options: Partial<LandscapeOptions> = {}): Landsc
   // than as objects resting on it.
   const rockGeo = new IcosahedronGeometry(1, 0);
   const rockMat = new MeshStandardNodeMaterial();
-  rockMat.color = new Color(0x473d31);
+  rockMat.color = new Color(0x5d574c);
   rockMat.roughness = 0.98;
   const rocks = scatter(rockGeo, rockMat, Math.round(90 * opts.detail), 8, 70, [0.1, 0.34], opts, 11, 0.62, true);
   group.add(rocks.mesh);
@@ -261,7 +265,7 @@ export function createLandscape(options: Partial<LandscapeOptions> = {}): Landsc
   // Grass: the near-field parallax cue, so it is densest where the camera is.
   const grassGeo = tuftGeometry();
   const grassMat = new MeshStandardNodeMaterial();
-  grassMat.color = new Color(0x6f6539);
+  grassMat.color = new Color(0x5f6733);
   grassMat.roughness = 1;
   const grass = scatter(grassGeo, grassMat, Math.round(9000 * opts.detail), 1.5, 22, [0.16, 0.46], opts, 29);
   group.add(grass.mesh);
@@ -269,7 +273,7 @@ export function createLandscape(options: Partial<LandscapeOptions> = {}): Landsc
   // Mid-field shrubs, for parallax between the grass and the horizon.
   const shrubGeo = tuftGeometry();
   const shrubMat = new MeshStandardNodeMaterial();
-  shrubMat.color = new Color(0x3d4626);
+  shrubMat.color = new Color(0x36421f);
   shrubMat.roughness = 1;
   const shrubs = scatter(shrubGeo, shrubMat, Math.round(420 * opts.detail), 12, 62, [0.9, 2.4], opts, 71, 0, true);
   group.add(shrubs.mesh);
@@ -279,7 +283,7 @@ export function createLandscape(options: Partial<LandscapeOptions> = {}): Landsc
   // cones instead, and the fog cannot rescue them once they are that big.
   const distantGeo = new ConeGeometry(0.85, 3.2, 5, 1);
   const distantMat = new MeshStandardNodeMaterial();
-  distantMat.color = new Color(0x2f3626);
+  distantMat.color = new Color(0x333c26);
   distantMat.roughness = 1;
   const distant = scatter(distantGeo, distantMat, Math.round(900 * opts.detail), 62, 140, [0.6, 1.7], opts, 53, -1.55);
   group.add(distant.mesh);
