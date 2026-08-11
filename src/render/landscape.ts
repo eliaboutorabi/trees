@@ -523,7 +523,12 @@ export function createLandscape(
       // Small and dense rather than large and sparse. At this camera distance a
       // tuft you can pick out individually reads as a weed; the field only
       // reads as grass once the clumps overlap and merge into texture.
-      count: Math.round(26000 * opts.detail),
+      //
+      // The count is high because profiling says it is nearly free: hiding
+      // every mesh in the scene does not measurably change the frame, which is
+      // fill-rate bound in post rather than geometry bound. Density is the one
+      // lever here that buys realism without buying cost.
+      count: Math.round(44000 * opts.detail),
       minRadius: 1.2,
       maxRadius: 22,
       scale: [0.15, 0.34],
@@ -539,7 +544,7 @@ export function createLandscape(
   const tussockMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.4, rootShade: 0.22, fadeStart: 45, fadeEnd: 85 }));
   group.add(
     scatter(tussockGeo, tussockMat, opts, {
-      count: Math.round(2600 * opts.detail),
+      count: Math.round(4200 * opts.detail),
       minRadius: 3,
       maxRadius: 55,
       scale: [0.28, 0.7],

@@ -192,6 +192,32 @@ Two rendering constraints worth knowing before you add to that list:
   mistake for bad art direction. Only the distant hills survive, because the
   parts that rise above eye level present their backfaces to the camera.
 
+### Two ways frame-time measurement lies
+
+Both of these produced confident, wrong conclusions here before being caught.
+
+**The vsync floor.** With vsync on, the median frame interval cannot go below
+one refresh period, so anything already inside budget measures as exactly
+16.67ms. Removing the sky, the shadow map and then *every mesh in the scene* all
+read 16.6-16.8ms — which looks like "the scene pass costs 16.6ms" and actually
+means "the scene pass is free and we are hitting vsync". The fix is to push the
+load above the floor before differencing: pinning the pixel ratio to 3 makes
+every pass 2.25x more expensive and the differences reappear. Timestamp queries
+would be better, but `resolveTimestampsAsync` returns nothing unless the browser
+exposes the WebGPU `timestamp-query` feature, which it often does not.
+
+**First-sample warm-up.** The first configuration in a sequence measures slow —
+pipeline compilation, cache warming, the resize that preceded it. Reading a
+shadow-map probe top to bottom said 2048 cost 2.5ms more than 1024. Running the
+same sizes alternating A/B/A/B/A said 2048 gives 22.4 / 19.9 / 20.5 and 1024
+gives 19.9 / 20.4 — no difference at all, with the entire effect living in the
+first sample. Always alternate, and always re-measure the starting
+configuration at the end.
+
+The practical upshot for this scene: geometry is free, the shadow map size does
+not matter, and post-processing is the only cost worth attacking. Grass density
+is set high on exactly that evidence.
+
 ### The post chain was 40% of the frame
 
 Profiling each effect by toggling it and watching the median frame interval, at
