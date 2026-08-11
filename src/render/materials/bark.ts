@@ -5,7 +5,7 @@ import { growthPosition, treeParams, vec3Attribute, type TreeUniforms } from './
 
 export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
-  material.positionNode = growthPosition(u, { thickenBase: 0.34, flutter: false });
+  material.positionNode = growthPosition(u, { thickenBase: 0.34, flutter: false, radial: u.radiusScale });
 
   const st = uv();
   const center = vec3Attribute('aCenter');
@@ -54,7 +54,9 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const withLenticels = mix(withMoss, u.barkDark, lenticel);
 
   // Branches buried inside the canopy sit in ambient shade.
-  material.colorNode = withLenticels.mul(occlusion.mul(u.occlusionStrength).mul(0.55).oneMinus());
+  material.colorNode = withLenticels.mul(
+    occlusion.mul(u.occlusionStrength).mul(u.leafCull.mul(0.7).add(0.3)).mul(0.55).oneMinus(),
+  );
   material.roughnessNode = float(0.98).sub(height.mul(0.22)).sub(twigness.mul(0.18));
   material.metalnessNode = float(0);
   // The slider is 0–1; bark needs a good deal more relief than that to read.

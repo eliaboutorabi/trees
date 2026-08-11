@@ -11,6 +11,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@hugeicons/core-free-icons": "^4.2.3",
+    "@hugeicons/svelte": "^1.1.4",
     "three": "^0.185.1"
   },
   "devDependencies": {

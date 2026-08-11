@@ -13,12 +13,20 @@ import { growthPosition, treeParams, type TreeUniforms } from './shared';
 export function createLeafMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   material.side = DoubleSide;
-  material.positionNode = growthPosition(u, { thickenBase: 0.5, flutter: true });
-
   const st = uv();
   const { seed: rawSeed, occlusion } = treeParams();
   const isBlossom = step(1.5, rawSeed);
   const seed = rawSeed.fract();
+
+  // Thinning happens on the GPU: a leaf whose hash falls above the density
+  // threshold collapses to a point. The hash is decorrelated from `seed` so
+  // thinning does not also bias the colour and flutter variation.
+  const keep = step(rawSeed.mul(97.31).fract(), u.leafCull);
+  material.positionNode = growthPosition(u, {
+    thickenBase: 0.5,
+    flutter: true,
+    radial: u.leafSize.mul(keep),
+  });
 
   // Veins: a bright midrib plus a fan of laterals.
   const offCentre = st.x.sub(0.5).abs();
@@ -41,7 +49,9 @@ export function createLeafMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
 
   // The inside of a canopy sees almost no sky. Without this the whole crown
   // reads as one flat green mass however many leaves it has.
-  const shade = occlusion.mul(u.occlusionStrength);
+  // Occlusion is baked at full density, so thinning the canopy has to lighten
+  // it too or a sparse crown stays as dark as a full one.
+  const shade = occlusion.mul(u.occlusionStrength).mul(u.leafCull.mul(0.7).add(0.3));
   material.colorNode = withVeins.mul(shade.mul(0.78).oneMinus());
   // Leaves are waxy — a little sheen picks the outer canopy out against the sky.
   material.roughnessNode = float(0.52).sub(veins.mul(0.1)).add(shade.mul(0.3));

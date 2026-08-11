@@ -3,11 +3,11 @@
  * between L-system parameters and what ends up on screen.
  */
 import {
-  CircleGeometry,
   Color,
   DirectionalLight,
   FogExp2,
   HemisphereLight,
+  Matrix4,
   Mesh,
   MathUtils,
   PCFSoftShadowMap,
@@ -20,7 +20,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTree, getPreset, type TreeBuild } from '../lsystem';
 import type { Palette } from '../lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
-import { createGroundMaterial } from './materials/ground';
+import { createLandscape } from './landscape';
 import { createLeafMaterial } from './materials/leaf';
 import { createTreeUniforms } from './materials/shared';
 import { createPostPipeline } from './post';
@@ -35,15 +35,13 @@ export interface StructureParams {
   angle: number;
   step: number;
   shrink: number;
-  trunkRadius: number;
   tropism: number;
   pipeExponent: number;
   seed: number;
+  /** Baked into the mesh as a baseline; the slider then rescales it live. */
+  trunkRadius: number;
   leafScale: number;
   leafShape: 0 | 1 | 2 | 3;
-  leafDensity: number;
-  /** Also drives the silhouette jitter baked into the geometry. */
-  barkDetail: number;
 }
 
 /** Uniform-only changes — applied instantly, no rebuild. */
@@ -55,13 +53,29 @@ export interface LookParams {
   translucency: number;
   barkDetail: number;
   moss: number;
+  /** Rescaled against the baked mesh rather than rebuilt. */
+  trunkRadius: number;
+  leafScale: number;
+  /** Culled on the GPU rather than rebuilt. */
+  leafDensity: number;
   exposure: number;
   bloom: number;
   depthOfField: boolean;
   grain: boolean;
   antialias: boolean;
   autoRotate: boolean;
+  /** 'auto' scales render resolution to hold the frame budget. */
+  quality: Quality;
 }
+
+export type Quality = 'auto' | 'low' | 'medium' | 'high';
+
+/** Upper bound on device pixel ratio for each fixed quality step. */
+const QUALITY_SCALE: Record<Exclude<Quality, 'auto'>, number> = {
+  low: 1,
+  medium: 1.5,
+  high: 2,
+};
 
 /** Re-bakes the sky texture, so it is worth debouncing. */
 export interface SkyParams {
@@ -81,9 +95,19 @@ export interface StudioStats {
   buildMs: number;
   fps: number;
   truncated: boolean;
+  /** Device pixel ratio currently being rendered at. */
+  renderScale: number;
+  /** True while adaptive scaling is driving `renderScale`. */
+  adaptive: boolean;
 }
 
 const MAX_LEAVES = 26_000;
+
+// Scratch objects for the shadow fit, which runs whenever the sun moves.
+const _v1 = new Vector3();
+const _v2 = new Vector3();
+const _m1 = new Matrix4();
+const UP_AXIS = new Vector3(0, 1, 0);
 
 export class TreeStudio {
   readonly scene = new Scene();
@@ -97,8 +121,8 @@ export class TreeStudio {
   private readonly sky = new ProceduralSky();
   private readonly sun = new DirectionalLight(0xffd7ab, 3.4);
   private readonly fill = new HemisphereLight(0xbdd4ff, 0x6b5836, 0.35);
-  private readonly ground: Mesh;
-  private readonly groundUniforms: ReturnType<typeof createGroundMaterial>['uniforms'];
+  private readonly landscape = createLandscape();
+  private readonly groundUniforms = this.landscape.uniforms;
 
   private branchMesh: Mesh | null = null;
   private leafMesh: Mesh | null = null;
@@ -111,11 +135,31 @@ export class TreeStudio {
 
   private treeHeight = 8;
   private treeRadius = 3;
+  private bakedTrunkRadius = 1;
+  private bakedLeafScale = 1;
   private growth = 0;
   private growthTarget = 1;
   private growthSpeed = 0.32;
   private lastTime = 0;
   private frameTimes: number[] = [];
+
+  // Adaptive resolution. Profiling showed this scene is almost entirely
+  // fill-rate bound — hiding every leaf, branch and shadow changes the frame
+  // time not at all, while dropping pixel ratio takes it straight to vsync. So
+  // resolution, not geometry, is the dial worth turning automatically.
+  private quality: Quality = 'auto';
+  private renderScale = 2;
+  private maxScale = 2;
+  private readonly adaptiveSamples: number[] = [];
+  private adaptiveCooldown = 0;
+  private adaptiveStable = 0;
+  /** Evaluations of calm before probing for more resolution; backs off on failure. */
+  private adaptiveProbeAfter = 8;
+  /** Scale a probe last failed at, so we stop pushing into a known wall. */
+  private adaptiveCeiling = Infinity;
+  /** Display refresh rate, measured — 60Hz is not a safe assumption. */
+  private refreshHz = 60;
+  private readonly refreshSamples: number[] = [];
   private pendingCapture: ((url: string) => void) | null = null;
   private disposed = false;
 
@@ -128,6 +172,8 @@ export class TreeStudio {
     buildMs: 0,
     fps: 0,
     truncated: false,
+    renderScale: 1,
+    adaptive: true,
   };
 
   onStats: ((stats: StudioStats) => void) | null = null;
@@ -136,12 +182,7 @@ export class TreeStudio {
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.scene.fog = this.fog;
 
-    const g = createGroundMaterial();
-    this.groundUniforms = g.uniforms;
-    this.ground = new Mesh(new CircleGeometry(90, 96), g.material);
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.receiveShadow = true;
-    this.scene.add(this.ground);
+    this.scene.add(this.landscape.group);
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -154,7 +195,9 @@ export class TreeStudio {
 
   async init(): Promise<void> {
     this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, alpha: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.maxScale = Math.min(window.devicePixelRatio, 2);
+    this.renderScale = this.maxScale;
+    this.renderer.setPixelRatio(this.renderScale);
     this.renderer.toneMapping = AgXToneMapping;
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
@@ -207,10 +250,13 @@ export class TreeStudio {
 
     const geo = buildTreeGeometry(build.skeleton, {
       leafShape: params.leafShape,
-      bark: params.barkDetail,
       maxLeaves: MAX_LEAVES,
-      leafDensity: params.leafDensity,
     });
+
+    // Remember what the mesh was baked at, so the live sliders can express
+    // themselves as a ratio against it instead of forcing a rebuild.
+    this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
+    this.bakedLeafScale = Math.max(1e-4, params.leafScale);
 
     this.disposeMeshes();
 
@@ -228,7 +274,9 @@ export class TreeStudio {
 
     this.treeHeight = Math.max(1, build.skeleton.height);
     this.treeRadius = Math.max(0.5, build.skeleton.radiusXZ);
-    this.updateShadowVolume(Math.max(this.treeRadius, this.treeHeight * 0.6));
+    this.updateShadowVolume();
+    // Different tree, possibly different cost — let the controller re-learn.
+    this.resetAdaptive();
 
     this.stats = {
       ...this.stats,
@@ -294,6 +342,9 @@ export class TreeStudio {
     u.translucency.value = params.translucency;
     u.barkBump.value = params.barkDetail;
     u.mossAmount.value = params.moss;
+    u.radiusScale.value = params.trunkRadius / this.bakedTrunkRadius;
+    u.leafSize.value = params.leafScale / this.bakedLeafScale;
+    u.leafCull.value = params.leafDensity;
 
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = params.exposure;
@@ -306,6 +357,7 @@ export class TreeStudio {
       antialias: params.antialias,
     });
     this.controls.autoRotate = params.autoRotate;
+    this.applyQuality(params.quality);
   }
 
   applySky(params: SkyParams): void {
@@ -323,8 +375,9 @@ export class TreeStudio {
     sunDirection(settings, this.sunDir);
     sunColorFor(settings, this.sunTint);
 
-    this.sun.position.copy(this.sunDir).multiplyScalar(45);
-    this.sun.target.position.set(0, this.treeHeight * 0.4, 0);
+    // Keep the shadow map wrapped around the new light direction; a low sun
+    // throws a much longer shadow than a high one.
+    this.updateShadowVolume();
     this.sun.color.copy(this.sunTint);
     // A sun near the horizon travels through more atmosphere, so it dims.
     this.sun.intensity = 4.2 * MathUtils.lerp(0.45, 1, Math.min(1, params.sunElevation / 26)) * (1 - params.haze * 0.35);
@@ -403,26 +456,198 @@ export class TreeStudio {
       resolve(this.canvas.toDataURL('image/png'));
     }
 
+    this.updateAdaptiveResolution(dt);
+
     this.frameTimes.push(dt);
     if (this.frameTimes.length > 45) {
       const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
       this.frameTimes.length = 0;
-      this.stats = { ...this.stats, fps: Math.round(1 / Math.max(1e-4, avg)) };
+      this.stats = {
+        ...this.stats,
+        fps: Math.round(1 / Math.max(1e-4, avg)),
+        renderScale: this.renderScale,
+        adaptive: this.quality === 'auto',
+      };
       this.onStats?.(this.stats);
     }
   }
 
-  private updateShadowVolume(radius: number): void {
-    const cam = this.sun.shadow.camera;
-    const r = Math.max(4, radius * 1.35);
-    cam.left = -r;
-    cam.right = r;
-    cam.top = r;
-    cam.bottom = -r;
-    cam.far = Math.max(60, r * 6);
+  /**
+   * Nudge render resolution to hold the frame budget.
+   *
+   * Starts at full resolution and only ever falls back, because vsync makes
+   * headroom invisible: a GPU with cycles to spare still reports 16.7ms, so
+   * "am I comfortably inside budget?" is unanswerable. Instead it drops when it
+   * misses, then occasionally probes back upward — if the probe misses it
+   * simply falls again, which costs one evaluation window.
+   *
+   * Judges by dropped-frame rate rather than average or median frame time.
+   * Vsync quantises frame time to multiples of the refresh interval, so a
+   * struggling scene does not show up as a gradually rising number — it shows
+   * up as a mix of 16.7ms frames and 33.3ms ones. The median just reports 16.7
+   * and looks perfectly healthy while a quarter of frames are being dropped;
+   * the mean is skewed by any one-off compile hitch. The fraction of frames
+   * that missed vsync is the honest measure of "are we holding 60".
+   */
+  /**
+   * Estimate the refresh interval from the *fastest* frames seen. A frame can
+   * always be slower than the display, never faster, so the low percentile of
+   * observed intervals is the refresh rate.
+   */
+  private measureRefresh(dt: number): void {
+    if (this.refreshSamples.length >= 90) return;
+    this.refreshSamples.push(dt * 1000);
+    if (this.refreshSamples.length < 90) return;
+    const sorted = [...this.refreshSamples].sort((a, b) => a - b);
+    const fastest = sorted[Math.floor(sorted.length * 0.1)];
+    this.refreshHz = MathUtils.clamp(Math.round(1000 / Math.max(1, fastest)), 30, 240);
+  }
+
+  /** Forget what we learned about this machine — the workload just changed. */
+  private resetAdaptive(): void {
+    this.adaptiveSamples.length = 0;
+    this.adaptiveCooldown = 0;
+    this.adaptiveStable = 0;
+    this.adaptiveProbeAfter = 8;
+    this.adaptiveCeiling = Infinity;
+  }
+
+  private updateAdaptiveResolution(dt: number): void {
+    this.measureRefresh(dt);
+    if (this.quality !== 'auto') return;
+    if (this.adaptiveCooldown > 0) {
+      this.adaptiveCooldown--;
+      return;
+    }
+
+    this.adaptiveSamples.push(dt * 1000);
+    if (this.adaptiveSamples.length < 45) return;
+
+    // Anything past 1.4 refresh intervals missed its vsync deadline.
+    const missThreshold = (1000 / this.refreshHz) * 1.4;
+    let missed = 0;
+    for (const ms of this.adaptiveSamples) if (ms > missThreshold) missed++;
+    const dropRate = missed / this.adaptiveSamples.length;
+    this.adaptiveSamples.length = 0;
+
+    let next = this.renderScale;
+
+    if (dropRate > 0.1) {
+      // If this was the frame right after a probe, we now know where the wall
+      // is; wait considerably longer before trying again.
+      this.adaptiveCeiling = Math.min(this.adaptiveCeiling, this.renderScale);
+      this.adaptiveProbeAfter = Math.min(64, this.adaptiveProbeAfter * 2);
+      next = Math.max(0.75, this.renderScale - 0.25);
+      this.adaptiveStable = 0;
+    } else if (dropRate > 0.02) {
+      // Holding, but not comfortably — stay put rather than probe upward.
+      this.adaptiveStable = 0;
+    } else if (
+      this.renderScale < this.maxScale &&
+      this.renderScale + 0.25 < this.adaptiveCeiling &&
+      ++this.adaptiveStable >= this.adaptiveProbeAfter
+    ) {
+      // Held budget for a long stretch — try for more resolution.
+      next = Math.min(this.maxScale, this.renderScale + 0.25);
+      this.adaptiveStable = 0;
+    }
+
+    if (next !== this.renderScale) {
+      this.renderScale = next;
+      this.renderer.setPixelRatio(next);
+      this.resize();
+      // Resizing costs a frame or two; do not measure those.
+      this.adaptiveCooldown = 30;
+    }
+  }
+
+  private applyQuality(quality: Quality): void {
+    if (this.quality === quality) return;
+    this.quality = quality;
+    this.resetAdaptive();
+    if (quality !== 'auto') {
+      this.renderScale = Math.min(this.maxScale, QUALITY_SCALE[quality]);
+      this.renderer.setPixelRatio(this.renderScale);
+      this.resize();
+    }
+    this.stats = { ...this.stats, renderScale: this.renderScale, adaptive: quality === 'auto' };
+    this.onStats?.(this.stats);
+  }
+
+  /**
+   * Fit the shadow camera to the tree *and* the shadow it throws on the ground.
+   *
+   * Sizing it to the tree alone is what makes low-sun shadows look unrelated to
+   * the sun: at 9° elevation a 7-unit tree casts a 44-unit shadow, so all but
+   * the first few units fall outside the map and simply vanish. The fix is to
+   * project the tree's bounds down the light direction onto the ground, then
+   * fit the box around the union — measured in the light's own space, not the
+   * world's.
+   */
+  private updateShadowVolume(): void {
+    const light = this.sun;
+    const cam = light.shadow.camera;
+
+    const h = Math.max(1, this.treeHeight);
+    const r = Math.max(0.5, this.treeRadius);
+
+    // Aim the light at the middle of the tree, from far enough out that the
+    // whole subject sits comfortably in front of the near plane.
+    const focus = _v1.set(0, h * 0.45, 0);
+    const distance = Math.max(30, h * 4 + r * 2);
+    light.position.copy(this.sunDir).multiplyScalar(distance).add(focus);
+    light.target.position.copy(focus);
+    light.target.updateMatrixWorld();
+    light.updateMatrixWorld();
+
+    // Corners of the tree's bounds, plus where each slides to on the ground.
+    const points: Vector3[] = [];
+    for (let i = 0; i < 8; i++) {
+      const x = (i & 1 ? r : -r) * 1.1;
+      const z = (i & 2 ? r : -r) * 1.1;
+      const y = i & 4 ? h * 1.05 : 0;
+      points.push(new Vector3(x, y, z));
+    }
+    // Shadows only travel a sane distance; at grazing sun the footprint would
+    // otherwise run to the horizon and blur the map away to nothing.
+    const rise = Math.max(0.12, this.sunDir.y);
+    for (let i = points.length - 1; i >= 0; i--) {
+      const p = points[i];
+      const travel = Math.min(p.y / rise, h * 3.5);
+      points.push(new Vector3(p.x - this.sunDir.x * travel, p.y - rise * travel, p.z - this.sunDir.z * travel));
+    }
+
+    // Measure the union in light space. The shadow camera's own matrix is not
+    // usable here — three only points it at the light target during rendering,
+    // so reading it now gives a stale basis and the box ends up fitted to the
+    // wrong direction. Build the same view matrix three will build.
+    _m1.lookAt(light.position, focus, UP_AXIS).setPosition(light.position).invert();
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const p of points) {
+      _v2.copy(p).applyMatrix4(_m1);
+      minX = Math.min(minX, _v2.x);
+      maxX = Math.max(maxX, _v2.x);
+      minY = Math.min(minY, _v2.y);
+      maxY = Math.max(maxY, _v2.y);
+      // Light space looks down -z, so distance from the light is -z.
+      minZ = Math.min(minZ, -_v2.z);
+      maxZ = Math.max(maxZ, -_v2.z);
+    }
+
+    const pad = Math.max(0.5, h * 0.06);
+    cam.left = minX - pad;
+    cam.right = maxX + pad;
+    cam.bottom = minY - pad;
+    cam.top = maxY + pad;
+    cam.near = Math.max(0.1, minZ - pad);
+    cam.far = maxZ + pad;
     cam.updateProjectionMatrix();
-    this.sun.target.position.set(0, this.treeHeight * 0.4, 0);
-    this.sun.target.updateMatrixWorld();
   }
 
   private disposeMeshes(): void {
@@ -444,7 +669,7 @@ export class TreeStudio {
     this.disposeMeshes();
     this.barkMaterial.dispose();
     this.leafMaterial.dispose();
-    this.ground.geometry.dispose();
+    this.landscape.dispose();
     this.sky.dispose();
     this.post?.dispose();
     this.controls?.dispose();

@@ -2,28 +2,31 @@
  * Turns a branch skeleton into two draw calls: one tube mesh for the wood and
  * one merged mesh for the foliage.
  *
- * Both meshes carry the same four custom attributes, so a single TSL growth
- * program animates them:
+ * Both meshes carry the same custom attributes, so a single TSL growth program
+ * animates them:
  *
  *   aOrigin  the point this vertex sprouts from (previous ring centre, or the
  *            leaf's anchor) — vertices start collapsed here
  *   aCenter  the pivot the vertex finally orbits (its own ring centre)
- *   aBirth   normalised distance from the root, so growth sweeps outward
- *   aFlex    how much wind moves this vertex
+ *   aParams  (birth, flex, seed, occlusion), packed into one vec4 because
+ *            WebGPU only guarantees 8 vertex buffers
  */
 import { BufferAttribute, BufferGeometry, Quaternion, Vector3 } from 'three';
 import type { LeafPlacement, Skeleton } from '../lsystem/turtle';
 import { CanopyOcclusion } from './occlusion';
 
 export interface TreeGeometryOptions {
-  /** 0 broad · 1 needle · 2 blossom. */
+  /** 0 broad · 1 needle · 2 blossom · 3 lance. */
   leafShape: 0 | 1 | 2 | 3;
-  /** Irregularity of the branch silhouette, 0–1. */
-  bark: number;
   maxLeaves: number;
-  /** Fraction of leaves to keep, 0–1 (the foliage-density slider). */
-  leafDensity: number;
 }
+
+/**
+ * Silhouette irregularity is baked in at a fixed amount. Exposing it as a
+ * slider would mean a rebuild on every drag, and the same look is available
+ * live through the bark-relief shading instead.
+ */
+const SILHOUETTE_WOBBLE = 0.55;
 
 export interface TreeGeometryResult {
   branches: BufferGeometry;
@@ -121,7 +124,7 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   const kept = selectLeaves(skel, opts);
   const field = buildOcclusionField(skel, kept, template, blossomTpl);
 
-  const branches = buildBranches(skel, opts, field);
+  const branches = buildBranches(skel, field);
   const foliage = buildFoliage(skel, kept, template, blossomTpl, field);
 
   return {
@@ -162,8 +165,7 @@ function templateArea(tpl: LeafTemplate): number {
 function selectLeaves(skel: Skeleton, opts: TreeGeometryOptions): LeafPlacement[] {
   const all = skel.leaves;
   if (all.length === 0) return [];
-  const density = Math.max(0, Math.min(1, opts.leafDensity));
-  const wanted = Math.min(opts.maxLeaves, Math.floor(all.length * density));
+  const wanted = Math.min(opts.maxLeaves, all.length);
   if (wanted <= 0) return [];
 
   const stride = all.length / wanted;
@@ -206,7 +208,7 @@ function buildOcclusionField(
 
 // ---------------------------------------------------------------- branches
 
-function buildBranches(skel: Skeleton, opts: TreeGeometryOptions, field: CanopyOcclusion): { buf: Buffers } {
+function buildBranches(skel: Skeleton, field: CanopyOcclusion): { buf: Buffers } {
   const buf = newBuffers();
   const { pos, parent, radius, arc, count } = skel;
   if (count === 0) return { buf };
@@ -334,7 +336,7 @@ function buildBranches(skel: Skeleton, opts: TreeGeometryOptions, field: CanopyO
         );
 
         // Nibble the silhouette so branches are not perfect cylinders.
-        const rr = r * (1 + opts.bark * 0.13 * silhouetteWobble(strandSeed * 0.137, a, t));
+        const rr = r * (1 + SILHOUETTE_WOBBLE * 0.13 * silhouetteWobble(strandSeed * 0.137, a, t));
 
         vNormal.copy(dir).addScaledVector(tangent, -slope).normalize();
 

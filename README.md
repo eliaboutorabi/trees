@@ -27,6 +27,8 @@ Needs a WebGPU-capable browser (recent Chrome, Edge or Safari).
 - **Baked canopy occlusion.** Leaf area is splatted into a voxel grid and
   Beer–Lambert gives each leaf its sky visibility. Without it a canopy reads as
   one flat green mass however many leaves you throw at it.
+- **Most controls are live.** Only the ones that change the derived word force a
+  rebuild, and those wait for the Redraw button — see below.
 - **Procedural everything.** Bark furrows, leaf blades, sky and ground are all
   generated — there is not a single texture file in the project.
 - **Golden-hour lighting.** An analytic sky doubles as the environment map, so
@@ -157,5 +159,24 @@ Two rendering constraints worth knowing before you add to that list:
 
 ## Controls
 
-Drag to orbit, scroll to zoom, space to regrow. The buttons under the timeline
-regrow, reframe the camera, and save a PNG.
+Drag to orbit, scroll to zoom. <kbd>R</kbd> redraws, <kbd>space</kbd> replays the
+growth animation. The buttons under the timeline redraw, replay, reframe the
+camera, and save a PNG.
+
+### Live vs. redraw
+
+Only the controls marked ↻ re-derive the grammar; everything else applies
+immediately to the mesh already on screen. Changing one of the marked controls
+lights up the **Redraw** button rather than rebuilding as you drag.
+
+| Live | How |
+| --- | --- |
+| Trunk radius, leaf size | Vertices are rescaled about their pivot by a uniform ratio against what the mesh was baked at |
+| Foliage density | Leaves whose hash exceeds the threshold collapse to a point in the vertex shader |
+| Bark relief, moss, autumn, translucency | Shading only |
+| Wind, sun, haze, exposure, bloom, DOF, grain | Shading and post only |
+| **Redraw needed** | |
+| Generations, branch angle, internode length, contraction, tropism, taper, seed, leaf shape, axiom and productions | Change the derived word or the leaf template |
+
+Sky changes rebake a 1024×512 environment texture, so they are throttled rather
+than run per frame.

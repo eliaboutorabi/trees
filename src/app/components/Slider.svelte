@@ -7,9 +7,11 @@
     step?: number;
     hint?: string;
     format?: (v: number) => string;
+    /** Marks a control that only takes effect on the next redraw. */
+    needsRedraw?: boolean;
   }
 
-  let { label, value = $bindable(), min, max, step = 0.01, hint, format }: Props = $props();
+  let { label, value = $bindable(), min, max, step = 0.01, hint, format, needsRedraw = false }: Props = $props();
 
   const shown = $derived(format ? format(value) : value.toFixed(step >= 1 ? 0 : 2));
   const fill = $derived(((value - min) / (max - min)) * 100);
@@ -17,7 +19,9 @@
 
 <label class="slider" title={hint ?? label}>
   <span class="slider__head">
-    <span class="slider__label">{label}</span>
+    <span class="slider__label">
+      {label}{#if needsRedraw}<span class="mark" title="Takes effect on redraw">↻</span>{/if}
+    </span>
     <span class="slider__value">{shown}</span>
   </span>
   <input
@@ -49,6 +53,12 @@
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     color: var(--ink-dim);
+  }
+
+  .mark {
+    margin-left: 0.3em;
+    font-size: 0.9em;
+    opacity: 0.5;
   }
 
   .slider__value {

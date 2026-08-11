@@ -94,43 +94,53 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
   {
     id: 'willow',
     name: 'Willow',
-    blurb: 'Weeping curtains of thin trailing shoots',
+    blurb: 'Broad dome hung with long trailing shoots',
     axiom: '!(1)A(1)',
-    rules: `# On the very last step there is no generation left to expand a V into
-# shoots, so anything unresolved simply leafs out.
-A(s) : n >= N-1 -> F(LEN*s)[&(76)L(0.9)][/(120)&(84)L(0.85)][/(240)&(70)L(0.9)]
+    rules: `# Salix babylonica: a stout trunk under a broad dome, spread roughly equal
+# to height, hung with unbranched shoots 50-70% of the tree's height that
+# sweep down to near ground level. The shoots are the whole silhouette, so
+# nearly every generation is spent making them long rather than branchy.
 
-# A short trunk that divides low into a handful of heavy limbs
-A(s) : s > 0.44 -> F(LEN*s)/(137.5)[&(ANG*rand(0.85,1.2))A(s*SHRINK*0.84)][/(155)&(ANG*rand(0.9,1.25))A(s*SHRINK*0.82)]^(rand(2,8))A(s*SHRINK)
+# Anything unresolved on the last step just leafs out — a V here would have no
+# generation left to expand into a shoot.
+A(s) : n >= N-1 -> F(LEN*s)[&(76)L(0.8)][/(140)&(84)L(0.75)][/(250)&(70)L(0.8)]
 
-A(s) -> C(s)
+# Trunk, then an open framework of ascending scaffolds. A wide angle is what
+# gets the spread out to match the height.
+A(s) : s > 0.36 -> F(LEN*s)/(137.5)[&(ANG*rand(0.85,1.15))A(s*SHRINK*0.86)][/(158)&(ANG*rand(0.9,1.2))A(s*SHRINK*0.84)]$&(5)A(s*SHRINK*0.94)
 
-# Each limb arches up and outward, dropping a curtain at every node. That is
-# what gives a willow its fountain shape: the shoots hang from a long span
-# rather than from one point in the middle of the crown. Arching the limb also
-# lifts the attachment points, so the curtains clear the ground.
-C(s) : s > 0.22 -> F(LEN*s*0.95)[V(s)]$&(9)+(rand(-22,22))C(s*0.88)
-C(s) -> V(s)
+A(s) -> C(s, 0)
+
+# The scaffold has to CLIMB before it sheds anything. A shoot hangs a fixed
+# length, so one dropped low simply runs into the ground — the height gained
+# here is what the curtain hangs from. After $ the frame is levelled, so & now
+# tilts toward the sky and ^ toward the ground.
+C(s, k) : k < 6 -> F(LEN*s*1.15)$&(rand(9,17))+(rand(-26,26))C(s*0.95, k+1)
+
+# Only the outer, highest reach of the scaffold arches over and weeps.
+C(s, k) : k < 9 -> F(LEN*s*1.05)$^(rand(4,11))+(rand(-24,24))[V(s)]C(s*0.93, k+1)
+C(s, k) -> V(s)
 
 # A curtain. The $ levels the frame against the horizon first, so the pitch
 # after it is measured from the ground rather than from whatever roll the limb
-# happened to be carrying — otherwise shoots launch sideways or upward and run
-# out of generations before gravity can turn them over.
-V(s) -> [$^(100)T(-0.9)W(s*1.4)]
+# was carrying — otherwise shoots launch sideways and run out of generations
+# before gravity turns them over. Straight down is the stable point of the
+# tropism, so a strong T settles the shoot to vertical and holds it there.
+V(s) -> [$^(108)T(-1.7)W(s, 0)]
 
-# The trailing shoot — many short internodes so the hang curves smoothly,
-# and a decay near 1 so it keeps going for as long as generations allow
-W(s) : s > 0.03 -> F(LEN*s*0.5)[/(60)L(0.8)][/(180)L(0.75)][/(290)L(0.8)]/(137.5)W(s*0.94)
-W(s) -> L(0.7)`,
+# The shoot itself: unbranched, leafy the whole way, and a decay near 1 so it
+# keeps running for every generation it is given.
+W(s, j) : j < 14 -> F(LEN*s*1.1)[/(70)L(0.95)][/(190)L(0.9)][/(300)L(0.95)]/(137.5)W(s*0.99, j+1)
+W(s, j) -> L(0.85)`,
     params: {
       iterations: 22,
-      angle: 46,
-      step: 1.0,
+      angle: 62,
+      step: 0.92,
       shrink: 0.9,
-      trunkRadius: 0.34,
-      tropism: 0.07,
+      trunkRadius: 0.26,
+      tropism: 0.05,
       pipeExponent: 2.6,
-      leafScale: 0.13,
+      leafScale: 0.19,
       leafShape: 3,
       windiness: 1.5,
     },

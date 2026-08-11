@@ -1,5 +1,5 @@
 import { DEFAULT_PRESET_ID, getPreset, PRESETS } from '../lsystem';
-import type { StudioParams } from '../render/studio';
+import type { Quality, StudioParams } from '../render/studio';
 
 export interface AppParams extends StudioParams {
   /** Seconds-ish rate for the growth animation. */
@@ -49,6 +49,7 @@ export function paramsFromPreset(id: string): AppParams {
     grain: true,
     antialias: true,
     autoRotate: false,
+    quality: 'auto' as Quality,
 
     growthSpeed: 0.3,
     autoGrow: true,

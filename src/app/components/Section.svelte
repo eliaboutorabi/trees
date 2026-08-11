@@ -1,19 +1,26 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import type { IconSvgElement } from '@hugeicons/svelte';
+  import { ArrowDown01Icon } from '@hugeicons/core-free-icons';
 
   interface Props {
     title: string;
+    icon?: IconSvgElement;
     open?: boolean;
     children: Snippet;
   }
 
-  let { title, open = false, children }: Props = $props();
+  let { title, icon, open = false, children }: Props = $props();
 </script>
 
 <details {open}>
   <summary>
-    <span>{title}</span>
-    <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" /></svg>
+    <span class="title">
+      {#if icon}<HugeiconsIcon {icon} size={15} strokeWidth={1.8} />{/if}
+      {title}
+    </span>
+    <span class="chevron"><HugeiconsIcon icon={ArrowDown01Icon} size={14} strokeWidth={2} /></span>
   </summary>
   <div class="body">
     {@render children()}
@@ -47,19 +54,19 @@
     color: var(--accent);
   }
 
-  summary svg {
-    width: 10px;
-    height: 6px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    transition: transform 0.18s ease;
-    opacity: 0.6;
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
-  details[open] summary svg {
+  .chevron {
+    display: flex;
+    opacity: 0.55;
+    transition: transform 0.18s ease;
+  }
+
+  details[open] .chevron {
     transform: rotate(180deg);
   }
 

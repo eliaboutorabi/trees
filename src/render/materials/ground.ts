@@ -20,13 +20,14 @@ export function createGroundMaterial() {
   const p = positionWorld;
   const dist = p.xz.length();
 
-  const broad = mx_fractal_noise_float(vec3(p.x.mul(0.16), 0, p.z.mul(0.16)), 4, 2.0, 0.55, 1.0).mul(0.5).add(0.5);
-  const fine = mx_fractal_noise_float(vec3(p.x.mul(1.6), 0, p.z.mul(1.6)), 3, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
-  // A high-frequency streaky layer so the ground does not read as flat paint
-  // when the camera drops near it. Stretched along one axis to suggest grass.
-  const blades = mx_fractal_noise_float(vec3(p.x.mul(11.0), 0, p.z.mul(2.5)), 2, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
+  // This shader covers the entire screen, so every octave here is paid for at
+  // full resolution on every pixel. Two cheap layers is enough now that the
+  // terrain carries real relief and the scattered tufts carry the fine detail —
+  // a third high-frequency layer was costing more than it showed.
+  const broad = mx_fractal_noise_float(vec3(p.x.mul(0.16), 0, p.z.mul(0.16)), 3, 2.0, 0.55, 1.0).mul(0.5).add(0.5);
+  const fine = mx_fractal_noise_float(vec3(p.x.mul(1.6), 0, p.z.mul(1.6)), 2, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
 
-  const grass = mix(uniforms.near, uniforms.far, broad.mul(0.62).add(fine.mul(0.24)).add(blades.mul(0.14)));
+  const grass = mix(uniforms.near, uniforms.far, broad.mul(0.72).add(fine.mul(0.28)));
 
   // A soft pool of darkening where the trunk meets the ground — cheap contact
   // shading that survives even when the shadow map softens out.
@@ -34,7 +35,7 @@ export function createGroundMaterial() {
   const shaded = grass.mul(float(1).sub(contact));
 
   material.colorNode = mix(shaded, uniforms.horizon, smoothstep(uniforms.fadeStart, uniforms.fadeEnd, dist));
-  material.roughnessNode = float(0.97).sub(fine.mul(0.07)).sub(blades.mul(0.06));
+  material.roughnessNode = float(0.97).sub(fine.mul(0.09));
   material.metalnessNode = float(0);
 
   return { material, uniforms };

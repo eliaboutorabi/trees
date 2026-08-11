@@ -74,6 +74,13 @@ export function createTreeUniforms() {
     /** Birch-style horizontal lenticel dashes. */
     lenticels: uniform(0),
 
+    // Live rescaling. Geometry is baked once at the preset's radius and leaf
+    // size; these carry the ratio so the sliders need no rebuild.
+    radiusScale: uniform(1),
+    leafSize: uniform(1),
+    /** Keep leaves whose hash falls under this — the foliage-density slider. */
+    leafCull: uniform(1),
+
     leafBase: uniform(new Color(0x2f5320)),
     leafTip: uniform(new Color(0x86a83c)),
     leafAutumn: uniform(new Color(0xc06a1e)),
@@ -99,6 +106,12 @@ export interface GrowthOptions {
   thickenBase: number;
   /** Add per-leaf turning about the attachment point. Foliage only. */
   flutter: boolean;
+  /**
+   * Live multiplier on a vertex's offset from its pivot — branch thickness or
+   * leaf size. Setting it to zero collapses the vertex, which is how leaves
+   * are culled without rebuilding the mesh.
+   */
+  radial?: FloatNode;
 }
 
 /**
@@ -120,7 +133,8 @@ export function growthPosition(u: TreeUniforms, opts: GrowthOptions) {
   const base = float(opts.thickenBase);
   const fill = extend.mul(base.add(base.oneMinus().mul(u.growth)));
 
-  const grown = mix(origin, center, extend).add(positionLocal.sub(center).mul(fill));
+  const radial = positionLocal.sub(center).mul(opts.radial ?? float(1));
+  const grown = mix(origin, center, extend).add(radial.mul(fill));
 
   // --------------------------------------------------------------- wind
   const t = time.mul(u.windSpeed);

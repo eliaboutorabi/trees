@@ -1,5 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import {
+    ArrowLeft01Icon,
+    ArrowRight01Icon,
+    Camera01Icon,
+    Download01Icon,
+    FocusIcon,
+    Leaf01Icon,
+    PlayIcon,
+    Rotate01Icon,
+    ShuffleIcon,
+    SourceCodeIcon,
+    SunIcon,
+    Tree01Icon,
+    UndoIcon,
+  } from '@hugeicons/core-free-icons';
   import { getPreset, type GrammarIssue } from '../lsystem';
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, presets } from './params.svelte';
@@ -27,6 +43,8 @@
     buildMs: 0,
     fps: 0,
     truncated: false,
+    renderScale: 1,
+    adaptive: true,
   });
 
   let axiomDraft = $state(params.axiom);
@@ -35,9 +53,9 @@
 
   const activePreset = $derived(getPreset(params.presetId));
 
-  let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
   let skyTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Only these force the grammar to be re-derived — everything else is live. */
   function structureSnapshot() {
     return {
       axiom: params.axiom,
@@ -46,20 +64,44 @@
       angle: params.angle,
       step: params.step,
       shrink: params.shrink,
-      trunkRadius: params.trunkRadius,
       tropism: params.tropism,
       pipeExponent: params.pipeExponent,
       seed: params.seed,
+      trunkRadius: params.trunkRadius,
       leafScale: params.leafScale,
       leafShape: params.leafShape,
-      leafDensity: params.leafDensity,
-      barkDetail: params.barkDetail,
     };
   }
 
+  // What the mesh currently on screen was built from.
+  let built = $state<ReturnType<typeof structureSnapshot> | null>(null);
+
+  // `trunkRadius` and `leafScale` are passed to the build as a baseline but are
+  // then rescaled live against it, so changing them is not a reason to redraw.
+  const REDRAW_KEYS = [
+    'axiom',
+    'rules',
+    'iterations',
+    'angle',
+    'step',
+    'shrink',
+    'tropism',
+    'pipeExponent',
+    'seed',
+    'leafShape',
+  ] as const;
+
+  const pending = $derived.by(() => {
+    const now = structureSnapshot();
+    if (!built) return false;
+    return REDRAW_KEYS.some((k) => now[k] !== built![k]);
+  });
+
   function doRebuild(replay: boolean) {
     if (!studio) return;
-    const build = studio.rebuild(structureSnapshot());
+    const snapshot = structureSnapshot();
+    const build = studio.rebuild(snapshot);
+    built = snapshot;
     issues = build.issues;
     if (replay) {
       studio.frameTree();
@@ -67,9 +109,13 @@
     }
   }
 
-  function scheduleRebuild(replay: boolean) {
-    clearTimeout(rebuildTimer);
-    rebuildTimer = setTimeout(() => doRebuild(replay), 140);
+  function redraw() {
+    doRebuild(params.autoGrow);
+  }
+
+  /** Put every control on this species back where it started. */
+  function resetToDefaults() {
+    choosePreset(params.presetId);
   }
 
   function choosePreset(id: string) {
@@ -78,7 +124,6 @@
     rulesDraft = params.rules;
     if (!studio) return;
     studio.applyPalette(getPreset(id).palette);
-    clearTimeout(rebuildTimer);
     doRebuild(true);
   }
 
@@ -89,6 +134,8 @@
 
   function shuffleSeed() {
     params.seed = Math.floor(Math.random() * 1_000_000);
+    // An explicit action, so it draws straight away rather than going pending.
+    doRebuild(params.autoGrow);
   }
 
   function replay() {
@@ -141,37 +188,13 @@
 
     return () => {
       observer.disconnect();
-      clearTimeout(rebuildTimer);
       clearTimeout(skyTimer);
       s.dispose();
       studio = null;
     };
   });
 
-  // Structure — debounced, because it re-derives the grammar.
-  $effect(() => {
-    const track = [
-      params.axiom,
-      params.rules,
-      params.iterations,
-      params.angle,
-      params.step,
-      params.shrink,
-      params.trunkRadius,
-      params.tropism,
-      params.pipeExponent,
-      params.seed,
-      params.leafScale,
-      params.leafShape,
-      params.leafDensity,
-      params.barkDetail,
-    ];
-    void track;
-    if (!ready) return;
-    scheduleRebuild(params.autoGrow);
-  });
-
-  // Look — uniform writes only, so these can land every frame.
+  // Look — uniform writes only, so these land immediately, every frame if need be.
   $effect(() => {
     const look = {
       wind: params.wind,
@@ -181,12 +204,16 @@
       translucency: params.translucency,
       barkDetail: params.barkDetail,
       moss: params.moss,
+      trunkRadius: params.trunkRadius,
+      leafScale: params.leafScale,
+      leafDensity: params.leafDensity,
       exposure: params.exposure,
       bloom: params.bloom,
       depthOfField: params.depthOfField,
       grain: params.grain,
       antialias: params.antialias,
       autoRotate: params.autoRotate,
+      quality: params.quality,
     };
     if (!ready) return;
     studio?.applyLook(look);
@@ -207,9 +234,14 @@
 
 <svelte:window
   onkeydown={(e) => {
-    if (e.key === ' ' && (e.target as HTMLElement)?.tagName !== 'TEXTAREA' && (e.target as HTMLElement)?.tagName !== 'INPUT') {
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+    if (e.key === ' ') {
       e.preventDefault();
       replay();
+    } else if (e.key === 'r' || e.key === 'R') {
+      e.preventDefault();
+      redraw();
     }
   }}
 />
@@ -248,12 +280,23 @@
         <span><b>{stats.branchTriangles.toLocaleString()}</b> tris</span>
         <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
         <span><b>{stats.buildMs.toFixed(0)}</b> ms</span>
+        <span><b>{stats.renderScale.toFixed(2)}</b>× {stats.adaptive ? 'auto' : 'fixed'}</span>
         {#if stats.truncated}<span class="warn">capped</span>{/if}
       </div>
 
       <div class="transport">
-        <button class="icon" onclick={replay} title="Regrow (space)" aria-label="Regrow">
-          <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 1 2.3 5.6M4 18v-5h5" /></svg>
+        <button
+          class="redraw"
+          class:pending
+          onclick={redraw}
+          title={pending ? 'Apply pending grammar changes (R)' : 'Rebuild the tree (R)'}
+        >
+          <HugeiconsIcon icon={Rotate01Icon} size={15} strokeWidth={2} />
+          <span>Redraw</span>
+        </button>
+        <span class="divider"></span>
+        <button class="icon" onclick={replay} title="Replay growth (space)" aria-label="Replay growth">
+          <HugeiconsIcon icon={PlayIcon} size={16} strokeWidth={1.9} />
         </button>
         <input
           class="scrub"
@@ -269,19 +312,24 @@
           style="--fill: {growth * 100}%"
         />
         <span class="pct">{Math.round(growth * 100)}%</span>
-        <button class="icon" onclick={() => studio?.frameTree()} title="Reframe" aria-label="Reframe">
-          <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+        <button class="icon" onclick={() => studio?.frameTree()} title="Reframe camera" aria-label="Reframe camera">
+          <HugeiconsIcon icon={FocusIcon} size={16} strokeWidth={1.8} />
         </button>
         <button class="icon" onclick={screenshot} title="Save PNG" aria-label="Save PNG">
-          <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M4 19h16" /></svg>
+          <HugeiconsIcon icon={Download01Icon} size={16} strokeWidth={1.8} />
+        </button>
+        <span class="divider"></span>
+        <button class="icon" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
+          <HugeiconsIcon icon={UndoIcon} size={16} strokeWidth={1.8} />
         </button>
       </div>
     {/if}
   </div>
 
   <aside class="panel" class:closed={!panelOpen}>
-    <button class="toggle" onclick={() => (panelOpen = !panelOpen)} aria-label="Toggle panel">
-      <svg viewBox="0 0 10 16"><path d={panelOpen ? 'M7 1L1 8l6 7' : 'M3 1l6 7-6 7'} /></svg>
+    <!-- The panel lives on the right, so an open panel closes to the right. -->
+    <button class="toggle" onclick={() => (panelOpen = !panelOpen)} aria-label={panelOpen ? 'Hide panel' : 'Show panel'}>
+      <HugeiconsIcon icon={panelOpen ? ArrowRight01Icon : ArrowLeft01Icon} size={16} strokeWidth={2} />
     </button>
 
     <div class="panel__inner">
@@ -304,21 +352,23 @@
       </div>
       <p class="blurb">{activePreset.blurb}</p>
 
-      <Section title="Form" open>
-        <Slider label="Generations" bind:value={params.iterations} min={1} max={16} step={1} />
-        <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} />
-        <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} />
-        <Slider label="Contraction" bind:value={params.shrink} min={0.6} max={0.99} hint="SHRINK — how fast each generation shortens" />
-        <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} />
-        <Slider label="Tropism" bind:value={params.tropism} min={-0.6} max={0.6} hint="Positive reaches for the sky, negative droops" />
-        <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" />
+      <Section title="Form" icon={Tree01Icon} open>
+        <p class="help">Controls marked ↻ re-derive the grammar — press Redraw (or <kbd>R</kbd>) to apply. Everything else is live.</p>
+        <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
+        <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} needsRedraw />
+        <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} needsRedraw />
+        <Slider label="Contraction" bind:value={params.shrink} min={0.6} max={0.99} hint="SHRINK — how fast each generation shortens" needsRedraw />
+        <Slider label="Tropism" bind:value={params.tropism} min={-0.6} max={0.6} hint="Positive reaches for the sky, negative droops" needsRedraw />
+        <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" needsRedraw />
+        <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
         <div class="row">
-          <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} />
-          <button class="ghost" onclick={shuffleSeed}>Shuffle</button>
+          <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
+          <button class="ghost" onclick={shuffleSeed} title="New random seed"><HugeiconsIcon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
         </div>
       </Section>
 
-      <Section title="Foliage">
+      <Section title="Foliage" icon={Leaf01Icon}>
+        <p class="help">Leaf shape ↻ needs a redraw; size and density are live.</p>
         <div class="segmented">
           {#each [{ v: 0, l: 'Broad' }, { v: 3, l: 'Lance' }, { v: 1, l: 'Needle' }, { v: 2, l: 'Blossom' }] as opt (opt.v)}
             <button
@@ -335,7 +385,7 @@
         <Slider label="Translucency" bind:value={params.translucency} min={0} max={2.5} />
       </Section>
 
-      <Section title="Light &amp; air">
+      <Section title="Light &amp; air" icon={SunIcon}>
         <Slider label="Sun elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} />
         <Slider label="Sun azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} />
         <Slider label="Haze" bind:value={params.haze} min={0} max={1} />
@@ -347,17 +397,28 @@
         <Slider label="Moss" bind:value={params.moss} min={0} max={1} />
       </Section>
 
-      <Section title="Render">
+      <Section title="Render" icon={Camera01Icon}>
+        <p class="help">
+          This scene is fill-rate bound, so resolution is the dial that matters. <b>Auto</b> holds 60 fps
+          by scaling it — currently {stats.renderScale.toFixed(2)}×.
+        </p>
+        <div class="segmented">
+          {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
+            <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>
+              {opt.l}
+            </button>
+          {/each}
+        </div>
         <Slider label="Bloom" bind:value={params.bloom} min={0} max={1.5} />
         <label class="check"><input type="checkbox" bind:checked={params.depthOfField} /> Depth of field</label>
         <label class="check"><input type="checkbox" bind:checked={params.grain} /> Film grain</label>
         <label class="check"><input type="checkbox" bind:checked={params.antialias} /> Anti-aliasing</label>
         <label class="check"><input type="checkbox" bind:checked={params.autoRotate} /> Orbit slowly</label>
-        <label class="check"><input type="checkbox" bind:checked={params.autoGrow} /> Regrow on edit</label>
+        <label class="check"><input type="checkbox" bind:checked={params.autoGrow} /> Replay growth on redraw</label>
         <Slider label="Growth rate" bind:value={params.growthSpeed} min={0.05} max={1.5} />
       </Section>
 
-      <Section title="Grammar">
+      <Section title="Grammar" icon={SourceCodeIcon}>
         <p class="help">
           Globals: <code>ANG</code> angle · <code>LEN</code> length · <code>SHRINK</code> contraction ·
           <code>N</code> generations · <code>n</code> current step. Rules are tried top-down;
@@ -507,6 +568,50 @@
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
   }
 
+  .redraw {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+    height: 30px;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.74rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .redraw :global(svg) {
+    display: block;
+  }
+
+  .redraw:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
+
+  /* Something structural changed and is not on screen yet. */
+  .redraw.pending {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #21160c;
+    font-weight: 500;
+    animation: nudge 2.4s ease-in-out infinite;
+  }
+
+  @keyframes nudge {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 176, 100, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(240, 176, 100, 0.16); }
+  }
+
+  .divider {
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
   .icon {
     width: 30px;
     height: 30px;
@@ -525,14 +630,8 @@
     color: #fff;
   }
 
-  .icon svg {
-    width: 17px;
-    height: 17px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  .icon :global(svg) {
+    display: block;
   }
 
   .scrub {
@@ -615,15 +714,6 @@
     color: var(--accent);
   }
 
-  .toggle svg {
-    width: 9px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
 
   header h1 {
     font-size: 1.35rem;
@@ -690,6 +780,9 @@
   }
 
   .ghost {
+    display: flex;
+    align-items: center;
+    gap: 0.32rem;
     padding: 0.3rem 0.6rem;
     margin-bottom: 0.7rem;
     font-size: 0.68rem;
@@ -758,6 +851,16 @@
     line-height: 1.65;
     color: var(--ink-faint);
     margin-bottom: 0.75rem;
+  }
+
+  kbd {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    padding: 0.05em 0.32em;
+    border-radius: 3px;
+    border: 1px solid var(--hairline);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--ink-dim);
   }
 
   .help code,
