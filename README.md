@@ -192,6 +192,37 @@ Two rendering constraints worth knowing before you add to that list:
   mistake for bad art direction. Only the distant hills survive, because the
   parts that rise above eye level present their backfaces to the camera.
 
+### The post chain was 40% of the frame
+
+Profiling each effect by toggling it and watching the median frame interval, at
+a pinned 2x device pixel ratio:
+
+| effect | cost |
+| --- | --- |
+| depth of field | 11.1ms |
+| bloom | 3.2ms |
+| FXAA | 2.5ms |
+| film grain | free |
+
+Depth of field alone was more than the tree, the terrain and everything else
+combined. Almost all of it is two 64-tap bokeh gathers, which three runs at half
+the input resolution. Bokeh is low-frequency by construction, so those run at a
+quarter here instead: the sample *step* stays keyed to the full-resolution texel
+size, so the blur keeps exactly the same radius on screen and only its sampling
+density drops. The circle-of-confusion pass and the composite stay at full
+resolution, so everything in focus stays sharp — only the parts that are meant
+to be blurred are computed coarsely. `setSize` is public and recomputed from the
+input texture every frame, so overriding it on the instance is enough; no fork.
+
+FXAA is now skipped above 1.75x device pixel ratio. At that density the browser's
+own downscale is already supersampling several times over, and FXAA has nothing
+left to find — it costs 2.5ms and returns a slightly softer image. The antialias
+control therefore means "smooth the edges if that needs doing", and the renderer
+decides whether it does. The adaptive controller revisits that decision whenever
+it changes resolution, since it is part of the same budget.
+
+Together: 27.4ms to 22.2ms at 2x, with no visible difference.
+
 ### Background and environment are not the same texture
 
 The procedural sky carries a sun disc at up to 30x the radiance of the sky

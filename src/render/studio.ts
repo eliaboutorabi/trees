@@ -142,6 +142,8 @@ export class TreeStudio {
   /** Display refresh rate, measured — 60Hz is not a safe assumption. */
   private refreshHz = 60;
   private readonly refreshSamples: number[] = [];
+  /** Last requested post-effect state, so a resolution change can revisit it. */
+  private lookToggles = { bloom: true, dof: true, grain: true, antialias: true };
   private pendingCapture: ((url: string) => void) | null = null;
   private disposed = false;
 
@@ -282,12 +284,13 @@ export class TreeStudio {
     this.renderer.toneMappingExposure = params.exposure;
     this.post.uniforms.bloomStrength.value = params.bloom;
     this.post.uniforms.bokeh.value = params.depthOfField ? 1.6 : 0;
-    this.post.setToggles({
+    this.lookToggles = {
       bloom: params.bloom > 0.001,
       dof: params.depthOfField,
       grain: params.grain,
       antialias: params.antialias,
-    });
+    };
+    this.refreshPost();
     this.controls.autoRotate = params.autoRotate;
     this.applyQuality(params.quality);
   }
@@ -495,9 +498,30 @@ export class TreeStudio {
       this.renderScale = next;
       this.renderer.setPixelRatio(next);
       this.resize();
+      // Crossing the supersampling threshold changes whether FXAA is worth
+      // running, which is itself part of the budget being balanced here.
+      this.refreshPost();
       // Resizing costs a frame or two; do not measure those.
       this.adaptiveCooldown = 30;
     }
+  }
+
+  /**
+   * Push the requested effects to the pipeline, minus anything the current
+   * resolution has made pointless.
+   *
+   * Above about 1.75x device pixel ratio the frame is already supersampled
+   * several times over by the browser's own downscale, and FXAA has nothing
+   * left to find — it costs 2.5ms and returns a slightly softer image. So the
+   * antialias control means "smooth the edges if that needs doing", and at high
+   * resolution it does not.
+   */
+  private refreshPost(): void {
+    if (!this.post) return;
+    this.post.setToggles({
+      ...this.lookToggles,
+      antialias: this.lookToggles.antialias && this.renderScale < 1.75,
+    });
   }
 
   private applyQuality(quality: Quality): void {
@@ -509,6 +533,7 @@ export class TreeStudio {
       this.renderer.setPixelRatio(this.renderScale);
       this.resize();
     }
+    this.refreshPost();
     this.stats = { ...this.stats, renderScale: this.renderScale, adaptive: quality === 'auto' };
     this.onStats?.(this.stats);
   }

@@ -6,6 +6,49 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 
+/**
+ * Depth of field is by far the most expensive thing in this frame — profiling
+ * put it at 11ms of 27ms at 2x device pixel ratio, more than the tree, the
+ * terrain and every other effect combined. Almost all of that is two 64-tap
+ * bokeh gathers.
+ *
+ * three runs those gathers at half the input resolution. Bokeh is low-frequency
+ * by construction, so a quarter works too: the sample *step* stays keyed to the
+ * full-resolution texel size, which means the blur keeps exactly the same
+ * radius on screen and only its sampling density drops. The circle-of-confusion
+ * pass and the final composite stay at full resolution, so everything in focus
+ * stays sharp — it is only the parts that are meant to be blurred that are
+ * computed coarsely.
+ *
+ * `setSize` is public and recomputed from the input texture every frame, so
+ * overriding it on the instance is enough; there is no need to fork the node.
+ */
+function shrinkDofBlurTargets(node: unknown, divisor: number): void {
+  const dofNode = node as {
+    _invSize: { value: { set(x: number, y: number): void } };
+    _CoCRT: { setSize(w: number, h: number): void };
+    _compositeRT: { setSize(w: number, h: number): void };
+    _CoCBlurredRT: { setSize(w: number, h: number): void };
+    _blur64RT: { setSize(w: number, h: number): void };
+    _blur16NearRT: { setSize(w: number, h: number): void };
+    _blur16FarRT: { setSize(w: number, h: number): void };
+    setSize(w: number, h: number): void;
+  };
+
+  dofNode.setSize = (width: number, height: number) => {
+    dofNode._invSize.value.set(1 / width, 1 / height);
+    dofNode._CoCRT.setSize(width, height);
+    dofNode._compositeRT.setSize(width, height);
+
+    const w = Math.max(1, Math.round(width / divisor));
+    const h = Math.max(1, Math.round(height / divisor));
+    dofNode._CoCBlurredRT.setSize(w, h);
+    dofNode._blur64RT.setSize(w, h);
+    dofNode._blur16NearRT.setSize(w, h);
+    dofNode._blur16FarRT.setSize(w, h);
+  };
+}
+
 export interface PostToggles {
   bloom: boolean;
   dof: boolean;
@@ -47,7 +90,9 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
 
     let node = toggles.bloom ? sceneColor.add(bloomPass) : sceneColor;
     if (toggles.dof) {
-      node = asColor(dof(node, viewZ, uniforms.focusDistance, uniforms.focalLength, uniforms.bokeh));
+      const dofNode = dof(node, viewZ, uniforms.focusDistance, uniforms.focalLength, uniforms.bokeh);
+      shrinkDofBlurTargets(dofNode, 4);
+      node = asColor(dofNode);
     }
 
     // Grading works on colour only — `vibrance` and `saturation` return vec3.
