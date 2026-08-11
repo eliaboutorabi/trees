@@ -165,6 +165,20 @@ Two rendering constraints worth knowing before you add to that list:
   mistake for bad art direction. Only the distant hills survive, because the
   parts that rise above eye level present their backfaces to the camera.
 
+### Background and environment are not the same texture
+
+The procedural sky carries a sun disc at up to 30x the radiance of the sky
+around it, so that it blooms. Using that same texture as `scene.environment`
+puts all of that energy into the IBL: a specular lobe at any real roughness
+integrates a wide cone of the environment, and the disc smears across it. The
+symptom is subtle and scene-wide — everything picks up a pale wash, and it is
+easy to blame the albedo. A fruit with a black albedo still rendered as a grey
+ball, which is what finally located it.
+
+So the sky bakes twice: a full-size background with the disc, and a small
+disc-free environment. Everything else — the canopy, the treeline, the fruit —
+got its colour back for free.
+
 ### Two things that cost more than they look like
 
 **Per-pixel fractal noise, on anything that fills the screen.** The terrain

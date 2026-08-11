@@ -615,7 +615,11 @@ function leafTemplate(shape: 0 | 1 | 2 | 3): LeafTemplate {
     return mergeTemplates(parts);
   }
 
-  return bladeTemplate(0.34, 1.0, 0.09, 0.14, 3, 5);
+  // A broad leaf is cupped and curved along its midrib, not flat. The cup is
+  // what gives a canopy its internal light variation: every leaf presents a
+  // slightly different set of angles to the sun, so the crown breaks into
+  // highlights and shadow instead of reading as one moulded green mass.
+  return bladeTemplate(0.34, 1.0, 0.19, 0.2, 4, 5);
 }
 
 /** A five-petal rosette. `uv.y` runs 0 at the throat to 1 at the petal tip. */
@@ -630,7 +634,7 @@ function flowerTemplate(): LeafTemplate {
  * most of what makes a small round thing read as three-dimensional once it is
  * only a dozen pixels across.
  */
-function berryTemplate(radius = 0.4, segments = 7, rings = 5): LeafTemplate {
+function berryTemplate(radius = 0.4, segments = 10, rings = 7): LeafTemplate {
   const position: number[] = [];
   const normal: number[] = [];
   const uv: number[] = [];

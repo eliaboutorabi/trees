@@ -30,6 +30,16 @@ export interface SkySettings {
 const WIDTH = 1024;
 const HEIGHT = 512;
 
+// The environment map is baked separately, small and without the sun disc.
+//
+// A specular lobe at any real roughness integrates a wide cone of the
+// environment, so a disc carrying 30x the radiance of the sky around it leaks
+// into every rough reflection in the scene — enough that a black-albedo sphere
+// still renders as a pale grey ball. The disc has to stay in the *background*
+// for it to bloom, so background and environment cannot be the same texture.
+const ENV_WIDTH = 256;
+const ENV_HEIGHT = 128;
+
 const ZENITH = new Color(0x1d3f77);
 const HORIZON_WARM = new Color(0xffb367);
 const HORIZON_COOL = new Color(0xa8bcd8);
@@ -56,25 +66,49 @@ export function sunColorFor(settings: SkySettings, out = new Color()): Color {
   return out.copy(SUN_LOW).lerp(SUN_HIGH, t);
 }
 
+function makeTexture(data: Uint16Array, width: number, height: number): DataTexture {
+  const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
+  texture.mapping = EquirectangularReflectionMapping;
+  texture.minFilter = LinearFilter;
+  texture.magFilter = LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export class ProceduralSky {
+  /** What the camera sees. Carries the sun disc, so it blooms. */
   readonly texture: DataTexture;
+  /** What surfaces reflect. Same sky, no disc — see the note above. */
+  readonly environment: DataTexture;
   private readonly data: Uint16Array;
+  private readonly envData: Uint16Array;
   private readonly sun = new Vector3();
   private readonly sunTint = new Color();
 
   constructor() {
     this.data = new Uint16Array(WIDTH * HEIGHT * 4);
-    this.texture = new DataTexture(this.data, WIDTH, HEIGHT, RGBAFormat, HalfFloatType);
-    this.texture.mapping = EquirectangularReflectionMapping;
-    this.texture.minFilter = LinearFilter;
-    this.texture.magFilter = LinearFilter;
-    this.texture.generateMipmaps = false;
-    this.texture.needsUpdate = true;
+    this.envData = new Uint16Array(ENV_WIDTH * ENV_HEIGHT * 4);
+    this.texture = makeTexture(this.data, WIDTH, HEIGHT);
+    this.environment = makeTexture(this.envData, ENV_WIDTH, ENV_HEIGHT);
   }
 
   update(settings: SkySettings): void {
     sunDirection(settings, this.sun);
     sunColorFor(settings, this.sunTint);
+    this.bake(this.data, WIDTH, HEIGHT, settings, true);
+    this.bake(this.envData, ENV_WIDTH, ENV_HEIGHT, settings, false);
+    this.texture.needsUpdate = true;
+    this.environment.needsUpdate = true;
+  }
+
+  private bake(
+    data: Uint16Array,
+    width: number,
+    height: number,
+    settings: SkySettings,
+    withDisc: boolean,
+  ): void {
 
     const haze = clamp01(settings.haze);
     const intensity = settings.intensity;
@@ -83,20 +117,19 @@ export class ProceduralSky {
     const horizon = HORIZON_COOL.clone().lerp(HORIZON_WARM, 0.35 + 0.65 * lowness);
     const zenith = ZENITH.clone().lerp(horizon, 0.12 + 0.35 * haze);
 
-    const { data } = this;
     const sx = this.sun.x;
     const sy = this.sun.y;
     const sz = this.sun.z;
 
     let o = 0;
-    for (let j = 0; j < HEIGHT; j++) {
-      const v = (j + 0.5) / HEIGHT;
+    for (let j = 0; j < height; j++) {
+      const v = (j + 0.5) / height;
       const lat = (v - 0.5) * Math.PI;
       const y = Math.sin(lat);
       const cosLat = Math.cos(lat);
 
-      for (let i = 0; i < WIDTH; i++) {
-        const u = (i + 0.5) / WIDTH;
+      for (let i = 0; i < width; i++) {
+        const u = (i + 0.5) / width;
         const phi = (u - 0.5) * Math.PI * 2;
         const x = -Math.cos(phi) * cosLat;
         const z = Math.sin(phi) * cosLat;
@@ -117,12 +150,14 @@ export class ProceduralSky {
         g += this.sunTint.g * nearSun;
         b += this.sunTint.b * nearSun;
 
-        // The disc itself, bright enough to bloom.
-        // Bright enough to bloom, dim enough to stay orange instead of clipping white.
-        const disc = smoothstep(0.99978, 0.99995, cosSun) * (13 + 20 * (1 - haze));
-        r += this.sunTint.r * disc;
-        g += this.sunTint.g * disc;
-        b += this.sunTint.b * disc;
+        // The disc itself, bright enough to bloom, dim enough to stay orange
+        // instead of clipping white. Omitted from the environment bake.
+        if (withDisc) {
+          const disc = smoothstep(0.99978, 0.99995, cosSun) * (13 + 20 * (1 - haze));
+          r += this.sunTint.r * disc;
+          g += this.sunTint.g * disc;
+          b += this.sunTint.b * disc;
+        }
 
         // Haze band hugging the horizon line.
         const hug = Math.exp(-Math.abs(y) * 26) * (0.05 + 0.22 * haze);
@@ -144,11 +179,10 @@ export class ProceduralSky {
         data[o++] = DataUtils.toHalfFloat(1);
       }
     }
-
-    this.texture.needsUpdate = true;
   }
 
   dispose(): void {
     this.texture.dispose();
+    this.environment.dispose();
   }
 }

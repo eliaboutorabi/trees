@@ -92,6 +92,10 @@ export function createTreeUniforms() {
     fruitDensity: uniform(0),
     fruitSize: uniform(1),
     fruitColor: uniform(new Color(0xb8231f)),
+    /** Where the shaded underside of a fruit has not turned yet. */
+    fruitUnripe: uniform(new Color(0x5c6a20)),
+    /** The sunward cheek — warmer, not brighter. */
+    fruitSun: uniform(new Color(0xd4581a)),
     /** 0 matte like a plum, 1 polished like an apple. */
     fruitGloss: uniform(0.55),
 

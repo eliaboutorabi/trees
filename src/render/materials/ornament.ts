@@ -11,7 +11,7 @@
  * coloured berries reads as plastic.
  */
 import { DoubleSide, MeshStandardNodeMaterial } from 'three/webgpu';
-import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv } from 'three/tsl';
+import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv, vec3 } from 'three/tsl';
 import { growthPosition, treeParams, type TreeUniforms } from './shared';
 
 export function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
@@ -67,17 +67,37 @@ export function createFruitMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
     radial: u.fruitSize.mul(vary.mul(0.36).add(0.82)).mul(keep),
   });
 
-  // Ripeness varies fruit to fruit, and the sunward side of any one fruit
-  // colours first — the top of a berry is redder than its shaded underside.
-  const ripeness = vary.mul(0.4).add(0.8);
-  const belly = smoothstep(0.75, 0.05, st.y);
-  const skin = u.fruitColor.mul(ripeness).mul(belly.mul(0.35).oneMinus());
+  // Ripeness varies fruit to fruit, and no piece of fruit is one flat colour:
+  // the shaded underside stays green long after the crown of the fruit has
+  // turned, and the side that gets the most sun turns first of all.
+  // Deliberately dark. AgX compresses chroma as luminance rises, so a
+  // saturated red lit to near-white desaturates and renders *pink* — which is
+  // exactly what a plausible-looking 0.25 albedo did here. Sitting the skin
+  // lower on the tone curve is what keeps it red.
+  const ripeness = vary.mul(0.28).add(0.62);
+  const belly = smoothstep(0.8, 0.1, st.y);
+  const sunward = normalWorld.dot(u.sunDir).clamp(0, 1).pow(0.7);
+  const ripe = u.fruitColor.mul(ripeness);
+  const unripe = mix(ripe, u.fruitUnripe, belly.mul(0.72).add(sunward.oneMinus().mul(0.28)).clamp(0, 1));
+  // The sunward cheek shifts toward orange rather than simply brightening,
+  // for the same reason: extra luminance costs saturation.
+  const skin = mix(unripe, mix(ripe, u.fruitSun, 0.55), sunward.mul(0.6));
 
   const shade = occlusion.mul(u.occlusionStrength).mul(0.5);
-  material.colorNode = skin.mul(shade.oneMinus());
-  // A polished skin is what makes fruit catch the sun and pick itself out of
-  // the canopy; a matte one disappears into the leaves.
-  material.roughnessNode = float(0.62).sub(u.fruitGloss.mul(0.45));
+
+  // Bloom — the waxy dust on a plum or a fresh apple. It is what stops fruit
+  // reading as painted plastic: a pale, view-dependent haze strongest at
+  // glancing angles, sitting on top of the skin rather than tinting it.
+  const view = cameraPosition.sub(positionWorld).normalize();
+  const grazing = float(1).sub(view.dot(normalWorld).clamp(0, 1)).pow(5.0);
+  material.colorNode = mix(skin.mul(shade.oneMinus()), vec3(0.55, 0.53, 0.5), grazing.mul(0.16));
+
+  // Roughness that only ever gets so low. A near-mirror skin blows the specular
+  // lobe out to white across half the sphere, which is exactly what made these
+  // read as pink rather than red.
+  material.roughnessNode = float(0.82)
+    .sub(u.fruitGloss.mul(0.3))
+    .add(belly.mul(0.1));
   material.metalnessNode = float(0);
 
   return material;

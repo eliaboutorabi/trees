@@ -407,7 +407,10 @@ export class TreeStudio {
     };
     this.sky.update(settings);
     this.scene.background = this.sky.texture;
-    this.scene.environment = this.sky.texture;
+    // Deliberately not the same texture — the background keeps the sun disc so
+    // it can bloom, the environment drops it so rough specular does not smear
+    // 30x radiance over every surface in the scene.
+    this.scene.environment = this.sky.environment;
     this.scene.environmentIntensity = 0.85;
 
     sunDirection(settings, this.sunDir);
