@@ -3,48 +3,26 @@
  * between L-system parameters and what ends up on screen.
  */
 import {
-  BufferGeometry,
   Color,
   DirectionalLight,
   HemisphereLight,
   Matrix4,
-  Mesh,
   MathUtils,
   PCFSoftShadowMap,
   PerspectiveCamera,
   Scene,
   Vector3,
 } from 'three';
-import { AgXToneMapping, MeshStandardNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import { AgXToneMapping, WebGPURenderer } from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildTree, getPreset, type TreeBuild } from '../lsystem';
-import type { Palette } from '../lsystem/presets';
-import { createBarkMaterial } from './materials/bark';
+import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from '../engine';
 import { createLandscape } from './landscape';
-import { createLeafMaterial } from './materials/leaf';
-import { createFlowerMaterial, createFruitMaterial } from './materials/ornament';
-import { createTreeUniforms } from './materials/shared';
 import { createPostPipeline } from './post';
 import { ProceduralSky, sunColorFor, sunDirection, type SkySettings } from './sky';
-import { buildTreeGeometry } from './treeGeometry';
 import { aerialPerspective } from './materials/ground';
 
-/** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
-export interface StructureParams {
-  axiom: string;
-  rules: string;
-  iterations: number;
-  angle: number;
-  step: number;
-  shrink: number;
-  tropism: number;
-  pipeExponent: number;
-  seed: number;
-  /** Baked into the mesh as a baseline; the slider then rescales it live. */
-  trunkRadius: number;
-  leafScale: number;
-  leafShape: 0 | 1 | 2 | 3;
-}
+/** Re-exported so the UI has one place to import parameter shapes from. */
+export type StructureParams = TreeStructure;
 
 /** Uniform-only changes — applied instantly, no rebuild. */
 export interface LookParams {
@@ -128,29 +106,19 @@ export class TreeStudio {
   private controls!: OrbitControls;
   private post!: ReturnType<typeof createPostPipeline>;
 
-  private readonly uniforms = createTreeUniforms();
+  /** The portable half of this app. Everything else here is scaffolding. */
+  private readonly tree = new Tree({ maxLeaves: MAX_LEAVES, maxOrnaments: MAX_ORNAMENTS });
   private readonly sky = new ProceduralSky();
   private readonly sun = new DirectionalLight(0xffd7ab, 3.4);
   private readonly fill = new HemisphereLight(0xbdd4ff, 0x6b5836, 0.35);
-  private readonly landscape = createLandscape(this.uniforms);
+  private readonly landscape = createLandscape(this.tree.uniforms);
   private readonly groundUniforms = this.landscape.uniforms;
-
-  private branchMesh: Mesh | null = null;
-  private leafMesh: Mesh | null = null;
-  private flowerMesh: Mesh | null = null;
-  private fruitMesh: Mesh | null = null;
-  private readonly barkMaterial = createBarkMaterial(this.uniforms);
-  private readonly leafMaterial = createLeafMaterial(this.uniforms);
-  private readonly flowerMaterial = createFlowerMaterial(this.uniforms);
-  private readonly fruitMaterial = createFruitMaterial(this.uniforms);
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
 
   private treeHeight = 8;
   private treeRadius = 3;
-  private bakedTrunkRadius = 1;
-  private bakedLeafScale = 1;
   private growth = 0;
   private growthTarget = 1;
   private growthSpeed = 0.32;
@@ -198,6 +166,7 @@ export class TreeStudio {
     this.scene.fogNode = aerialPerspective(this.groundUniforms);
 
     this.scene.add(this.landscape.group);
+    this.scene.add(this.tree.group);
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -249,58 +218,13 @@ export class TreeStudio {
 
   // ------------------------------------------------------------ structure
 
-  /** Re-derives the L-system and rebuilds both meshes. */
-  rebuild(params: StructureParams): TreeBuild {
-    const build = buildTree({
-      axiom: params.axiom,
-      rules: params.rules,
-      iterations: params.iterations,
-      angle: params.angle,
-      step: params.step,
-      shrink: params.shrink,
-      trunkRadius: params.trunkRadius,
-      tropism: params.tropism,
-      pipeExponent: params.pipeExponent,
-      leafScale: params.leafScale,
-      seed: params.seed,
-    });
-
+  /** Re-derives the L-system and rebuilds the tree. */
+  rebuild(params: StructureParams): TreeInfo {
+    const build = this.tree.rebuild(params);
     if (!build.skeleton) return build;
 
-    const geo = buildTreeGeometry(build.skeleton, {
-      leafShape: params.leafShape,
-      maxLeaves: MAX_LEAVES,
-      maxOrnaments: MAX_ORNAMENTS,
-    });
-
-    // Remember what the mesh was baked at, so the live sliders can express
-    // themselves as a ratio against it instead of forcing a rebuild.
-    this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
-    this.bakedLeafScale = Math.max(1e-4, params.leafScale);
-
-    this.disposeMeshes();
-
-    this.branchMesh = new Mesh(geo.branches, this.barkMaterial);
-    this.branchMesh.castShadow = true;
-    this.branchMesh.receiveShadow = true;
-    this.scene.add(this.branchMesh);
-
-    if (geo.foliage) {
-      this.leafMesh = new Mesh(geo.foliage, this.leafMaterial);
-      this.leafMesh.castShadow = true;
-      this.leafMesh.receiveShadow = true;
-      this.scene.add(this.leafMesh);
-    }
-
-    // Ornaments are always baked but start hidden. Their vertices collapse when
-    // density is zero, so they would cost nothing to draw — but a hidden mesh
-    // costs nothing to *skin* either, and the default tree carries neither
-    // flowers nor fruit.
-    this.flowerMesh = this.addOrnamentMesh(geo.flowers, this.flowerMaterial, this.uniforms.flowerDensity.value);
-    this.fruitMesh = this.addOrnamentMesh(geo.fruit, this.fruitMaterial, this.uniforms.fruitDensity.value);
-
-    this.treeHeight = Math.max(1, build.skeleton.height);
-    this.treeRadius = Math.max(0.5, build.skeleton.radiusXZ);
+    this.treeHeight = build.height;
+    this.treeRadius = build.radius;
     this.updateShadowVolume();
     // Different tree, possibly different cost — let the controller re-learn.
     this.resetAdaptive();
@@ -309,9 +233,9 @@ export class TreeStudio {
       ...this.stats,
       modules: build.stats.modules,
       nodes: build.stats.nodes,
-      leaves: geo.stats.leafCount,
-      branchTriangles: geo.stats.branchTriangles,
-      vertices: geo.stats.branchVertices + geo.stats.leafVertices,
+      leaves: build.leafCount,
+      branchTriangles: build.branchTriangles,
+      vertices: build.vertices,
       buildMs: build.stats.ms,
       truncated: build.stats.truncated,
     };
@@ -348,41 +272,11 @@ export class TreeStudio {
   // ----------------------------------------------------------------- look
 
   applyPalette(palette: Palette): void {
-    this.uniforms.barkDark.value.setHex(palette.barkDark);
-    this.uniforms.barkLight.value.setHex(palette.barkLight);
-    this.uniforms.barkTwig.value.setHex(palette.twig);
-    this.uniforms.barkMoss.value.setHex(palette.moss);
-    this.uniforms.lenticels.value = palette.lenticels ?? 0;
-    this.uniforms.leafBase.value.setHex(palette.leafBase);
-    this.uniforms.leafTip.value.setHex(palette.leafTip);
-    this.uniforms.leafAutumn.value.setHex(palette.leafAutumn);
-    this.uniforms.blossom.value.setHex(palette.blossom);
+    this.tree.applyPalette(palette);
   }
 
   applyLook(params: LookParams): void {
-    const u = this.uniforms;
-    u.wind.value = params.wind;
-    u.windSpeed.value = params.windSpeed;
-    const rad = MathUtils.degToRad(params.windDirection);
-    u.windDir.value.set(Math.sin(rad), Math.cos(rad));
-    u.autumn.value = params.autumn;
-    u.translucency.value = params.translucency;
-    u.barkBump.value = params.barkDetail;
-    u.mossAmount.value = params.moss;
-    u.radiusScale.value = params.trunkRadius / this.bakedTrunkRadius;
-    u.leafSize.value = params.leafScale / this.bakedLeafScale;
-    u.leafCull.value = params.leafDensity;
-
-    u.flowerDensity.value = params.flowerDensity;
-    u.flowerSize.value = params.flowerSize;
-    u.flowerColor.value.set(params.flowerColor);
-    u.flowerCore.value.set(params.flowerCore);
-    u.fruitDensity.value = params.fruitDensity;
-    u.fruitSize.value = params.fruitSize;
-    u.fruitColor.value.set(params.fruitColor);
-    u.fruitGloss.value = params.fruitGloss;
-    if (this.flowerMesh) this.flowerMesh.visible = params.flowerDensity > 0.001;
-    if (this.fruitMesh) this.fruitMesh.visible = params.fruitDensity > 0.001;
+    this.tree.applyLook(params);
 
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = params.exposure;
@@ -423,8 +317,7 @@ export class TreeStudio {
     // A sun near the horizon travels through more atmosphere, so it dims.
     this.sun.intensity = 4.2 * MathUtils.lerp(0.45, 1, Math.min(1, params.sunElevation / 26)) * (1 - params.haze * 0.35);
 
-    this.uniforms.sunDir.value.copy(this.sunDir);
-    this.uniforms.sunColor.value.copy(this.sunTint);
+    this.tree.setSun(this.sunDir, this.sunTint);
 
     // Tie the haze and ground horizon to the sky so nothing looks pasted on.
     const horizon = this.sunTint.clone().lerp(new Color(0xcfd8e6), 0.26).multiplyScalar(0.8);
@@ -444,7 +337,7 @@ export class TreeStudio {
   setGrowth(value: number): void {
     this.growth = MathUtils.clamp(value, 0, 1);
     this.growthTarget = this.growth;
-    this.uniforms.growth.value = this.growth;
+    this.tree.setGrowth(this.growth);
     this.onGrowth?.(this.growth);
   }
 
@@ -452,7 +345,7 @@ export class TreeStudio {
     this.growth = MathUtils.clamp(from, 0, 1);
     this.growthTarget = 1;
     this.growthSpeed = speed;
-    this.uniforms.growth.value = this.growth;
+    this.tree.setGrowth(this.growth);
   }
 
   get currentGrowth(): number {
@@ -484,7 +377,7 @@ export class TreeStudio {
 
     if (this.growth < this.growthTarget) {
       this.growth = Math.min(this.growthTarget, this.growth + dt * this.growthSpeed);
-      this.uniforms.growth.value = this.growth;
+      this.tree.setGrowth(this.growth);
       this.onGrowth?.(this.growth);
     }
 
@@ -696,49 +589,11 @@ export class TreeStudio {
     cam.updateProjectionMatrix();
   }
 
-  private disposeMeshes(): void {
-    if (this.branchMesh) {
-      this.scene.remove(this.branchMesh);
-      this.branchMesh.geometry.dispose();
-      this.branchMesh = null;
-    }
-    if (this.leafMesh) {
-      this.scene.remove(this.leafMesh);
-      this.leafMesh.geometry.dispose();
-      this.leafMesh = null;
-    }
-    for (const key of ['flowerMesh', 'fruitMesh'] as const) {
-      const mesh = this[key];
-      if (mesh) {
-        this.scene.remove(mesh);
-        mesh.geometry.dispose();
-        this[key] = null;
-      }
-    }
-  }
-
-  private addOrnamentMesh(
-    geometry: BufferGeometry | null,
-    material: MeshStandardNodeMaterial,
-    density: number,
-  ): Mesh | null {
-    if (!geometry) return null;
-    const mesh = new Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.visible = density > 0.001;
-    this.scene.add(mesh);
-    return mesh;
-  }
 
   dispose(): void {
     this.disposed = true;
     this.renderer?.setAnimationLoop(null);
-    this.disposeMeshes();
-    this.barkMaterial.dispose();
-    this.leafMaterial.dispose();
-    this.flowerMaterial.dispose();
-    this.fruitMaterial.dispose();
+    this.tree.dispose();
     this.landscape.dispose();
     this.sky.dispose();
     this.post?.dispose();

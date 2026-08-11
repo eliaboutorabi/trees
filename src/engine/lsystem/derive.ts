@@ -1,5 +1,5 @@
 /** Parallel rewriting: apply productions to every module, `iterations` times. */
-import type { Rng } from '../lib/rng';
+import type { Rng } from '../../lib/rng';
 import type { EvalEnv } from './expr';
 import type { Module, Production } from './grammar';
 

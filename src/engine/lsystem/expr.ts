@@ -5,7 +5,7 @@
  * operators, and a handful of math builtins. Compiles once to a closure so
  * derivation stays fast even for hundreds of thousands of modules.
  */
-import type { Rng } from '../lib/rng';
+import type { Rng } from '../../lib/rng';
 
 export type EvalEnv = Record<string, number>;
 export type Compiled = (env: EvalEnv, rng: Rng) => number;

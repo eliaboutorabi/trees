@@ -1,4 +1,4 @@
-import { mulberry32 } from '../lib/rng';
+import { mulberry32 } from '../../lib/rng';
 import { derive } from './derive';
 import type { EvalEnv } from './expr';
 import { parseAxiom, parseRules } from './grammar';

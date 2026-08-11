@@ -30,7 +30,7 @@ import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
 import { createGroundMaterial } from './materials/ground';
 import { createGroundCoverMaterial } from './materials/groundCover';
-import type { TreeUniforms } from './materials/shared';
+import type { TreeUniforms } from '../engine/materials/shared';
 
 export interface LandscapeOptions {
   seed: number;

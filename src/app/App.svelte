@@ -18,7 +18,7 @@
     Tree01Icon,
     UndoIcon,
   } from '@hugeicons/core-free-icons';
-  import { getPreset, type GrammarIssue } from '../lsystem';
+  import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, presets } from './params.svelte';
   import Section from './components/Section.svelte';

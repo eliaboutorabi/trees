@@ -135,10 +135,37 @@ overwritten by the pipe pass.
 
 ```
 src/
-  lsystem/      grammar: expression compiler, parser, derivation, turtle, presets
-  render/       three.js: geometry building, TSL materials, sky, post, scene
+  engine/       the portable half — no renderer, camera, post, or UI
+    lsystem/      expression compiler, parser, derivation, 3D turtle, presets
+    materials/    bark, foliage, flowers, fruit, and the shared vertex program
+    treeGeometry  meshing; occlusion  canopy light field
+    tree.ts       the Tree class — meshes plus uniforms, nothing else
+    index.ts      the entire public surface
+  render/       this particular app: scene, sky, landscape, post, adaptive res
   app/          Svelte 5 UI
+  lib/          rng, baked noise texture
 ```
+
+`src/engine` depends on nothing above it. `src/render` is one application built
+on top; `src/app` is one UI on top of that. Putting a tree in some other
+three.js scene is:
+
+```ts
+import { Tree, getPreset } from './engine';
+
+const tree = new Tree();
+scene.add(tree.group);
+tree.applyPreset(getPreset('oak'));
+tree.setSun(sunDirection, sunColour);
+
+// animation loop
+tree.setGrowth(elapsed / 3);
+```
+
+Growth and wind are GPU-side, so `setGrowth` is a single uniform write and an
+animating tree costs the same as a static one. A rebuild is only needed when the
+*grammar* changes — `Tree.applyLook` covers the long list of things that do not,
+from wind and autumn to flower colour.
 
 The interesting seam is `treeGeometry.ts`, which bakes the same attributes onto
 both the branch and foliage meshes so a single TSL vertex program in

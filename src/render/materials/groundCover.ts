@@ -35,7 +35,7 @@ import {
   uv,
   vec3,
 } from 'three/tsl';
-import type { TreeUniforms } from './shared';
+import type { TreeUniforms } from '../../engine/materials/shared';
 
 export interface GroundCoverOptions {
   /** How far the tip travels sideways, as a fraction of the blade's height. */

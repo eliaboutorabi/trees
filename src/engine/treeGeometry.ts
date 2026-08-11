@@ -12,7 +12,7 @@
  *            WebGPU only guarantees 8 vertex buffers
  */
 import { BufferAttribute, BufferGeometry, Quaternion, Vector3 } from 'three';
-import type { LeafPlacement, Skeleton } from '../lsystem/turtle';
+import type { LeafPlacement, Skeleton } from './lsystem/turtle';
 import { CanopyOcclusion } from './occlusion';
 
 export interface TreeGeometryOptions {

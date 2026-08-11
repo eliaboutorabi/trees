@@ -1,4 +1,4 @@
-import { DEFAULT_PRESET_ID, getPreset, PRESETS } from '../lsystem';
+import { DEFAULT_PRESET_ID, getPreset, PRESETS } from '../engine';
 import type { Quality, StudioParams } from '../render/studio';
 
 export interface AppParams extends StudioParams {

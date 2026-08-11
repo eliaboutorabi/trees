@@ -41,7 +41,7 @@ import {
   vec2,
   vec3,
 } from 'three/tsl';
-import { createNoiseTexture } from '../noiseTexture';
+import { createNoiseTexture } from '../../lib/noiseTexture';
 
 export type GroundUniforms = ReturnType<typeof createGroundMaterial>['uniforms'];
 

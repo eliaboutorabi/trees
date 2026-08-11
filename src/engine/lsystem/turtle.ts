@@ -11,7 +11,7 @@
  *   L     place a leaf
  */
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import type { Rng } from '../lib/rng';
+import type { Rng } from '../../lib/rng';
 import type { Module } from './grammar';
 
 export interface Skeleton {
