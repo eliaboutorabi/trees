@@ -1,0 +1,25 @@
+{
+  "name": "arbor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Arbor — a WebGPU L-system tree growing studio",
+  "scripts": {
+    "dev": "vite",
+    "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@types/node": "^26.2.0",
+    "@types/three": "^0.185.0",
+    "svelte": "^5.56.8",
+    "svelte-check": "^4.3.4",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.1"
+  }
+}

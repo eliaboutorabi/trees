@@ -1,0 +1,63 @@
+:root {
+  --panel: rgba(22, 17, 13, 0.72);
+  --panel-solid: #17110d;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --ink: rgba(255, 250, 244, 0.92);
+  --ink-dim: rgba(255, 246, 236, 0.6);
+  --ink-faint: rgba(255, 246, 236, 0.38);
+  --accent: #f0b064;
+
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: #0d0a08;
+}
+
+body {
+  font-family: ui-sans-serif, -apple-system, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--accent);
+  color: #21160c;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
