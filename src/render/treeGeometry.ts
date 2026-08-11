@@ -13,10 +13,11 @@
  */
 import { BufferAttribute, BufferGeometry, Quaternion, Vector3 } from 'three';
 import type { LeafPlacement, Skeleton } from '../lsystem/turtle';
+import { CanopyOcclusion } from './occlusion';
 
 export interface TreeGeometryOptions {
   /** 0 broad · 1 needle · 2 blossom. */
-  leafShape: 0 | 1 | 2;
+  leafShape: 0 | 1 | 2 | 3;
   /** Irregularity of the branch silhouette, 0–1. */
   bark: number;
   maxLeaves: number;
@@ -44,11 +45,23 @@ interface Buffers {
   birth: number[];
   flex: number[];
   seed: number[];
+  occlusion: number[];
   index: number[];
 }
 
 function newBuffers(): Buffers {
-  return { position: [], normal: [], uv: [], origin: [], center: [], birth: [], flex: [], seed: [], index: [] };
+  return {
+    position: [],
+    normal: [],
+    uv: [],
+    origin: [],
+    center: [],
+    birth: [],
+    flex: [],
+    seed: [],
+    occlusion: [],
+    index: [],
+  };
 }
 
 function toGeometry(b: Buffers): BufferGeometry {
@@ -58,9 +71,19 @@ function toGeometry(b: Buffers): BufferGeometry {
   g.setAttribute('uv', new BufferAttribute(new Float32Array(b.uv), 2));
   g.setAttribute('aOrigin', new BufferAttribute(new Float32Array(b.origin), 3));
   g.setAttribute('aCenter', new BufferAttribute(new Float32Array(b.center), 3));
-  g.setAttribute('aBirth', new BufferAttribute(new Float32Array(b.birth), 1));
-  g.setAttribute('aFlex', new BufferAttribute(new Float32Array(b.flex), 1));
-  g.setAttribute('aSeed', new BufferAttribute(new Float32Array(b.seed), 1));
+
+  // WebGPU guarantees only 8 vertex buffers, and one attribute per scalar blows
+  // straight through that. The four per-vertex scalars ride in a single vec4.
+  const count = b.birth.length;
+  const params = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    params[i * 4] = b.birth[i];
+    params[i * 4 + 1] = b.flex[i];
+    params[i * 4 + 2] = b.seed[i];
+    params[i * 4 + 3] = b.occlusion[i];
+  }
+  g.setAttribute('aParams', new BufferAttribute(params, 4));
+
   g.setIndex(b.index);
   g.computeBoundingSphere();
   // Wind pushes vertices past their resting position; keep them from popping.
@@ -91,8 +114,16 @@ function silhouetteWobble(seed: number, along: number, angle: number): number {
 }
 
 export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): TreeGeometryResult {
-  const branches = buildBranches(skel, opts);
-  const foliage = buildFoliage(skel, opts);
+  // Foliage has to be chosen first: the occlusion field is built from the
+  // leaves that actually survive thinning, and the branches sample it too.
+  const template = leafTemplate(opts.leafShape);
+  const blossomTpl = opts.leafShape === 2 ? template : leafTemplate(2);
+  const kept = selectLeaves(skel, opts);
+  const field = buildOcclusionField(skel, kept, template, blossomTpl);
+
+  const branches = buildBranches(skel, opts, field);
+  const foliage = buildFoliage(skel, kept, template, blossomTpl, field);
+
   return {
     branches: toGeometry(branches.buf),
     foliage: foliage ? toGeometry(foliage.buf) : null,
@@ -105,9 +136,77 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   };
 }
 
+/** Total surface area of a leaf template, used to weight the occlusion field. */
+function templateArea(tpl: LeafTemplate): number {
+  const p = tpl.position;
+  let total = 0;
+  for (let t = 0; t < tpl.index.length; t += 3) {
+    const a = tpl.index[t] * 3;
+    const b = tpl.index[t + 1] * 3;
+    const c = tpl.index[t + 2] * 3;
+    const abx = p[b] - p[a];
+    const aby = p[b + 1] - p[a + 1];
+    const abz = p[b + 2] - p[a + 2];
+    const acx = p[c] - p[a];
+    const acy = p[c + 1] - p[a + 1];
+    const acz = p[c + 2] - p[a + 2];
+    const cx = aby * acz - abz * acy;
+    const cy = abz * acx - abx * acz;
+    const cz = abx * acy - aby * acx;
+    total += Math.hypot(cx, cy, cz) * 0.5;
+  }
+  return total;
+}
+
+/** Deterministic thinning: keep an evenly spaced subset of the placements. */
+function selectLeaves(skel: Skeleton, opts: TreeGeometryOptions): LeafPlacement[] {
+  const all = skel.leaves;
+  if (all.length === 0) return [];
+  const density = Math.max(0, Math.min(1, opts.leafDensity));
+  const wanted = Math.min(opts.maxLeaves, Math.floor(all.length * density));
+  if (wanted <= 0) return [];
+
+  const stride = all.length / wanted;
+  const kept: LeafPlacement[] = [];
+  for (let i = 0; i < wanted; i++) kept.push(all[Math.min(all.length - 1, Math.floor(i * stride))]);
+  return kept;
+}
+
+function buildOcclusionField(
+  skel: Skeleton,
+  kept: LeafPlacement[],
+  blade: LeafTemplate,
+  blossom: LeafTemplate,
+): CanopyOcclusion {
+  const min = new Vector3(Infinity, Infinity, Infinity);
+  const max = new Vector3(-Infinity, -Infinity, -Infinity);
+  for (let i = 0; i < skel.count; i++) {
+    min.x = Math.min(min.x, skel.pos[i * 3]);
+    min.y = Math.min(min.y, skel.pos[i * 3 + 1]);
+    min.z = Math.min(min.z, skel.pos[i * 3 + 2]);
+    max.x = Math.max(max.x, skel.pos[i * 3]);
+    max.y = Math.max(max.y, skel.pos[i * 3 + 1]);
+    max.z = Math.max(max.z, skel.pos[i * 3 + 2]);
+  }
+  if (!Number.isFinite(min.x)) {
+    min.set(-1, -1, -1);
+    max.set(1, 1, 1);
+  }
+
+  const field = new CanopyOcclusion(min, max);
+  const bladeArea = templateArea(blade);
+  const blossomArea = templateArea(blossom);
+  for (const leaf of kept) {
+    const area = (leaf.kind === 1 ? blossomArea : bladeArea) * leaf.scale * leaf.scale;
+    field.addArea(leaf.pos.x, leaf.pos.y, leaf.pos.z, area);
+  }
+  field.finalize();
+  return field;
+}
+
 // ---------------------------------------------------------------- branches
 
-function buildBranches(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffers } {
+function buildBranches(skel: Skeleton, opts: TreeGeometryOptions, field: CanopyOcclusion): { buf: Buffers } {
   const buf = newBuffers();
   const { pos, parent, radius, arc, count } = skel;
   if (count === 0) return { buf };
@@ -144,6 +243,7 @@ function buildBranches(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffer
 
   const rootRadius = Math.max(1e-5, skel.maxRadius);
   const maxArc = Math.max(1e-5, skel.maxArc);
+  const heightRef = Math.max(0.5, skel.height);
 
   const centers: number[] = [];
   const radii: number[] = [];
@@ -206,8 +306,16 @@ function buildBranches(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffer
       const oz = centers[oi * 3 + 2];
 
       const birth = Math.min(1, a / maxArc);
+      const occlusion = field.sample(cx, cy, cz);
+
+      // Wind weight is dominated by height, not by arc length. Height is a
+      // smooth function of space, so anything sitting near anything else bends
+      // by nearly the same angle and the two never scissor through each other.
+      // Arc length is not: a twig tip and the limb it hangs off can share a
+      // location while being metres apart along the branch.
       const thin = 1 - Math.min(1, r / rootRadius);
-      const flex = Math.pow(thin, 1.5) * (0.25 + 0.75 * Math.min(1, a / maxArc));
+      const heightNorm = Math.max(0, Math.min(1, cy / heightRef));
+      const flex = Math.pow(heightNorm, 1.3) * (0.62 + 0.38 * Math.pow(thin, 1.5));
 
       // Taper slope, so normals lean along the cone rather than straight out.
       const rPrev = radii[Math.max(0, i - 1)];
@@ -238,6 +346,7 @@ function buildBranches(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffer
         buf.birth.push(birth);
         buf.flex.push(flex);
         buf.seed.push(strandSeed);
+        buf.occlusion.push(occlusion);
       }
     }
 
@@ -245,7 +354,11 @@ function buildBranches(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffer
       const a0 = base + i * ringVerts;
       const b0 = base + (i + 1) * ringVerts;
       for (let k = 0; k < segs; k++) {
-        buf.index.push(a0 + k, b0 + k, a0 + k + 1, a0 + k + 1, b0 + k, b0 + k + 1);
+        // Counter-clockwise seen from outside. The frame is right-handed with
+        // normalB = tangent × normalA, so winding the other way puts the face
+        // normal down the tube's axis-inward direction and the whole trunk
+        // renders inside-out.
+        buf.index.push(a0 + k, a0 + k + 1, b0 + k + 1, a0 + k, b0 + k + 1, b0 + k);
       }
     }
   };
@@ -326,7 +439,8 @@ function bladeTemplate(halfWidth: number, length: number, cup: number, droop: nu
     for (let i = 0; i < nu - 1; i++) {
       const a = j * nu + i;
       const b = a + nu;
-      index.push(a, b, a + 1, a + 1, b, b + 1);
+      // Wound so the geometric normal agrees with the +z normals above.
+      index.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
   return normalizeTemplate(position, normal, uv, index);
@@ -373,7 +487,12 @@ function mergeTemplates(parts: { tpl: LeafTemplate; quat: Quaternion; scale: num
   return normalizeTemplate(position, normal, uv, index);
 }
 
-function leafTemplate(shape: 0 | 1 | 2): LeafTemplate {
+function leafTemplate(shape: 0 | 1 | 2 | 3): LeafTemplate {
+  if (shape === 3) {
+    // Lance: long, narrow and drooping, the way a willow leaf hangs.
+    return bladeTemplate(0.115, 1.7, 0.035, 0.34, 3, 6);
+  }
+
   if (shape === 1) {
     // Needle spray: a fan of slender blades. They have to stay wide enough to
     // cover more than a pixel or the whole conifer renders as bare branches.
@@ -407,24 +526,18 @@ function leafTemplate(shape: 0 | 1 | 2): LeafTemplate {
   return bladeTemplate(0.34, 1.0, 0.09, 0.14, 3, 5);
 }
 
-function buildFoliage(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffers; count: number } | null {
-  const all = skel.leaves;
-  if (all.length === 0) return null;
-
-  const density = Math.max(0, Math.min(1, opts.leafDensity));
-  const wanted = Math.min(opts.maxLeaves, Math.floor(all.length * density));
-  if (wanted <= 0) return null;
-
-  // Deterministic thinning: keep an evenly spaced subset.
-  const stride = all.length / wanted;
-  const kept: LeafPlacement[] = [];
-  for (let i = 0; i < wanted; i++) kept.push(all[Math.min(all.length - 1, Math.floor(i * stride))]);
-
-  const blade = leafTemplate(opts.leafShape);
-  const blossom = opts.leafShape === 2 ? blade : leafTemplate(2);
+function buildFoliage(
+  skel: Skeleton,
+  kept: LeafPlacement[],
+  blade: LeafTemplate,
+  blossom: LeafTemplate,
+  field: CanopyOcclusion,
+): { buf: Buffers; count: number } | null {
+  if (kept.length === 0) return null;
 
   const buf = newBuffers();
   const maxArc = Math.max(1e-5, skel.maxArc);
+  const heightRef = Math.max(0.5, skel.height);
   const v = new Vector3();
   const nrm = new Vector3();
 
@@ -434,6 +547,12 @@ function buildFoliage(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffers
     const scale = leaf.scale;
     // Leaves appear just after the twig that carries them.
     const birth = Math.min(1, leaf.arc / maxArc + 0.015);
+    const occlusion = field.sample(leaf.pos.x, leaf.pos.y, leaf.pos.z);
+
+    // A leaf must bend by the same amount as the twig it hangs on, or it slides
+    // along the branch and shears through its neighbours. Twigs are thin, so
+    // their `thin` term is ~1 and this reduces to the branch formula.
+    const flex = Math.pow(Math.max(0, Math.min(1, leaf.pos.y / heightRef)), 1.3);
 
     for (let i = 0; i < tpl.position.length; i += 3) {
       v.set(tpl.position[i], tpl.position[i + 1], tpl.position[i + 2])
@@ -448,10 +567,11 @@ function buildFoliage(skel: Skeleton, opts: TreeGeometryOptions): { buf: Buffers
       buf.origin.push(leaf.pos.x, leaf.pos.y, leaf.pos.z);
       buf.center.push(leaf.pos.x, leaf.pos.y, leaf.pos.z);
       buf.birth.push(birth);
-      buf.flex.push(1);
+      buf.flex.push(flex);
       // Blossoms are tagged by offsetting the seed past 2, so the leaf shader
       // can tell them apart without another attribute.
       buf.seed.push(leaf.kind === 1 ? leaf.seed + 2 : leaf.seed);
+      buf.occlusion.push(occlusion);
     }
     for (let i = 0; i < tpl.uv.length; i++) buf.uv.push(tpl.uv[i]);
     for (let i = 0; i < tpl.index.length; i++) buf.index.push(base + tpl.index[i]);

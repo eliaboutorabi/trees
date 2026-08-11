@@ -1,15 +1,15 @@
 /** Procedural bark — furrows, ridges, moss and young-twig blending, no textures. */
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { bumpMap, float, mix, mx_fractal_noise_float, positionGeometry, smoothstep, uv, vec3 } from 'three/tsl';
-import { floatAttribute, growthPosition, vec3Attribute, type TreeUniforms } from './shared';
+import { growthPosition, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
 export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
-  material.positionNode = growthPosition(u, { thickenBase: 0.34, windScale: 1 });
+  material.positionNode = growthPosition(u, { thickenBase: 0.34, flutter: false });
 
   const st = uv();
   const center = vec3Attribute('aCenter');
-  const seed = floatAttribute('aSeed');
+  const { seed, occlusion } = treeParams();
 
   // Distance from the strand axis: the resting radius of this vertex.
   const radius = positionGeometry.sub(center).length();
@@ -41,7 +41,20 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
     .mul(twigness.oneMinus())
     .clamp(0, 1);
 
-  material.colorNode = mix(withTwig, u.barkMoss, mossMask);
+  // Birch lenticels: dark dashes stretched around the trunk, not along it.
+  const lenticel = mx_fractal_noise_float(vec3(angle.mul(ringScale.mul(0.35)), st.y.mul(26.0), 4.7), 2, 2.0, 0.5, 1.0)
+    .abs()
+    .oneMinus()
+    .pow(6.0)
+    .mul(u.lenticels)
+    .mul(twigness.oneMinus())
+    .clamp(0, 1);
+
+  const withMoss = mix(withTwig, u.barkMoss, mossMask);
+  const withLenticels = mix(withMoss, u.barkDark, lenticel);
+
+  // Branches buried inside the canopy sit in ambient shade.
+  material.colorNode = withLenticels.mul(occlusion.mul(u.occlusionStrength).mul(0.55).oneMinus());
   material.roughnessNode = float(0.98).sub(height.mul(0.22)).sub(twigness.mul(0.18));
   material.metalnessNode = float(0);
   // The slider is 0–1; bark needs a good deal more relief than that to read.

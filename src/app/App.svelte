@@ -320,10 +320,10 @@
 
       <Section title="Foliage">
         <div class="segmented">
-          {#each [{ v: 0, l: 'Broad' }, { v: 1, l: 'Needle' }, { v: 2, l: 'Blossom' }] as opt (opt.v)}
+          {#each [{ v: 0, l: 'Broad' }, { v: 3, l: 'Lance' }, { v: 1, l: 'Needle' }, { v: 2, l: 'Blossom' }] as opt (opt.v)}
             <button
               class:active={params.leafShape === opt.v}
-              onclick={() => (params.leafShape = opt.v as 0 | 1 | 2)}
+              onclick={() => (params.leafShape = opt.v as 0 | 1 | 2 | 3)}
             >
               {opt.l}
             </button>

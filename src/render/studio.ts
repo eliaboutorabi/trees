@@ -40,7 +40,7 @@ export interface StructureParams {
   pipeExponent: number;
   seed: number;
   leafScale: number;
-  leafShape: 0 | 1 | 2;
+  leafShape: 0 | 1 | 2 | 3;
   leafDensity: number;
   /** Also drives the silhouette jitter baked into the geometry. */
   barkDetail: number;
@@ -277,6 +277,7 @@ export class TreeStudio {
     this.uniforms.barkLight.value.setHex(palette.barkLight);
     this.uniforms.barkTwig.value.setHex(palette.twig);
     this.uniforms.barkMoss.value.setHex(palette.moss);
+    this.uniforms.lenticels.value = palette.lenticels ?? 0;
     this.uniforms.leafBase.value.setHex(palette.leafBase);
     this.uniforms.leafTip.value.setHex(palette.leafTip);
     this.uniforms.leafAutumn.value.setHex(palette.leafAutumn);

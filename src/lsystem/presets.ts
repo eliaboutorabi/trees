@@ -12,6 +12,8 @@ export interface Palette {
   /** Smooth young-twig colour, blended in as branches get thin. */
   twig: number;
   moss: number;
+  /** Birch-style horizontal dashes on the bark, 0–1. */
+  lenticels?: number;
   leafBase: number;
   leafTip: number;
   /** Where leaves head as the `autumn` slider rises. */
@@ -32,8 +34,8 @@ export interface PresetParams {
   tropism: number;
   pipeExponent: number;
   leafScale: number;
-  /** 0 broad leaf · 1 needle cluster · 2 rounded blossom. */
-  leafShape: 0 | 1 | 2;
+  /** 0 broad · 1 needle cluster · 2 rounded blossom · 3 narrow lance. */
+  leafShape: 0 | 1 | 2 | 3;
   /** How much this species moves in wind. */
   windiness: number;
 }
@@ -98,29 +100,38 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
 # shoots, so anything unresolved simply leafs out.
 A(s) : n >= N-1 -> F(LEN*s)[&(76)L(0.9)][/(120)&(84)L(0.85)][/(240)&(70)L(0.9)]
 
-# Structural crown
-A(s) : s > 0.30 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.2))A(s*SHRINK*0.82)][/(150)&(ANG*rand(0.9,1.3))A(s*SHRINK*0.80)]A(s*SHRINK)
+# A short trunk that divides low into a handful of heavy limbs
+A(s) : s > 0.44 -> F(LEN*s)/(137.5)[&(ANG*rand(0.85,1.2))A(s*SHRINK*0.84)][/(155)&(ANG*rand(0.9,1.25))A(s*SHRINK*0.82)]^(rand(2,8))A(s*SHRINK)
 
-A(s) -> F(LEN*s)V(s)
+A(s) -> C(s)
 
-# V drops a fan of trailing shoots. They must start well off vertical:
-# tropism turns a shoot about heading × up, which is zero when the shoot
-# points straight up — a vertical shoot would never feel gravity at all.
-V(s) -> [&(76)T(-0.5)W(s*1.1)][/(120)&(84)T(-0.5)W(s*1.05)][/(240)&(70)T(-0.5)W(s*1.15)]
+# Each limb arches up and outward, dropping a curtain at every node. That is
+# what gives a willow its fountain shape: the shoots hang from a long span
+# rather than from one point in the middle of the crown. Arching the limb also
+# lifts the attachment points, so the curtains clear the ground.
+C(s) : s > 0.22 -> F(LEN*s*0.95)[V(s)]$&(9)+(rand(-22,22))C(s*0.88)
+C(s) -> V(s)
 
-# The trailing shoot itself — T(-0.5) does all the weeping
-W(s) : s > 0.05 -> F(LEN*s*1.1)[/(90)&(40)L(0.8)][/(250)&(38)L(0.75)]/(137.5)W(s*0.92)
-W(s) -> [L(0.9)][/(120)L(0.8)]`,
+# A curtain. The $ levels the frame against the horizon first, so the pitch
+# after it is measured from the ground rather than from whatever roll the limb
+# happened to be carrying — otherwise shoots launch sideways or upward and run
+# out of generations before gravity can turn them over.
+V(s) -> [$^(100)T(-0.9)W(s*1.4)]
+
+# The trailing shoot — many short internodes so the hang curves smoothly,
+# and a decay near 1 so it keeps going for as long as generations allow
+W(s) : s > 0.03 -> F(LEN*s*0.5)[/(60)L(0.8)][/(180)L(0.75)][/(290)L(0.8)]/(137.5)W(s*0.94)
+W(s) -> L(0.7)`,
     params: {
-      iterations: 14,
-      angle: 32,
+      iterations: 22,
+      angle: 46,
       step: 1.0,
       shrink: 0.9,
       trunkRadius: 0.34,
-      tropism: 0.1,
-      pipeExponent: 2.5,
-      leafScale: 0.105,
-      leafShape: 0,
+      tropism: 0.07,
+      pipeExponent: 2.6,
+      leafScale: 0.13,
+      leafShape: 3,
       windiness: 1.5,
     },
     palette: {
@@ -203,6 +214,7 @@ A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
       barkLight: 0xe4ded0,
       twig: 0x8a7c5e,
       moss: 0x5c6a34,
+      lenticels: 1,
       leafBase: 0x4a7526,
       leafTip: 0xb2cc4e,
       leafAutumn: 0xe8b23a,
