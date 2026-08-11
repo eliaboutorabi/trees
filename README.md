@@ -249,6 +249,34 @@ it changes resolution, since it is part of the same budget.
 
 Together: 27.4ms to 22.2ms at 2x, with no visible difference.
 
+### The sky is hand-tuned on purpose
+
+A Preetham single-scattering sky was built and then reverted. Recording why, so
+it is not attempted again without new information.
+
+The model itself works — the port produced a correct blue zenith at (0.09, 0.29,
+0.80) and a bright neutral horizon band, and deriving the directional light's
+colour from the same extinction term is a genuinely better idea than two
+hand-picked constants kept in sync by eye. Three things went wrong in practice:
+
+- **Preetham's `0.04` exposure assumes a tone-mapped background.** Here the sky
+  is also the image-based light, and at that scale the horizon sits at a
+  radiance of 2.6 — enough ambient to bleach the scene and flatten the key light
+  out of it.
+- **Mie is the whiteness, Rayleigh is the blue.** The default ratio gives a
+  milky sky at every sun angle: physically defensible, visually flat.
+- **17 degrees is not golden hour.** Golden hour is roughly 0-6 degrees, and the
+  painted gradient simply declared the light warm at any elevation. The physical
+  model correctly renders 17 degrees as mid-morning — and at 6 degrees, where it
+  should shine, `sunIntensity` has fallen to 9% of its peak, so the sky goes dim
+  while the separately-computed directional light does not, and the two
+  disagree in the opposite direction from before.
+
+Fixing all three is possible; it means deriving the light intensity from the
+same model and re-tuning the whole look around a lower default sun. That is a
+larger change than it looks, and four attempts did not beat the gradient it was
+replacing, so the gradient stays.
+
 ### Background and environment are not the same texture
 
 The procedural sky carries a sun disc at up to 30x the radiance of the sky
