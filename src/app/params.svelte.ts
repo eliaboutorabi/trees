@@ -10,6 +10,8 @@ export interface AppParams extends StudioParams {
 
 export const presets = PRESETS;
 
+const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+
 export function paramsFromPreset(id: string): AppParams {
   const preset = getPreset(id);
   const p = preset.params;
@@ -30,6 +32,15 @@ export function paramsFromPreset(id: string): AppParams {
     leafScale: p.leafScale,
     leafShape: p.leafShape,
     leafDensity: 1,
+
+    flowerDensity: p.flowerDensity ?? 0,
+    flowerSize: 1,
+    flowerColor: hex(preset.palette.flowerColor ?? 0xf6d9e8),
+    flowerCore: hex(preset.palette.flowerCore ?? 0xf2c455),
+    fruitDensity: p.fruitDensity ?? 0,
+    fruitSize: 1,
+    fruitColor: hex(preset.palette.fruitColor ?? 0xb8231f),
+    fruitGloss: 0.55,
 
     barkDetail: 0.55,
     moss: 0.4,

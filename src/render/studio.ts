@@ -3,6 +3,7 @@
  * between L-system parameters and what ends up on screen.
  */
 import {
+  BufferGeometry,
   Color,
   DirectionalLight,
   FogExp2,
@@ -15,13 +16,14 @@ import {
   Scene,
   Vector3,
 } from 'three';
-import { AgXToneMapping, WebGPURenderer } from 'three/webgpu';
+import { AgXToneMapping, MeshStandardNodeMaterial, WebGPURenderer } from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTree, getPreset, type TreeBuild } from '../lsystem';
 import type { Palette } from '../lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
 import { createLandscape } from './landscape';
 import { createLeafMaterial } from './materials/leaf';
+import { createFlowerMaterial, createFruitMaterial } from './materials/ornament';
 import { createTreeUniforms } from './materials/shared';
 import { createPostPipeline } from './post';
 import { ProceduralSky, sunColorFor, sunDirection, type SkySettings } from './sky';
@@ -58,6 +60,14 @@ export interface LookParams {
   leafScale: number;
   /** Culled on the GPU rather than rebuilt. */
   leafDensity: number;
+  flowerDensity: number;
+  flowerSize: number;
+  flowerColor: string;
+  flowerCore: string;
+  fruitDensity: number;
+  fruitSize: number;
+  fruitColor: string;
+  fruitGloss: number;
   exposure: number;
   bloom: number;
   depthOfField: boolean;
@@ -102,6 +112,7 @@ export interface StudioStats {
 }
 
 const MAX_LEAVES = 26_000;
+const MAX_ORNAMENTS = 1_800;
 
 // Scratch objects for the shadow fit, which runs whenever the sun moves.
 const _v1 = new Vector3();
@@ -126,8 +137,12 @@ export class TreeStudio {
 
   private branchMesh: Mesh | null = null;
   private leafMesh: Mesh | null = null;
+  private flowerMesh: Mesh | null = null;
+  private fruitMesh: Mesh | null = null;
   private readonly barkMaterial = createBarkMaterial(this.uniforms);
   private readonly leafMaterial = createLeafMaterial(this.uniforms);
+  private readonly flowerMaterial = createFlowerMaterial(this.uniforms);
+  private readonly fruitMaterial = createFruitMaterial(this.uniforms);
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
@@ -251,6 +266,7 @@ export class TreeStudio {
     const geo = buildTreeGeometry(build.skeleton, {
       leafShape: params.leafShape,
       maxLeaves: MAX_LEAVES,
+      maxOrnaments: MAX_ORNAMENTS,
     });
 
     // Remember what the mesh was baked at, so the live sliders can express
@@ -271,6 +287,13 @@ export class TreeStudio {
       this.leafMesh.receiveShadow = true;
       this.scene.add(this.leafMesh);
     }
+
+    // Ornaments are always baked but start hidden. Their vertices collapse when
+    // density is zero, so they would cost nothing to draw — but a hidden mesh
+    // costs nothing to *skin* either, and the default tree carries neither
+    // flowers nor fruit.
+    this.flowerMesh = this.addOrnamentMesh(geo.flowers, this.flowerMaterial, this.uniforms.flowerDensity.value);
+    this.fruitMesh = this.addOrnamentMesh(geo.fruit, this.fruitMaterial, this.uniforms.fruitDensity.value);
 
     this.treeHeight = Math.max(1, build.skeleton.height);
     this.treeRadius = Math.max(0.5, build.skeleton.radiusXZ);
@@ -345,6 +368,17 @@ export class TreeStudio {
     u.radiusScale.value = params.trunkRadius / this.bakedTrunkRadius;
     u.leafSize.value = params.leafScale / this.bakedLeafScale;
     u.leafCull.value = params.leafDensity;
+
+    u.flowerDensity.value = params.flowerDensity;
+    u.flowerSize.value = params.flowerSize;
+    u.flowerColor.value.set(params.flowerColor);
+    u.flowerCore.value.set(params.flowerCore);
+    u.fruitDensity.value = params.fruitDensity;
+    u.fruitSize.value = params.fruitSize;
+    u.fruitColor.value.set(params.fruitColor);
+    u.fruitGloss.value = params.fruitGloss;
+    if (this.flowerMesh) this.flowerMesh.visible = params.flowerDensity > 0.001;
+    if (this.fruitMesh) this.fruitMesh.visible = params.fruitDensity > 0.001;
 
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = params.exposure;
@@ -661,6 +695,28 @@ export class TreeStudio {
       this.leafMesh.geometry.dispose();
       this.leafMesh = null;
     }
+    for (const key of ['flowerMesh', 'fruitMesh'] as const) {
+      const mesh = this[key];
+      if (mesh) {
+        this.scene.remove(mesh);
+        mesh.geometry.dispose();
+        this[key] = null;
+      }
+    }
+  }
+
+  private addOrnamentMesh(
+    geometry: BufferGeometry | null,
+    material: MeshStandardNodeMaterial,
+    density: number,
+  ): Mesh | null {
+    if (!geometry) return null;
+    const mesh = new Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.visible = density > 0.001;
+    this.scene.add(mesh);
+    return mesh;
   }
 
   dispose(): void {
@@ -669,6 +725,8 @@ export class TreeStudio {
     this.disposeMeshes();
     this.barkMaterial.dispose();
     this.leafMaterial.dispose();
+    this.flowerMaterial.dispose();
+    this.fruitMaterial.dispose();
     this.landscape.dispose();
     this.sky.dispose();
     this.post?.dispose();

@@ -19,6 +19,8 @@ export interface TreeGeometryOptions {
   /** 0 broad · 1 needle · 2 blossom · 3 lance. */
   leafShape: 0 | 1 | 2 | 3;
   maxLeaves: number;
+  /** Sites baked for flowers and for fruit. Density then culls on the GPU. */
+  maxOrnaments?: number;
 }
 
 /**
@@ -31,11 +33,14 @@ const SILHOUETTE_WOBBLE = 0.55;
 export interface TreeGeometryResult {
   branches: BufferGeometry;
   foliage: BufferGeometry | null;
+  flowers: BufferGeometry | null;
+  fruit: BufferGeometry | null;
   stats: {
     branchVertices: number;
     branchTriangles: number;
     leafCount: number;
     leafVertices: number;
+    ornamentSites: number;
   };
 }
 
@@ -127,16 +132,98 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   const branches = buildBranches(skel, field);
   const foliage = buildFoliage(skel, kept, template, blossomTpl, field);
 
+  // Flowers and fruit hang off the same attachment points as the leaves, so any
+  // species can carry them without the grammar knowing anything about it.
+  const sites = selectOrnamentSites(kept, opts.maxOrnaments ?? 2600);
+  const flowers = buildOrnaments(skel, sites, flowerTemplate(), field, { droop: 0 });
+  const fruit = buildOrnaments(skel, sites, berryTemplate(), field, { droop: 1.05, seedShift: 0.37 });
+
   return {
     branches: toGeometry(branches.buf),
     foliage: foliage ? toGeometry(foliage.buf) : null,
+    flowers: flowers ? toGeometry(flowers) : null,
+    fruit: fruit ? toGeometry(fruit) : null,
     stats: {
       branchVertices: branches.buf.position.length / 3,
       branchTriangles: branches.buf.index.length / 3,
       leafCount: foliage?.count ?? 0,
       leafVertices: foliage ? foliage.buf.position.length / 3 : 0,
+      ornamentSites: sites.length,
     },
   };
+}
+
+/**
+ * Pick the sites that can carry a flower or a fruit, ordered so that the
+ * density slider only ever adds.
+ *
+ * Each site gets a rank in [0, 1) which the shader compares against the density
+ * uniform. Ranks are assigned in hash order rather than in placement order, so
+ * a low density scatters a few ornaments through the whole crown instead of
+ * clustering them on whichever branch happened to be built first.
+ */
+function selectOrnamentSites(kept: LeafPlacement[], max: number): { leaf: LeafPlacement; rank: number }[] {
+  if (kept.length === 0 || max <= 0) return [];
+  const ranked = kept.map((leaf, i) => ({ leaf, key: Math.sin(i * 12.9898 + leaf.seed * 78.233) * 43758.5453 }));
+  ranked.sort((a, b) => (a.key - Math.floor(a.key)) - (b.key - Math.floor(b.key)));
+  const take = Math.min(max, ranked.length);
+  const sites: { leaf: LeafPlacement; rank: number }[] = [];
+  for (let i = 0; i < take; i++) sites.push({ leaf: ranked[i].leaf, rank: (i + 0.5) / take });
+  return sites;
+}
+
+function buildOrnaments(
+  skel: Skeleton,
+  sites: { leaf: LeafPlacement; rank: number }[],
+  tpl: LeafTemplate,
+  field: CanopyOcclusion,
+  opts: { droop: number; seedShift?: number },
+): Buffers | null {
+  if (sites.length === 0) return null;
+
+  const buf = newBuffers();
+  const maxArc = Math.max(1e-5, skel.maxArc);
+  const heightRef = Math.max(0.5, skel.height);
+  const v = new Vector3();
+  const nrm = new Vector3();
+  const shift = opts.seedShift ?? 0;
+
+  for (const { leaf, rank } of sites) {
+    const base = buf.position.length / 3;
+    const scale = leaf.scale;
+    // Ornaments arrive a little after the leaves that share their twig.
+    const birth = Math.min(1, leaf.arc / maxArc + 0.04);
+    const occlusion = field.sample(leaf.pos.x, leaf.pos.y, leaf.pos.z);
+    const flex = Math.pow(Math.max(0, Math.min(1, leaf.pos.y / heightRef)), 1.3);
+    // Fruit hangs straight down whatever the twig is doing, so the droop is
+    // applied in world space after the placement rotation. It scales with the
+    // ornament because the pivot stays at the anchor: bigger fruit hangs lower.
+    const drop = opts.droop * scale;
+
+    for (let i = 0; i < tpl.position.length; i += 3) {
+      v.set(tpl.position[i], tpl.position[i + 1], tpl.position[i + 2])
+        .multiplyScalar(scale)
+        .applyQuaternion(leaf.quat)
+        .add(leaf.pos);
+      v.y -= drop;
+      nrm.set(tpl.normal[i], tpl.normal[i + 1], tpl.normal[i + 2]).applyQuaternion(leaf.quat);
+
+      buf.position.push(v.x, v.y, v.z);
+      buf.normal.push(nrm.x, nrm.y, nrm.z);
+      buf.origin.push(leaf.pos.x, leaf.pos.y, leaf.pos.z);
+      buf.center.push(leaf.pos.x, leaf.pos.y, leaf.pos.z);
+      buf.birth.push(birth);
+      buf.flex.push(flex);
+      // The seed slot carries the rank. Per-ornament colour variation is hashed
+      // back out of it in the shader, so one scalar does both jobs.
+      buf.seed.push((rank + shift) % 1);
+      buf.occlusion.push(occlusion);
+    }
+    for (let i = 0; i < tpl.uv.length; i++) buf.uv.push(tpl.uv[i]);
+    for (let i = 0; i < tpl.index.length; i++) buf.index.push(base + tpl.index[i]);
+  }
+
+  return buf;
 }
 
 /** Total surface area of a leaf template, used to weight the occlusion field. */
@@ -526,6 +613,54 @@ function leafTemplate(shape: 0 | 1 | 2 | 3): LeafTemplate {
   }
 
   return bladeTemplate(0.34, 1.0, 0.09, 0.14, 3, 5);
+}
+
+/** A five-petal rosette. `uv.y` runs 0 at the throat to 1 at the petal tip. */
+function flowerTemplate(): LeafTemplate {
+  return leafTemplate(2);
+}
+
+/**
+ * A berry: a squat sphere, low enough poly to bake thousands of them.
+ *
+ * `uv.y` runs bottom to top so the shader can darken the underside, which is
+ * most of what makes a small round thing read as three-dimensional once it is
+ * only a dozen pixels across.
+ */
+function berryTemplate(radius = 0.4, segments = 7, rings = 5): LeafTemplate {
+  const position: number[] = [];
+  const normal: number[] = [];
+  const uv: number[] = [];
+  const index: number[] = [];
+
+  for (let r = 0; r <= rings; r++) {
+    const v = r / rings;
+    const phi = v * Math.PI;
+    const sy = Math.cos(phi);
+    const sr = Math.sin(phi);
+    for (let s = 0; s <= segments; s++) {
+      const u = s / segments;
+      const theta = u * Math.PI * 2;
+      const nx = Math.cos(theta) * sr;
+      const ny = sy;
+      const nz = Math.sin(theta) * sr;
+      // Slightly taller than wide, and flattened at the top where the stalk sits.
+      position.push(nx * radius, ny * radius * 1.12 - radius * 0.05, nz * radius);
+      normal.push(nx, ny, nz);
+      uv.push(u, 1 - v);
+    }
+  }
+
+  const stride = segments + 1;
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
+      const a = r * stride + s;
+      const b = a + stride;
+      index.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+
+  return normalizeTemplate(position, normal, uv, index);
 }
 
 function buildFoliage(

@@ -7,6 +7,8 @@
     Camera01Icon,
     Download01Icon,
     FocusIcon,
+    CherryIcon,
+    FlowerIcon,
     Leaf01Icon,
     PlayIcon,
     Rotate01Icon,
@@ -20,6 +22,7 @@
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, presets } from './params.svelte';
   import Section from './components/Section.svelte';
+  import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
 
   let canvas = $state<HTMLCanvasElement>();
@@ -207,6 +210,14 @@
       trunkRadius: params.trunkRadius,
       leafScale: params.leafScale,
       leafDensity: params.leafDensity,
+      flowerDensity: params.flowerDensity,
+      flowerSize: params.flowerSize,
+      flowerColor: params.flowerColor,
+      flowerCore: params.flowerCore,
+      fruitDensity: params.fruitDensity,
+      fruitSize: params.fruitSize,
+      fruitColor: params.fruitColor,
+      fruitGloss: params.fruitGloss,
       exposure: params.exposure,
       bloom: params.bloom,
       depthOfField: params.depthOfField,
@@ -383,6 +394,24 @@
         <Slider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} />
         <Slider label="Autumn" bind:value={params.autumn} min={0} max={1} />
         <Slider label="Translucency" bind:value={params.translucency} min={0} max={2.5} />
+      </Section>
+
+      <Section title="Bloom &amp; fruit" icon={FlowerIcon}>
+        <p class="help">
+          Flowers and fruit hang from the same twigs the leaves do, so any species can carry
+          them. Everything here is live.
+        </p>
+        <h4 class="sub"><HugeiconsIcon icon={FlowerIcon} size={13} strokeWidth={1.6} /> Flowers</h4>
+        <Slider label="Amount" bind:value={params.flowerDensity} min={0} max={1} />
+        <Slider label="Size" bind:value={params.flowerSize} min={0.2} max={2.5} />
+        <Swatch label="Petal" bind:value={params.flowerColor} />
+        <Swatch label="Throat" bind:value={params.flowerCore} />
+
+        <h4 class="sub"><HugeiconsIcon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
+        <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
+        <Slider label="Size" bind:value={params.fruitSize} min={0.2} max={2.5} />
+        <Swatch label="Skin" bind:value={params.fruitColor} />
+        <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} />
       </Section>
 
       <Section title="Light &amp; air" icon={SunIcon}>
@@ -844,6 +873,22 @@
     width: 13px;
     height: 13px;
     cursor: pointer;
+  }
+
+  .sub {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.9rem 0 0.6rem;
+    font-size: 0.64rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .sub:first-of-type {
+    margin-top: 0.2rem;
   }
 
   .help {

@@ -81,6 +81,20 @@ export function createTreeUniforms() {
     /** Keep leaves whose hash falls under this — the foliage-density slider. */
     leafCull: uniform(1),
 
+    // Flowers and fruit. Sites are baked at rebuild time and culled here, so
+    // every one of these is live.
+    /** Fraction of baked sites that carry a flower. */
+    flowerDensity: uniform(0),
+    flowerSize: uniform(1),
+    flowerColor: uniform(new Color(0xf6d9e8)),
+    flowerCore: uniform(new Color(0xf2c455)),
+    /** Fraction of baked sites that carry a fruit. */
+    fruitDensity: uniform(0),
+    fruitSize: uniform(1),
+    fruitColor: uniform(new Color(0xb8231f)),
+    /** 0 matte like a plum, 1 polished like an apple. */
+    fruitGloss: uniform(0.55),
+
     leafBase: uniform(new Color(0x2f5320)),
     leafTip: uniform(new Color(0x86a83c)),
     leafAutumn: uniform(new Color(0xc06a1e)),

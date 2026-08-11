@@ -156,6 +156,45 @@ Two rendering constraints worth knowing before you add to that list:
   right-handed with `normalB = tangent × normalA`; wind the quads the other way
   and every face normal points down the tube's axis, so the trunk renders
   inside-out with its near wall culled.
+- **The same applies to the terrain**, and it fails much more quietly there. The
+  polar grid's radius grows with the ring index and its angle with the sector
+  index, so emitting `(a, b, a+1)` spans +x then +z and gives a face normal of
+  `x̂ × ẑ = -ŷ`. Every triangle faces the floor, backface culling removes the
+  whole near field, and what you see instead is the sky's below-horizon haze
+  colour through the hole — a plausible-looking brown wash that is easy to
+  mistake for bad art direction. Only the distant hills survive, because the
+  parts that rise above eye level present their backfaces to the camera.
+
+### Flowers and fruit
+
+Neither is part of the grammar. Both are baked onto a subset of the leaf
+attachment points at rebuild time and then culled on the GPU, so any species can
+carry them and every control is live. Each site gets a rank in `[0, 1)` assigned
+in hash order, and an ornament whose rank exceeds the density uniform collapses
+to a point. Hash order rather than placement order matters: it means a low
+density scatters a few flowers through the whole crown instead of clustering
+them on whichever branch was built first, and raising the slider only ever adds.
+
+The rank doubles as the per-ornament random seed, so one scalar drives both the
+culling and the colour and size variation — a crown of identically coloured
+berries reads as plastic.
+
+### Grass
+
+Two tricks from game foliage rendering do nearly all the work, both in
+`materials/groundCover.ts`:
+
+- **Blade normals point up, not out.** A blade's true surface normal is nearly
+  horizontal, and at golden hour a horizontal normal faces away from a low sun
+  and renders black. Real grass reads as a lit surface because the eye takes its
+  shading from the ground it covers, so the normals are bent most of the way
+  toward vertical.
+- **Darkness comes from the root.** Grass self-shadows: the base of a clump is
+  in near-total occlusion and only the tips are lit. A vertical gradient down
+  each blade fakes the whole effect for one multiply.
+
+Clumps also have to be small and dense enough to merge into texture. A tuft you
+can pick out individually reads as a weed, not as a field.
 
 ## Controls
 
@@ -173,6 +212,7 @@ lights up the **Redraw** button rather than rebuilding as you drag.
 | --- | --- |
 | Trunk radius, leaf size | Vertices are rescaled about their pivot by a uniform ratio against what the mesh was baked at |
 | Foliage density | Leaves whose hash exceeds the threshold collapse to a point in the vertex shader |
+| Flower and fruit amount, size, colour, gloss | Ornament sites are baked at rebuild and culled by rank in the vertex shader |
 | Bark relief, moss, autumn, translucency | Shading only |
 | Wind, sun, haze, exposure, bloom, DOF, grain | Shading and post only |
 | **Redraw needed** | |

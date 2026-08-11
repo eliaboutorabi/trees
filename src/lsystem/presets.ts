@@ -19,6 +19,10 @@ export interface Palette {
   /** Where leaves head as the `autumn` slider rises. */
   leafAutumn: number;
   blossom: number;
+  /** Flower and fruit colours, if this species suggests any. */
+  flowerColor?: number;
+  flowerCore?: number;
+  fruitColor?: number;
 }
 
 export interface PresetParams {
@@ -38,6 +42,10 @@ export interface PresetParams {
   leafShape: 0 | 1 | 2 | 3;
   /** How much this species moves in wind. */
   windiness: number;
+  /** Fraction of ornament sites carrying a flower, 0–1. */
+  flowerDensity?: number;
+  /** Fraction of ornament sites carrying a fruit, 0–1. */
+  fruitDensity?: number;
 }
 
 export interface Preset {
