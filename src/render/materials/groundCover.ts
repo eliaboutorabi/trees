@@ -22,7 +22,19 @@
  */
 import { DoubleSide } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { float, instanceIndex, mix, positionLocal, sin, time, uv, vec3 } from 'three/tsl';
+import {
+  cameraPosition,
+  float,
+  instanceIndex,
+  mix,
+  positionLocal,
+  positionWorld,
+  sin,
+  smoothstep,
+  time,
+  uv,
+  vec3,
+} from 'three/tsl';
 import type { TreeUniforms } from './shared';
 
 export interface GroundCoverOptions {
@@ -31,10 +43,14 @@ export interface GroundCoverOptions {
   /** Shading at the root, where 1 is fully lit. */
   rootShade?: number;
   roughness?: number;
+  /** Distance at which clumps start shrinking. */
+  fadeStart?: number;
+  /** Distance at which they collapse entirely. */
+  fadeEnd?: number;
 }
 
 export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverOptions = {}) {
-  const { sway = 0.5, rootShade = 0.3, roughness = 0.94 } = options;
+  const { sway = 0.5, rootShade = 0.3, roughness = 0.94, fadeStart = 26, fadeEnd = 55 } = options;
 
   const material = new MeshStandardNodeMaterial();
   // A blade is a single sheet of triangles; without this, half of every tuft is
@@ -45,6 +61,14 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
 
   // Height along the blade, 0 at the root and 1 at the tip.
   const t = uv().y;
+
+  // Distance LOD. Clumps shrink over `fadeStart..fadeEnd` and reach zero at the
+  // far end, which collapses every triangle to zero area — the hardware drops
+  // those before rasterising, so it costs nothing at all beyond the vertex.
+  // Shrinking first rather than cutting straight to nothing is what makes the
+  // transition invisible: overdraw falls off gradually and there is no pop.
+  const clumpDist = cameraPosition.sub(positionWorld).length();
+  const lod = smoothstep(fadeEnd, fadeStart, clumpDist);
 
   if (sway > 0) {
     // Instance index is the only per-instance value available without spending
@@ -60,13 +84,18 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
     // Displacement proportional to height gives a straight blade a plausible
     // hinge at the root; the y term shortens it so the tip traces an arc
     // instead of stretching.
-    const lean = gust.mul(u.wind).mul(sway).mul(t.mul(t).mul(0.65).add(t.mul(0.35)));
+    // Folding the LOD factor into the sway means a clump that is nearly gone
+    // also stops moving, so the trig result is thrown away rather than paid for
+    // twice.
+    const lean = gust.mul(u.wind).mul(sway).mul(t.mul(t).mul(0.65).add(t.mul(0.35))).mul(lod);
     const dir = u.windDir.normalize();
     material.positionNode = vec3(
       positionLocal.x.add(dir.x.mul(lean).mul(positionLocal.y)),
       positionLocal.y.mul(float(1).sub(lean.mul(lean).mul(0.3))),
       positionLocal.z.add(dir.y.mul(lean).mul(positionLocal.y)),
-    );
+    ).mul(lod);
+  } else {
+    material.positionNode = positionLocal.mul(lod);
   }
 
   // Root-to-tip occlusion. `instanceColor` is multiplied in automatically by

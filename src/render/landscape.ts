@@ -18,7 +18,6 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
-  ConeGeometry,
   Group,
   IcosahedronGeometry,
   InstancedMesh,
@@ -35,8 +34,12 @@ import type { TreeUniforms } from './materials/shared';
 
 export interface LandscapeOptions {
   seed: number;
-  /** How far the terrain extends. */
+  /** How far the meadow extends before the ground starts climbing. */
   radius: number;
+  /** How far the mesh reaches in total, mountains included. */
+  horizonRadius: number;
+  /** Height of the tallest peaks. */
+  mountainHeight: number;
   /** Ground stays flat within this radius so the tree is not on a slope. */
   flatRadius: number;
   /** Vertical scale of the relief. */
@@ -48,6 +51,8 @@ export interface LandscapeOptions {
 export const DEFAULT_LANDSCAPE: LandscapeOptions = {
   seed: 20250811,
   radius: 150,
+  horizonRadius: 620,
+  mountainHeight: 165,
   flatRadius: 7,
   relief: 1,
   detail: 1,
@@ -90,15 +95,48 @@ function fbm(x: number, y: number, seed: number, octaves = 5): number {
 }
 
 /**
+ * Ridged noise. Folding fbm about zero and inverting turns its smooth hills
+ * into sharp crests with rounded valleys between them, which is the standard
+ * way to get a mountain profile out of a function that otherwise only makes
+ * dunes. Squaring sharpens the ridge lines further.
+ */
+function ridged(x: number, y: number, seed: number, octaves = 5): number {
+  let sum = 0;
+  let amp = 0.5;
+  let freq = 1;
+  let norm = 0;
+  let weight = 1;
+  for (let i = 0; i < octaves; i++) {
+    const n = 1 - Math.abs(valueNoise(x * freq, y * freq, seed + i * 1013) * 2 - 1);
+    // Each octave is attenuated by the one above it, so detail collects on the
+    // ridges instead of spraying evenly over the slopes.
+    sum += n * n * amp * weight;
+    weight = Math.min(1, n * 1.4);
+    norm += amp;
+    amp *= 0.5;
+    freq *= 2.07;
+  }
+  return sum / norm;
+}
+
+const smootherstep = (t: number): number => {
+  const u = Math.min(1, Math.max(0, t));
+  return u * u * (3 - 2 * u);
+};
+
+/**
  * Terrain height at a world position. Exported so scatter and any future
  * gameplay can sit exactly on the surface rather than guessing.
+ *
+ * The mountains are part of this same function rather than a separate ring
+ * mesh, which is what guarantees there is no seam or sky gap where one would
+ * meet the other.
  */
 export function terrainHeight(x: number, z: number, opts: LandscapeOptions): number {
   const dist = Math.hypot(x, z);
 
   // Keep the ground level under the tree, then ease into the relief.
-  const t = Math.min(1, Math.max(0, (dist - opts.flatRadius) / (opts.radius * 0.35)));
-  const ease = t * t * (3 - 2 * t);
+  const ease = smootherstep((dist - opts.flatRadius) / (opts.radius * 0.35));
 
   const broad = fbm(x * 0.018, z * 0.018, opts.seed, 5) - 0.5;
   const medium = fbm(x * 0.06, z * 0.06, opts.seed + 77, 4) - 0.5;
@@ -108,15 +146,28 @@ export function terrainHeight(x: number, z: number, opts: LandscapeOptions): num
   // silhouette to orbit against.
   const far = Math.min(1, dist / (opts.radius * 0.7));
   const hills = broad * (14 + 26 * far * far);
+  const meadow = (hills + medium * 2.2 + fine * 0.5) * ease;
 
-  return (hills + medium * 2.2 + fine * 0.5) * ease * opts.relief;
+  // Mountains take over past the meadow. The range is not a uniform wall: a
+  // very low frequency mass term lets whole massifs rise and others sink to
+  // foothills, so the skyline has somewhere for the eye to rest.
+  const rise = smootherstep((dist - opts.radius * 1.05) / (opts.horizonRadius * 0.42));
+  if (rise <= 0) return meadow * opts.relief;
+
+  const mass = Math.pow(fbm(x * 0.0026, z * 0.0026, opts.seed + 1777, 3), 1.5);
+  const crest = ridged(x * 0.0043, z * 0.0043, opts.seed + 313, 6);
+  const peaks = crest * (0.28 + 1.5 * mass) * opts.mountainHeight;
+  // Foothills bridge the gap so the range does not spring out of flat ground.
+  const skirt = (fbm(x * 0.012, z * 0.012, opts.seed + 55, 4) - 0.35) * 26;
+
+  return (meadow + (peaks + skirt) * rise) * opts.relief;
 }
 
 // -------------------------------------------------------------- terrain
 
 function buildTerrainGeometry(opts: LandscapeOptions): BufferGeometry {
-  const rings = 150;
-  const sectors = 192;
+  const rings = 220;
+  const sectors = 224;
 
   const vertexCount = (rings + 1) * (sectors + 1);
   const positions = new Float32Array(vertexCount * 3);
@@ -126,7 +177,7 @@ function buildTerrainGeometry(opts: LandscapeOptions): BufferGeometry {
   let t = 0;
   for (let i = 0; i <= rings; i++) {
     // Quadratic spacing: dense where the camera is, sparse at the horizon.
-    const radius = opts.radius * Math.pow(i / rings, 2);
+    const radius = opts.horizonRadius * Math.pow(i / rings, 2);
     for (let j = 0; j <= sectors; j++) {
       const a = (j / sectors) * Math.PI * 2;
       const x = Math.cos(a) * radius;
@@ -264,6 +315,88 @@ function tuftGeometry(options: TuftOptions = {}): BufferGeometry {
   return geo;
 }
 
+/**
+ * A distant tree: a trunk under a crown built from stacked, jittered rings.
+ *
+ * A single cone reads as a cone no matter how far away it is, because its
+ * silhouette is two perfectly straight lines meeting at a point. Real trees
+ * read as trees at distance almost entirely through an irregular outline, so
+ * each ring's radius here is pushed around by a deterministic wobble and the
+ * profile is a curve rather than a straight taper.
+ */
+function distantTreeGeometry(kind: 'conifer' | 'broadleaf' | 'columnar', variant: number): BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const segments = 7;
+  const rings = kind === 'conifer' ? 8 : 6;
+  const rand = mulberry32(variant * 7919 + 17);
+  const jitter: number[] = [];
+  for (let i = 0; i < rings * 3; i++) jitter.push(rand());
+
+  // Trunk height as a fraction of the whole, and where the crown is widest.
+  const bare = kind === 'conifer' ? 0.1 : kind === 'columnar' ? 0.08 : 0.3;
+  const widest = kind === 'conifer' ? 0.12 : kind === 'columnar' ? 0.45 : 0.35;
+  const maxWidth = kind === 'conifer' ? 0.3 : kind === 'columnar' ? 0.17 : 0.42;
+
+  const profile = (t: number): number => {
+    if (t <= bare) return 0.035;
+    const u = (t - bare) / (1 - bare);
+    if (kind === 'conifer') {
+      // Concave taper, plus tiers — a spruce is a stack of skirts, not a cone.
+      const tier = 1 + Math.sin(u * Math.PI * 3.4) * 0.13;
+      return maxWidth * Math.pow(1 - u, 0.78) * tier;
+    }
+    if (kind === 'columnar') {
+      return maxWidth * Math.sin(Math.pow(u, 0.62) * Math.PI) ** 0.55;
+    }
+    // Broadleaf: a rounded mass sitting on the trunk.
+    const d = (u - widest) / (u > widest ? 1 - widest : widest);
+    return maxWidth * Math.sqrt(Math.max(0, 1 - d * d));
+  };
+
+  for (let r = 0; r <= rings; r++) {
+    const t = r / rings;
+    const base = profile(t);
+    for (let s = 0; s <= segments; s++) {
+      const a = (s / segments) * Math.PI * 2;
+      // Two harmonics of wobble: the outline has to break up, but coherently,
+      // or the crown turns into noise instead of foliage.
+      const wob =
+        1 +
+        Math.sin(a * 3 + jitter[r * 3] * 6.28) * 0.19 +
+        Math.sin(a * 5 - jitter[r * 3 + 1] * 6.28 + t * 4) * 0.11;
+      const radius = base * (t <= bare ? 1 : wob);
+      const y = t + (t > bare ? (jitter[r * 3 + 2] - 0.5) * 0.035 : 0);
+      const nx = Math.cos(a);
+      const nz = Math.sin(a);
+      positions.push(nx * radius, y, nz * radius);
+      // Normals lean upward for the same reason grass normals do: a distant
+      // crown lit only on its sides goes black against a low sun.
+      normals.push(nx * 0.6, 0.75, nz * 0.6);
+      uvs.push(s / segments, t);
+    }
+  }
+
+  const stride = segments + 1;
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
+      const a = r * stride + s;
+      const b = a + stride;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+  geo.setAttribute('normal', new BufferAttribute(new Float32Array(normals), 3));
+  geo.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
+  geo.setIndex(indices);
+  return geo;
+}
+
 export interface ScatterOptions {
   count: number;
   minRadius: number;
@@ -276,6 +409,12 @@ export interface ScatterOptions {
   castShadow?: boolean;
   /** Maximum yaw, in radians. Kept small where the shader sways in local space. */
   yaw?: number;
+  /**
+   * Reject placements where the terrain noise falls below `threshold`, so
+   * instances gather into patches instead of spreading evenly. Woodland follows
+   * the land; a uniform scatter of trees reads as an orchard, or as wallpaper.
+   */
+  clump?: { scale: number; threshold: number };
   /** Per-instance tint. Hue and value variation is what stops a field of
    *  identical instances from reading as wallpaper. */
   tint?: { base: number; vary: number };
@@ -299,27 +438,44 @@ function scatter(
   const sink = s.sink ?? 0;
   const yaw = s.yaw ?? Math.PI * 2;
 
+  let placed = 0;
   for (let i = 0; i < s.count; i++) {
     // Square-root radial distribution keeps density even over the annulus.
-    const r = Math.sqrt(rng()) * (s.maxRadius - s.minRadius) + s.minRadius;
-    const a = rng() * Math.PI * 2;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
+    let r = 0;
+    let a = 0;
+    let x = 0;
+    let z = 0;
+    // Rejection sampling against the clump mask. Bounded, because a mask that
+    // rejects everywhere must not turn into an infinite loop.
+    for (let attempt = 0; attempt < 12; attempt++) {
+      r = Math.sqrt(rng()) * (s.maxRadius - s.minRadius) + s.minRadius;
+      a = rng() * Math.PI * 2;
+      x = Math.cos(a) * r;
+      z = Math.sin(a) * r;
+      if (!s.clump) break;
+      if (fbm(x * s.clump.scale, z * s.clump.scale, opts.seed + 401, 3) >= s.clump.threshold) break;
+      if (attempt === 11) x = NaN;
+    }
+    if (Number.isNaN(x)) continue;
     const scale = s.scale[0] + rng() * (s.scale[1] - s.scale[0]);
+    const i2 = placed++;
 
     pos.set(x, terrainHeight(x, z, opts) - sink * scale, z);
     quat.setFromAxisAngle(axis, (rng() - 0.5) * yaw);
     scl.set(scale, scale * (0.75 + rng() * 0.5), scale);
-    mesh.setMatrixAt(i, m.compose(pos, quat, scl));
+    mesh.setMatrixAt(i2, m.compose(pos, quat, scl));
 
     if (color && base && s.tint) {
       const k = 1 + (rng() - 0.5) * s.tint.vary;
       // Shift hue slightly with value: sunlit patches go yellow, not just pale.
       color.setRGB(base.r * k, base.g * (1 + (k - 1) * 0.7), base.b * (2 - k));
-      mesh.setColorAt(i, color);
+      mesh.setColorAt(i2, color);
     }
   }
 
+  // Rejected placements would otherwise draw as identity-matrix instances piled
+  // on the origin.
+  mesh.count = placed;
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   // Grass and horizon trees are not worth a shadow-map draw: they are either
@@ -380,7 +536,7 @@ export function createLandscape(
   // Tussocks: taller, sparser, and allowed to spin freely because at this size
   // the eye reads the clump's silhouette rather than which way it leans.
   const tussockGeo = track(tuftGeometry({ blades: 8, lean: 0.7, height: 1.0, width: 0.06 }));
-  const tussockMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.4, rootShade: 0.22 }));
+  const tussockMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.4, rootShade: 0.22, fadeStart: 45, fadeEnd: 85 }));
   group.add(
     scatter(tussockGeo, tussockMat, opts, {
       count: Math.round(2600 * opts.detail),
@@ -412,24 +568,37 @@ export function createLandscape(
     }),
   );
 
-  // A distant treeline. Small, dark and numerous so it reads as a wooded
-  // horizon the camera swings past — a few large pale cones read as traffic
-  // cones instead, and the fog cannot rescue them once they are that big.
-  const distantGeo = track(new ConeGeometry(0.85, 3.2, 5, 1));
+  // A distant treeline. Three silhouettes rather than one, clumped into stands
+  // that follow the land, because a uniform scatter of identical shapes reads
+  // as an orchard at best and as wallpaper at worst.
   const distantMat = track(new MeshStandardNodeMaterial());
-  distantMat.color = new Color(0x3d4a2b);
+  // Dark. Their normals lean upward so they do not go black under a low sun,
+  // which also means they catch a great deal of sky — a mid-tone albedo comes
+  // out pale grey and the stand reads as fog rather than as woodland.
   distantMat.roughness = 1;
-  group.add(
-    scatter(distantGeo, distantMat, opts, {
-      count: Math.round(1100 * opts.detail),
-      minRadius: 58,
-      maxRadius: 140,
-      scale: [0.6, 1.8],
-      seedOffset: 53,
-      sink: -1.55,
-      tint: { base: 0xffffff, vary: 0.4 },
-    }),
-  );
+  distantMat.color = new Color(0x2b3520);
+  const stands: [Parameters<typeof distantTreeGeometry>[0], number, number, [number, number]][] = [
+    ['conifer', 0, 620, [2.6, 6.5]],
+    ['broadleaf', 1, 900, [2.4, 5.5]],
+    ['columnar', 2, 220, [3, 7]],
+  ];
+  for (const [kind, variant, count, scale] of stands) {
+    const geo = track(distantTreeGeometry(kind, variant));
+    group.add(
+      scatter(geo, distantMat, opts, {
+        count: Math.round(count * opts.detail),
+        // Far enough out that they never rival the subject. A treeline that
+        // starts close reads as a forest the tree is standing in, not as a
+        // horizon it is standing against.
+        minRadius: 85,
+        maxRadius: 165,
+        scale,
+        seedOffset: 53 + variant * 13,
+        clump: { scale: 0.021, threshold: 0.47 },
+        tint: { base: 0xffffff, vary: 0.3 },
+      }),
+    );
+  }
 
   return {
     group,

@@ -34,11 +34,11 @@ export function paramsFromPreset(id: string): AppParams {
     leafDensity: 1,
 
     flowerDensity: p.flowerDensity ?? 0,
-    flowerSize: 1,
+    flowerSize: p.flowerSize ?? 1,
     flowerColor: hex(preset.palette.flowerColor ?? 0xf6d9e8),
     flowerCore: hex(preset.palette.flowerCore ?? 0xf2c455),
     fruitDensity: p.fruitDensity ?? 0,
-    fruitSize: 1,
+    fruitSize: p.fruitSize ?? 1,
     fruitColor: hex(preset.palette.fruitColor ?? 0xb8231f),
     fruitGloss: 0.55,
 

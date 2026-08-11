@@ -165,6 +165,26 @@ Two rendering constraints worth knowing before you add to that list:
   mistake for bad art direction. Only the distant hills survive, because the
   parts that rise above eye level present their backfaces to the camera.
 
+### Two things that cost more than they look like
+
+**Per-pixel fractal noise, on anything that fills the screen.** The terrain
+material started out evaluating roughly thirty octaves of 3D fbm per fragment,
+which measured at 12ms of a 32ms frame. Halving the octave count bought 3ms;
+baking the same fields into a tileable, mipmapped RGBA texture and sampling it
+three times took the draw to 1.7ms. Mipmapping is the second, quieter win —
+procedural noise has no derivatives the hardware can use, so it shimmers as soon
+as its features fall below a pixel, while a texture averages itself down for
+free. The cost is tiling, which `noiseTexture.ts` expects callers to break by
+mixing two samples at incommensurate world scales.
+
+**Aerial perspective mixed into an albedo.** Haze belongs on the *shaded
+output*, not on the base colour: mix it into the albedo and the lighting
+multiplies it afterwards, so the hazier something is meant to be, the brighter
+it renders. A distant treeline done that way glows white against the hills it is
+standing on. `scene.fogNode` is applied after lighting, which is where it has to
+go — and putting it there also means every material shares one depth cue instead
+of some using scene fog and others rolling their own.
+
 ### Flowers and fruit
 
 Neither is part of the grammar. Both are baked onto a subset of the leaf

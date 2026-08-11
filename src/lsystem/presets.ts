@@ -46,6 +46,9 @@ export interface PresetParams {
   flowerDensity?: number;
   /** Fraction of ornament sites carrying a fruit, 0–1. */
   fruitDensity?: number;
+  /** Ornament scale, relative to what the leaf size implies. */
+  flowerSize?: number;
+  fruitSize?: number;
 }
 
 export interface Preset {
@@ -263,6 +266,10 @@ A(s) -> F(LEN*s*0.8)[K(1.0)][/(90)&(28)L(0.6)][/(200)^(20)K(0.9)]`,
       leafScale: 0.14,
       leafShape: 2,
       windiness: 1.15,
+      // The grammar already smothers the twigs in K blossom, so the ornament
+      // layer only adds a scatter of later, brighter flowers on top.
+      flowerDensity: 0.35,
+      flowerSize: 1.15,
     },
     palette: {
       barkDark: 0x1d1413,
@@ -273,6 +280,103 @@ A(s) -> F(LEN*s*0.8)[K(1.0)][/(90)&(28)L(0.6)][/(200)^(20)K(0.9)]`,
       leafTip: 0x8fb04a,
       leafAutumn: 0xd9707f,
       blossom: 0xffd7e4,
+      flowerColor: 0xffe3ee,
+      flowerCore: 0xe8a2b4,
+      fruitColor: 0x8e1f36,
+    },
+  },
+  {
+    id: 'apple',
+    name: 'Apple',
+    blurb: 'Low open orchard crown, heavy with fruit',
+    axiom: '!(1)A(1)',
+    rules: `# An orchard tree is pruned, not wild: a short trunk that forks early into a
+# few scaffold limbs, then an open vase-shaped crown with the fruiting wood
+# out at the edges where the light is. The wide first fork is the whole look.
+
+A(s) : n >= N-1 -> F(LEN*s*0.5)[&(40)L(1.05)]/(137.5)F(LEN*s*0.35)[&(32)L(1.0)][/(160)&(44)L(0.95)]/(137.5)[&(26)L(1.05)]
+
+# Fruiting wood: short, twiggy, and leafing out as it goes
+A(s) : s > 0.15 && s < 0.46 -> F(LEN*s*0.9)[&(58)L(0.9)][/(175)&(50)L(0.85)]/(137.5)[&(ANG*rand(0.85,1.3))A(s*SHRINK*0.74)][/(150)&(ANG*rand(0.9,1.35))A(s*SHRINK*0.72)]^(rand(3,11))A(s*SHRINK*0.93)
+
+# Scaffold limbs sweep out and up, leaving the middle of the crown open
+A(s) : s > 0.15 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.25))A(s*SHRINK*0.80)][/(148)&(ANG*rand(0.95,1.3))A(s*SHRINK*0.78)]^(rand(2,8))A(s*SHRINK*0.96)
+
+A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
+    params: {
+      iterations: 10,
+      angle: 46,
+      step: 1.0,
+      shrink: 0.86,
+      trunkRadius: 0.26,
+      tropism: 0.03,
+      pipeExponent: 2.2,
+      leafScale: 0.165,
+      leafShape: 0,
+      windiness: 1,
+      // The orchard grammar is deliberately open, so it carries far fewer
+      // leaves than the oak — the same fruit density reads as a much heavier
+      // crop here and has to come down to match.
+      fruitDensity: 0.22,
+      // An apple is a good deal larger than the leaf beside it; a berry is not.
+      fruitSize: 1.15,
+    },
+    palette: {
+      barkDark: 0x241a13,
+      barkLight: 0x7a6349,
+      twig: 0x6f5b3c,
+      moss: 0x51602c,
+      leafBase: 0x2c5321,
+      leafTip: 0x7ea23a,
+      leafAutumn: 0xc8871f,
+      blossom: 0xfbe4ea,
+      flowerColor: 0xfdeef2,
+      flowerCore: 0xf0c25a,
+      fruitColor: 0x8f1d13,
+    },
+  },
+  {
+    id: 'rowan',
+    name: 'Rowan',
+    blurb: 'Upright and airy, hung with orange berries',
+    axiom: '!(1)A(1)',
+    rules: `# Sorbus aucuparia: a slender, steeply ascending tree with an open oval
+# crown. Narrow branch angles and a strong upward tropism are what keep it
+# from spreading into an oak.
+
+A(s) : n >= N-1 -> F(LEN*s*0.45)[&(30)L(0.95)][/(150)&(36)L(0.9)]/(137.5)F(LEN*s*0.35)[&(24)L(0.95)][/(170)&(32)L(0.85)]
+
+A(s) : s > 0.14 && s < 0.5 -> F(LEN*s)[&(46)L(0.85)][/(185)&(40)L(0.8)]/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.78)][/(160)&(ANG*rand(0.85,1.3))A(s*SHRINK*0.76)]^(rand(2,7))A(s*SHRINK*0.95)
+
+A(s) : s > 0.14 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.78)][/(160)&(ANG*rand(0.85,1.3))A(s*SHRINK*0.76)]^(rand(1,6))A(s*SHRINK*0.97)
+
+A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
+    params: {
+      iterations: 11,
+      angle: 30,
+      step: 1.0,
+      shrink: 0.88,
+      trunkRadius: 0.2,
+      tropism: 0.13,
+      pipeExponent: 2.4,
+      leafScale: 0.1,
+      leafShape: 3,
+      windiness: 1.2,
+      fruitDensity: 0.55,
+      fruitSize: 0.85,
+    },
+    palette: {
+      barkDark: 0x2a241d,
+      barkLight: 0x8e8676,
+      twig: 0x7d7355,
+      moss: 0x55622f,
+      leafBase: 0x335b28,
+      leafTip: 0x7fa63f,
+      leafAutumn: 0xcf6a24,
+      blossom: 0xf6f2e0,
+      flowerColor: 0xfaf6e6,
+      flowerCore: 0xe6d38a,
+      fruitColor: 0xe1541a,
     },
   },
   {

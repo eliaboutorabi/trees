@@ -6,7 +6,6 @@ import {
   BufferGeometry,
   Color,
   DirectionalLight,
-  FogExp2,
   HemisphereLight,
   Matrix4,
   Mesh,
@@ -28,6 +27,7 @@ import { createTreeUniforms } from './materials/shared';
 import { createPostPipeline } from './post';
 import { ProceduralSky, sunColorFor, sunDirection, type SkySettings } from './sky';
 import { buildTreeGeometry } from './treeGeometry';
+import { aerialPerspective } from './materials/ground';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
 export interface StructureParams {
@@ -122,7 +122,7 @@ const UP_AXIS = new Vector3(0, 1, 0);
 
 export class TreeStudio {
   readonly scene = new Scene();
-  readonly camera = new PerspectiveCamera(38, 1, 0.1, 400);
+  readonly camera = new PerspectiveCamera(38, 1, 0.1, 1400);
 
   private renderer!: WebGPURenderer;
   private controls!: OrbitControls;
@@ -146,7 +146,6 @@ export class TreeStudio {
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
-  private readonly fog = new FogExp2(0xd9b184, 0.014);
 
   private treeHeight = 8;
   private treeRadius = 3;
@@ -195,7 +194,8 @@ export class TreeStudio {
   onGrowth: ((growth: number) => void) | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
-    this.scene.fog = this.fog;
+    // Aerial perspective, as a fog node so it lands after lighting.
+    this.scene.fogNode = aerialPerspective(this.groundUniforms);
 
     this.scene.add(this.landscape.group);
 
@@ -236,6 +236,10 @@ export class TreeStudio {
     this.controls.update();
 
     this.resize();
+    // A handle for profiling from the console — hiding a mesh and watching the
+    // frame time is the only reliable way to find out what a frame is spending
+    // its budget on.
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__studio = this;
     this.renderer.setAnimationLoop((t) => this.frame(t));
   }
 
@@ -421,9 +425,14 @@ export class TreeStudio {
 
     // Tie the haze and ground horizon to the sky so nothing looks pasted on.
     const horizon = this.sunTint.clone().lerp(new Color(0xcfd8e6), 0.26).multiplyScalar(0.8);
-    this.fog.color.copy(horizon);
-    this.fog.density = 0.0025 + params.haze * 0.009;
+    this.groundUniforms.fadeDistance.value = 470 - params.haze * 240;
     this.groundUniforms.horizon.value.copy(horizon);
+    // What distance scatters toward once the warm horizon band is behind you.
+    // Keeping it cool and a shade darker than the sky is what leaves the
+    // mountains a silhouette instead of dissolving them into it.
+    this.groundUniforms.aerialFar.value.copy(horizon).lerp(new Color(0x7d90bb), 0.72).multiplyScalar(0.92);
+    // Snow takes the sun's colour: at golden hour a snowfield is pink, not white.
+    this.groundUniforms.snow.value.copy(this.sunTint).lerp(new Color(0xffffff), 0.35);
     this.fill.intensity = 0.55 + params.haze * 0.35;
   }
 

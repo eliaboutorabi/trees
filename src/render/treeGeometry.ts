@@ -166,7 +166,10 @@ function selectOrnamentSites(kept: LeafPlacement[], max: number): { leaf: LeafPl
   if (kept.length === 0 || max <= 0) return [];
   const ranked = kept.map((leaf, i) => ({ leaf, key: Math.sin(i * 12.9898 + leaf.seed * 78.233) * 43758.5453 }));
   ranked.sort((a, b) => (a.key - Math.floor(a.key)) - (b.key - Math.floor(b.key)));
-  const take = Math.min(max, ranked.length);
+  // Capped as a fraction of the canopy as well as absolutely. A fixed site
+  // count puts as many apples on a sparse tree as on a dense one, and on the
+  // sparse one that means a fruit on nearly every leaf.
+  const take = Math.min(max, Math.ceil(ranked.length * 0.45));
   const sites: { leaf: LeafPlacement; rank: number }[] = [];
   for (let i = 0; i < take; i++) sites.push({ leaf: ranked[i].leaf, rank: (i + 0.5) / take });
   return sites;
