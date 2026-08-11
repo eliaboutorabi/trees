@@ -121,7 +121,7 @@ export class TreeStudio {
   private readonly sky = new ProceduralSky();
   private readonly sun = new DirectionalLight(0xffd7ab, 3.4);
   private readonly fill = new HemisphereLight(0xbdd4ff, 0x6b5836, 0.35);
-  private readonly landscape = createLandscape();
+  private readonly landscape = createLandscape(this.uniforms);
   private readonly groundUniforms = this.landscape.uniforms;
 
   private branchMesh: Mesh | null = null;
