@@ -277,6 +277,26 @@ same model and re-tuning the whole look around a lower default sun. That is a
 larger change than it looks, and four attempts did not beat the gradient it was
 replacing, so the gradient stays.
 
+### The baked sky has to invert three's own sampling
+
+three samples an equirectangular map as `u = atan2(dir.z, dir.x) / 2pi + 0.5`,
+`v = asin(dir.y) / pi + 0.5`. A CPU bake walking texels has to invert exactly
+that: `x = cos(phi) * cosLat`, `z = sin(phi) * cosLat`. Negating x — which this
+did — mirrors the entire sky about the X axis.
+
+Nothing looks broken. The gradient is still smooth, the horizon is still warm,
+the disc is still round. But the directional light is placed from the same
+azimuth *without* the mirror, so the painted sun drifts away from the light that
+casts the shadows: about 20 degrees off at an oblique azimuth, and close to 180
+degrees with the sun due east or west, where the sun is drawn on the opposite
+horizon from the one lighting the scene. It reads as "the shadows are wrong"
+when the shadows were the only part that was right.
+
+Worth checking numerically rather than by eye: find the brightest texel in the
+baked texture, invert the sampling to get its direction, and take the angle
+against `sunDir`. It should come out under a texel's worth of arc — 1024x512 is
+about 0.35 degrees per texel.
+
 ### Background and environment are not the same texture
 
 The procedural sky carries a sun disc at up to 30x the radiance of the sky
