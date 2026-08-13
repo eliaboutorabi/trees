@@ -18,7 +18,7 @@
  * see `LiveParams` for everything that does not.
  */
 import { Color, Group, Mesh, Vector2, Vector3, type BufferGeometry } from 'three';
-import type { MeshStandardNodeMaterial } from 'three/webgpu';
+import type { MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { buildTree, type TreeBuild } from './lsystem';
 import type { Palette, Preset } from './lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
@@ -74,6 +74,12 @@ export interface LiveParams {
   fruitDensity?: number;
   fruitSize?: number;
   fruitColor?: Color | string | number;
+  /** 1 keeps `fruitColor` exactly; lower lets green survive on the shaded half. */
+  fruitRipeness?: number;
+  /** How far the sunward cheek shifts toward orange. */
+  fruitBlush?: number;
+  /** Waxy rim dust, as on a plum. */
+  fruitWax?: number;
   fruitGloss?: number;
 }
 
@@ -116,7 +122,7 @@ export class Tree {
   private readonly bark: MeshStandardNodeMaterial;
   private readonly foliage: MeshStandardNodeMaterial;
   private readonly flower: MeshStandardNodeMaterial;
-  private readonly fruit: MeshStandardNodeMaterial;
+  private readonly fruit: MeshPhysicalNodeMaterial;
 
   private meshes: Mesh[] = [];
   private flowerMesh: Mesh | null = null;
@@ -245,6 +251,9 @@ export class Tree {
     }
     if (p.fruitSize !== undefined) u.fruitSize.value = p.fruitSize;
     if (p.fruitColor !== undefined) toColor(u.fruitColor.value, p.fruitColor);
+    if (p.fruitRipeness !== undefined) u.fruitRipeness.value = p.fruitRipeness;
+    if (p.fruitBlush !== undefined) u.fruitBlush.value = p.fruitBlush;
+    if (p.fruitWax !== undefined) u.fruitWax.value = p.fruitWax;
     if (p.fruitGloss !== undefined) u.fruitGloss.value = p.fruitGloss;
   }
 

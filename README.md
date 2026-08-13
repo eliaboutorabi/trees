@@ -277,39 +277,62 @@ same model and re-tuning the whole look around a lower default sun. That is a
 larger change than it looks, and four attempts did not beat the gradient it was
 replacing, so the gradient stays.
 
-### The baked sky has to invert three's own sampling
+### The sky was a 128ms CPU bake, and two bakes cannot agree
 
-three samples an equirectangular map as `u = atan2(dir.z, dir.x) / 2pi + 0.5`,
-`v = asin(dir.y) / pi + 0.5`. A CPU bake walking texels has to invert exactly
-that: `x = cos(phi) * cosLat`, `z = sin(phi) * cosLat`. Negating x — which this
-did — mirrors the entire sky about the X axis.
+The sky used to be baked into a 1024x512 equirectangular half-float texture in
+JavaScript, once per change of sun position. That measured at **128ms of blocked
+main thread**, so nudging the sun slider stalled the app for eight frames and
+felt exactly like triggering a rebuild — with the sky arriving late while the
+shadows had already moved.
 
-Nothing looks broken. The gradient is still smooth, the horizon is still warm,
-the disc is still round. But the directional light is placed from the same
-azimuth *without* the mirror, so the painted sun drifts away from the light that
-casts the shadows: about 20 degrees off at an oblique azimuth, and close to 180
-degrees with the sun due east or west, where the sun is drawn on the opposite
-horizon from the one lighting the scene. It reads as "the shadows are wrong"
-when the shadows were the only part that was right.
+It also had a subtler failure. Baking the same gradient twice — once at full
+size with the sun disc for the background, once small and disc-free for the
+environment — means two copies of the formula that have to agree, and a CPU bake
+has to invert three's own equirect sampling (`u = atan2(dir.z, dir.x)/2pi + 0.5`,
+`v = asin(dir.y)/pi + 0.5`) exactly. A single negated `x` mirrors the entire sky
+about the X axis. Nothing looks broken: the gradient is smooth, the horizon warm,
+the disc round. But the directional light is placed from the same azimuth
+*without* the mirror, so the painted sun drifts from the light casting the
+shadows — 20 degrees at an oblique azimuth, close to 180 with the sun due east or
+west. It reads as "the shadows are wrong" when the shadows were the only part
+that was right.
 
-Worth checking numerically rather than by eye: find the brightest texel in the
-baked texture, invert the sampling to get its direction, and take the angle
-against `sunDir`. It should come out under a texel's worth of arc — 1024x512 is
-about 0.35 degrees per texel.
+Both problems have the same fix. The gradient is now a TSL node used directly as
+`scene.backgroundNode`, and the *same node* is rendered into a 96px cube map on
+the GPU for image-based lighting (`CubeCamera.update` flags the texture, so three
+refilters the PMREM by itself). Moving the sun costs **0.2ms** — a handful of
+uniform writes — and the sky you see and the sky that lights the tree cannot
+disagree, because they are the same expression.
 
-### Background and environment are not the same texture
+The one thing the two skies still differ on is the sun disc, and that difference
+is deliberate. The disc carries about 26x the radiance around it so that it
+blooms; leave it in the environment and a specular lobe at any real roughness
+integrates a wide cone of it and smears it over everything. A fruit with a black
+albedo still rendering as a grey ball is what originally located that.
 
-The procedural sky carries a sun disc at up to 30x the radiance of the sky
-around it, so that it blooms. Using that same texture as `scene.environment`
-puts all of that energy into the IBL: a specular lobe at any real roughness
-integrates a wide cone of the environment, and the disc smears across it. The
-symptom is subtle and scene-wide — everything picks up a pale wash, and it is
-easy to blame the albedo. A fruit with a black albedo still rendered as a grey
-ball, which is what finally located it.
+Verify by aiming: point the camera straight down `sunDir` from several azimuths
+and find the brightest pixel. It should land in the centre of frame every time —
+currently within one pixel at 40, 140, 250 and 330 degrees.
 
-So the sky bakes twice: a full-size background with the disc, and a small
-disc-free environment. Everything else — the canopy, the treeline, the fruit —
-got its colour back for free.
+### The sun's colour is derived, not chosen
+
+Sun colour and brightness come from atmospheric extinction rather than from two
+hand-picked constants: Kasten–Young air mass, Rayleigh optical depth per channel
+(`0.0088 * lambda^-4.15`), plus an aerosol term the haze slider drives. A low sun
+reddens and dims because its light crosses 38 atmospheres, not because a `lerp`
+says so — and the sky, the disc and the key light cannot drift apart, because all
+three read the same function.
+
+Two adjustments are needed to make it usable, both documented in `sky.ts`. Full
+extinction over-reddens, because it models only light removed from the beam and
+not light scattered back into it; transmittance is raised to the power 0.75 to
+stand in for the missing multiple scattering. And colour is normalised separately
+from brightness: physically they fall together, but a light that is both nearly
+black *and* deep red is no use, so the hue is normalised to its brightest channel
+and the dimming applied on its own gentler curve.
+
+This is a smaller change than the full Preetham sky recorded above, and it works
+because it only replaces the *light*, leaving the tuned gradient alone.
 
 ### Two things that cost more than they look like
 
@@ -322,6 +345,22 @@ procedural noise has no derivatives the hardware can use, so it shimmers as soon
 as its features fall below a pixel, while a texture averages itself down for
 free. The cost is tiling, which `noiseTexture.ts` expects callers to break by
 mixing two samples at incommensurate world scales.
+
+**`bumpMap()` on a procedural height field, which fails silently.** three's
+`bumpMap()` takes its three height samples by re-evaluating the node with the UV
+context overridden — a trick only a `TextureNode` responds to. Hand it a computed
+expression and all three samples come back identical, the gradient is exactly
+zero, and it returns the untouched normal. The bark relief slider moved a uniform
+that could not reach a single pixel: 0 and 40 produced byte-identical frames, and
+the fault is invisible in a code review because the call site looks correct.
+
+For a procedural height field the gradient has to be taken directly, from
+screen-space derivatives of the height *value* — `proceduralBump()` in
+`engine/materials/shared.ts`, which then applies Mikkelsen's surface-gradient
+construction so the perturbation stays independent of any UV parameterisation.
+Worth knowing before writing another one: a screen-space height gradient is a
+small number, so it takes a multiplier around 20x before furrows read as depth
+rather than as a faint sheen.
 
 **Aerial perspective mixed into an albedo.** Haze belongs on the *shaded
 output*, not on the base colour: mix it into the albedo and the lighting
@@ -344,6 +383,24 @@ them on whichever branch was built first, and raising the slider only ever adds.
 The rank doubles as the per-ornament random seed, so one scalar drives both the
 culling and the colour and size variation — a crown of identically coloured
 berries reads as plastic.
+
+**Why fruit renders pale, and what actually fixes it.** Pick a saturated red and
+the fruit still comes out salmon. It is tempting to chase the albedo, and that is
+the wrong end: bisecting it by setting `scene.environmentIntensity` to zero makes
+the same fruit deep red instantly. The diffuse half of image-based lighting is
+multiplied by the albedo, so a `(0.75, 0, 0)` skin can only ever come back red —
+it has to be the specular half. A smooth sphere reflects the *entire* sky, and
+Fresnel takes reflectance to 1 at the rim, which on a berry a dozen pixels across
+is most of what you can see.
+
+Roughness is not the lever. Lowering it sharpens the reflection but does not
+shrink it; the sphere still faces every part of the sky. `specularIntensity`
+(hence `MeshPhysicalNodeMaterial`) is — it scales F0 *and* F90, so it genuinely
+dims the rim, and a thin waxy cuticle over water reflecting less than a polished
+dielectric is the honest answer anyway. Two art terms were quietly making it
+worse and are now sliders rather than constants: the unripe green, which was
+hard-coded far enough up that a pure red went olive on its shaded half, and the
+pale wax bloom, which is lovely on an apple and poison on a berry.
 
 ### Grass
 
@@ -396,11 +453,12 @@ lights up the **Redraw** button rather than rebuilding as you drag.
 | --- | --- |
 | Trunk radius, leaf size | Vertices are rescaled about their pivot by a uniform ratio against what the mesh was baked at |
 | Foliage density | Leaves whose hash exceeds the threshold collapse to a point in the vertex shader |
-| Flower and fruit amount, size, colour, gloss | Ornament sites are baked at rebuild and culled by rank in the vertex shader |
+| Flower and fruit amount, size, colour, ripeness, blush, wax, gloss | Ornament sites are baked at rebuild and culled by rank in the vertex shader |
 | Bark relief, moss, autumn, translucency | Shading only |
-| Wind, sun, haze, exposure, bloom, DOF, grain | Shading and post only |
+| Wind, sun position and strength, sky light, haze, exposure, bloom, DOF, grain | Shading and post only |
 | **Redraw needed** | |
 | Generations, branch angle, internode length, contraction, tropism, taper, seed, leaf shape, axiom and productions | Change the derived word or the leaf template |
 
-Sky changes rebake a 1024×512 environment texture, so they are throttled rather
-than run per frame.
+Nothing here is throttled. Moving the sun costs 0.2ms — uniform writes plus a
+96px cube render for the environment — so the whole panel responds on the next
+frame.

@@ -5,6 +5,8 @@
     ArrowLeft01Icon,
     ArrowRight01Icon,
     Camera01Icon,
+    CloudFastWindIcon,
+    CloudFogIcon,
     Download01Icon,
     FocusIcon,
     CherryIcon,
@@ -58,8 +60,6 @@
   const grammarDirty = $derived(axiomDraft !== params.axiom || rulesDraft !== params.rules);
 
   const activePreset = $derived(getPreset(params.presetId));
-
-  let skyTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Only these force the grammar to be re-derived — everything else is live. */
   function structureSnapshot() {
@@ -203,7 +203,13 @@
     s.init()
       .then(() => {
         s.applyPalette(activePreset.palette);
-        s.applySky({ sunElevation: params.sunElevation, sunAzimuth: params.sunAzimuth, haze: params.haze });
+        s.applySky({
+          sunElevation: params.sunElevation,
+          sunAzimuth: params.sunAzimuth,
+          sunIntensity: params.sunIntensity,
+          skyLight: params.skyLight,
+          haze: params.haze,
+        });
         ready = true;
         doRebuild(true);
       })
@@ -231,7 +237,6 @@
     return () => {
       window.removeEventListener('hashchange', onHashChange);
       observer.disconnect();
-      clearTimeout(skyTimer);
       s.dispose();
       studio = null;
     };
@@ -257,6 +262,9 @@
       fruitDensity: params.fruitDensity,
       fruitSize: params.fruitSize,
       fruitColor: params.fruitColor,
+      fruitRipeness: params.fruitRipeness,
+      fruitBlush: params.fruitBlush,
+      fruitWax: params.fruitWax,
       fruitGloss: params.fruitGloss,
       exposure: params.exposure,
       bloom: params.bloom,
@@ -270,16 +278,21 @@
     studio?.applyLook(look);
   });
 
-  // Sky — re-bakes a 1024×512 texture, so throttle it.
+  // Sun and atmosphere. This used to be debounced by 70ms because each change
+  // re-baked a 1024×512 texture on the CPU — 128ms of blocked main thread, which
+  // is what made moving the sun feel like triggering a rebuild while the sky
+  // itself lagged behind its own shadows. The sky is a shader now, so this is a
+  // handful of uniform writes and lands on the very next frame.
   $effect(() => {
     const sky = {
       sunElevation: params.sunElevation,
       sunAzimuth: params.sunAzimuth,
+      sunIntensity: params.sunIntensity,
+      skyLight: params.skyLight,
       haze: params.haze,
     };
     if (!ready) return;
-    clearTimeout(skyTimer);
-    skyTimer = setTimeout(() => studio?.applySky(sky), 70);
+    studio?.applySky(sky);
   });
 </script>
 
@@ -425,6 +438,10 @@
           <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
           <button class="ghost" onclick={shuffleSeed} title="New random seed"><HugeiconsIcon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
         </div>
+
+        <h4 class="sub"><HugeiconsIcon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
+        <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows — a surface gradient, so it reads at any zoom" />
+        <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
       </Section>
 
       <Section title="Foliage" icon={Leaf01Icon}>
@@ -458,21 +475,34 @@
 
         <h4 class="sub"><HugeiconsIcon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
         <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
-        <Slider label="Size" bind:value={params.fruitSize} min={0.2} max={2.5} />
+        <Slider label="Size" bind:value={params.fruitSize} min={0.15} max={2} />
         <Swatch label="Skin" bind:value={params.fruitColor} />
-        <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} />
+        <Slider label="Ripeness" bind:value={params.fruitRipeness} min={0} max={1} hint="1 keeps the skin colour exactly; lower lets green survive on the shaded half" />
+        <Slider label="Sun blush" bind:value={params.fruitBlush} min={0} max={1} hint="How far the sunward cheek turns toward orange" />
+        <Slider label="Wax bloom" bind:value={params.fruitWax} min={0} max={1} hint="The pale dust on a plum, strongest around the rim" />
+        <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} hint="How much sky the skin mirrors. High gloss is shinier but paler — that trade is real, not a bug" />
       </Section>
 
-      <Section title="Light &amp; air" icon={SunIcon}>
-        <Slider label="Sun elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} />
-        <Slider label="Sun azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} />
-        <Slider label="Haze" bind:value={params.haze} min={0} max={1} />
+      <Section title="Light &amp; air" icon={SunIcon} open>
+        <p class="help">
+          The sun's colour and strength are not picked — they follow from how much
+          atmosphere its light crosses, so it reddens and dims as it sets. Every
+          control here is live.
+        </p>
+        <h4 class="sub"><HugeiconsIcon icon={SunIcon} size={13} strokeWidth={1.6} /> Sun</h4>
+        <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
+        <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
+        <Slider label="Strength" bind:value={params.sunIntensity} min={0} max={12} step={0.1} hint="Brightness of the direct beam, before the atmosphere takes its cut" />
+
+        <h4 class="sub"><HugeiconsIcon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
+        <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
+        <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
         <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
-        <Slider label="Wind" bind:value={params.wind} min={0} max={1.5} />
+
+        <h4 class="sub"><HugeiconsIcon icon={CloudFastWindIcon} size={13} strokeWidth={1.6} /> Wind</h4>
+        <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
         <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
-        <Slider label="Wind bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} />
-        <Slider label="Bark relief" bind:value={params.barkDetail} min={0} max={1} />
-        <Slider label="Moss" bind:value={params.moss} min={0} max={1} />
+        <Slider label="Bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="The direction the wind pushes the tree toward" />
       </Section>
 
       <Section title="Render" icon={Camera01Icon}>

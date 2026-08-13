@@ -18,7 +18,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from '../engine';
 import { createLandscape } from './landscape';
 import { createPostPipeline } from './post';
-import { ProceduralSky, sunColorFor, sunDirection, type SkySettings } from './sky';
+import { ProceduralSky, sunDirection, type SkySettings } from './sky';
 import { aerialPerspective } from './materials/ground';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
@@ -45,6 +45,9 @@ export interface LookParams {
   fruitDensity: number;
   fruitSize: number;
   fruitColor: string;
+  fruitRipeness: number;
+  fruitBlush: number;
+  fruitWax: number;
   fruitGloss: number;
   exposure: number;
   bloom: number;
@@ -65,11 +68,18 @@ const QUALITY_SCALE: Record<Exclude<Quality, 'auto'>, number> = {
   high: 2,
 };
 
-/** Re-bakes the sky texture, so it is worth debouncing. */
+/**
+ * Sun and atmosphere. Uniform writes and one small cube render — cheap enough
+ * to drive straight from a slider without a debounce.
+ */
 export interface SkyParams {
   sunElevation: number;
   sunAzimuth: number;
   haze: number;
+  /** Strength of the direct beam, before atmospheric extinction. */
+  sunIntensity: number;
+  /** Brightness of the sky itself, which is what fills the shadows. */
+  skyLight: number;
 }
 
 export type StudioParams = StructureParams & LookParams & SkyParams & { presetId: string };
@@ -166,6 +176,11 @@ export class TreeStudio {
   constructor(private readonly canvas: HTMLCanvasElement) {
     // Aerial perspective, as a fog node so it lands after lighting.
     this.scene.fogNode = aerialPerspective(this.groundUniforms);
+    // The sky is a shader, not a texture: moving the sun costs a uniform write.
+    this.scene.backgroundNode = this.sky.backgroundNode;
+    // Same sky, rendered small into a cube for image-based lighting. Assigned
+    // once — `refresh` updates the contents in place.
+    this.scene.environment = this.sky.environment;
 
     this.scene.add(this.landscape.group);
     this.scene.add(this.tree.group);
@@ -300,39 +315,49 @@ export class TreeStudio {
       elevation: params.sunElevation,
       azimuth: params.sunAzimuth,
       haze: params.haze,
-      intensity: 1,
     };
-    this.sky.update(settings);
-    this.scene.background = this.sky.texture;
-    // Deliberately not the same texture — the background keeps the sun disc so
-    // it can bloom, the environment drops it so rough specular does not smear
-    // 30x radiance over every surface in the scene.
-    this.scene.environment = this.sky.environment;
-    this.scene.environmentIntensity = 0.85;
 
+    // One call, and every consumer of the sun reads the same answer: the disc
+    // painted in the sky, the key light, the fill, the aerial perspective and
+    // the tree's own backlighting.
+    const light = this.sky.update(settings);
+    this.sky.setIntensity(params.skyLight);
     sunDirection(settings, this.sunDir);
-    sunColorFor(settings, this.sunTint);
+    this.sunTint.copy(light.color);
 
     // Keep the shadow map wrapped around the new light direction; a low sun
     // throws a much longer shadow than a high one.
     this.updateShadowVolume();
     this.sun.color.copy(this.sunTint);
-    // A sun near the horizon travels through more atmosphere, so it dims.
-    this.sun.intensity = 4.2 * MathUtils.lerp(0.45, 1, Math.min(1, params.sunElevation / 26)) * (1 - params.haze * 0.35);
+    // `strength` is already the atmospheric dimming — a horizon sun is a
+    // fraction of a noon one because its light has crossed 38 atmospheres.
+    this.sun.intensity = params.sunIntensity * light.strength;
 
     this.tree.setSun(this.sunDir, this.sunTint);
 
+    // The sky is the fill light, so its brightness has to move with the slider
+    // that controls it, and its colour with the hour.
+    this.scene.environmentIntensity = 0.85 * params.skyLight;
+    const skyFill = this.sunTint.clone().lerp(new Color(0xbcd2ff), 0.55 + params.haze * 0.25);
+    this.fill.color.copy(skyFill);
+    this.fill.intensity = (0.5 + params.haze * 0.55) * params.skyLight;
+
     // Tie the haze and ground horizon to the sky so nothing looks pasted on.
-    const horizon = this.sunTint.clone().lerp(new Color(0xcfd8e6), 0.26).multiplyScalar(0.8);
-    this.groundUniforms.fadeDistance.value = 470 - params.haze * 240;
+    const horizon = this.sunTint.clone().lerp(new Color(0xcfd8e6), 0.26 + params.haze * 0.4).multiplyScalar(0.8 + params.haze * 0.3);
+    // Haze is *the* aerial-perspective control: clear air lets you see the far
+    // ridges, thick air stacks them into flat grey planes a few hundred units
+    // out. A gentle range here was most of why the slider read as doing nothing.
+    this.groundUniforms.fadeDistance.value = MathUtils.lerp(620, 95, params.haze * params.haze);
     this.groundUniforms.horizon.value.copy(horizon);
     // What distance scatters toward once the warm horizon band is behind you.
     // Keeping it cool and a shade darker than the sky is what leaves the
     // mountains a silhouette instead of dissolving them into it.
-    this.groundUniforms.aerialFar.value.copy(horizon).lerp(new Color(0x7d90bb), 0.72).multiplyScalar(0.92);
+    this.groundUniforms.aerialFar.value
+      .copy(horizon)
+      .lerp(new Color(0x7d90bb), 0.72 - params.haze * 0.45)
+      .multiplyScalar(0.92 + params.haze * 0.22);
     // Snow takes the sun's colour: at golden hour a snowfield is pink, not white.
     this.groundUniforms.snow.value.copy(this.sunTint).lerp(new Color(0xffffff), 0.35);
-    this.fill.intensity = 0.55 + params.haze * 0.35;
   }
 
   // --------------------------------------------------------------- growth
@@ -390,6 +415,9 @@ export class TreeStudio {
     const focus = this.camera.position.distanceTo(this.controls.target);
     this.post.uniforms.focusDistance.value = focus;
 
+    // Re-render the environment cube before the frame that needs it, and only
+    // when the sun has actually moved.
+    this.sky.refresh(this.renderer);
     this.post.render();
 
     if (this.pendingCapture) {

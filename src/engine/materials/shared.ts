@@ -19,7 +19,20 @@
  * the twigs that carry them.
  */
 import { Color, Vector2, Vector3 } from 'three';
-import { attribute, float, mix, positionLocal, smoothstep, time, uniform, vec3 } from 'three/tsl';
+import {
+  attribute,
+  faceDirection,
+  float,
+  mix,
+  normalView,
+  positionLocal,
+  positionView,
+  smoothstep,
+  time,
+  uniform,
+  vec2,
+  vec3,
+} from 'three/tsl';
 // `three/webgpu` re-exports the concrete node classes but not the base `Node`
 // type itself, which is what every TSL operator actually returns.
 import type Node from 'three/src/nodes/core/Node.js';
@@ -90,14 +103,24 @@ export function createTreeUniforms() {
     flowerCore: uniform(new Color(0xf2c455)),
     /** Fraction of baked sites that carry a fruit. */
     fruitDensity: uniform(0),
-    fruitSize: uniform(1),
+    fruitSize: uniform(0.65),
     fruitColor: uniform(new Color(0xb8231f)),
     /** Where the shaded underside of a fruit has not turned yet. */
     fruitUnripe: uniform(new Color(0x5c6a20)),
     /** The sunward cheek — warmer, not brighter. */
     fruitSun: uniform(new Color(0xd4581a)),
+    /**
+     * 1 = every fruit is the chosen skin colour; 0 = the crop is still green.
+     * This used to be hard-coded high enough that a pure red came out olive on
+     * its shaded half, with no way to turn it off.
+     */
+    fruitRipeness: uniform(0.9),
+    /** How far the sunward cheek shifts toward orange. Also once hard-coded. */
+    fruitBlush: uniform(0.25),
+    /** The waxy rim dust on a plum. Pale, so a little goes a long way. */
+    fruitWax: uniform(0.15),
     /** 0 matte like a plum, 1 polished like an apple. */
-    fruitGloss: uniform(0.55),
+    fruitGloss: uniform(0.5),
 
     leafBase: uniform(new Color(0x2f5320)),
     leafTip: uniform(new Color(0x86a83c)),
@@ -111,6 +134,39 @@ export function createTreeUniforms() {
 
 type Vec3Node = Node<'vec3'>;
 type FloatNode = Node<'float'>;
+
+/**
+ * Perturb the shading normal by a *procedural* height field.
+ *
+ * three's own `bumpMap()` cannot do this, and fails silently when asked to.
+ * It takes its three height samples by re-evaluating the node with the UV
+ * context overridden — a trick that only a `TextureNode` responds to. Hand it a
+ * computed expression and all three samples come back identical, the gradient
+ * is exactly zero, and the returned normal is the untouched one. The bark
+ * relief slider moved a uniform that could not reach a single pixel: 0 and 40
+ * produced byte-identical frames.
+ *
+ * So the gradient is taken directly, from screen-space derivatives of the
+ * height value itself. The rest is Mikkelsen's surface-gradient construction,
+ * which is what makes the perturbation independent of any UV parameterisation —
+ * necessary here, since bark noise is evaluated in object space.
+ */
+export function proceduralBump(height: FloatNode, scale: FloatNode | number): Vec3Node {
+  const h = height.toVar();
+  const grad = vec2(h.dFdx(), h.dFdy()).mul(scale);
+
+  // Normalised so the effect does not change strength with screen size.
+  const sigmaX = positionView.dFdx().normalize();
+  const sigmaY = positionView.dFdy().normalize();
+  const n = normalView;
+
+  const r1 = sigmaY.cross(n);
+  const r2 = n.cross(sigmaX);
+  const det = sigmaX.dot(r1).mul(faceDirection);
+  const surfaceGrad = det.sign().mul(grad.x.mul(r1).add(grad.y.mul(r2)));
+
+  return det.abs().mul(n).sub(surfaceGrad).normalize();
+}
 
 /** Rodrigues' rotation of `v` about a unit `axis`. Preserves length. */
 function rotateAboutAxis(v: Vec3Node, axis: Vec3Node, angle: FloatNode): Vec3Node {

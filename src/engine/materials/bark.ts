@@ -1,7 +1,7 @@
 /** Procedural bark — furrows, ridges, moss and young-twig blending, no textures. */
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { bumpMap, float, mix, mx_fractal_noise_float, positionGeometry, smoothstep, uv, vec3 } from 'three/tsl';
-import { growthPosition, treeParams, vec3Attribute, type TreeUniforms } from './shared';
+import { float, mix, mx_fractal_noise_float, positionGeometry, smoothstep, uv, vec3 } from 'three/tsl';
+import { growthPosition, proceduralBump, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
 export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
@@ -95,8 +95,10 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
     .sub(mossMask.mul(0.05))
     .clamp(0.35, 1);
   material.metalnessNode = float(0);
-  // The slider is 0–1; bark needs a good deal more relief than that to read.
-  material.normalNode = bumpMap(height, u.barkBump.mul(3.2).mul(twigness.oneMinus().mul(0.85).add(0.15)));
+  // The slider is 0–1; a screen-space height gradient is a small number, so it
+  // takes a large multiplier before furrows read as depth rather than as a
+  // faint sheen. Twigs keep a little relief but nowhere near a mature trunk's.
+  material.normalNode = proceduralBump(height, u.barkBump.mul(22).mul(twigness.oneMinus().mul(0.88).add(0.12)));
 
   return material;
 }

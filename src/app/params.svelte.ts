@@ -38,9 +38,12 @@ export function paramsFromPreset(id: string): AppParams {
     flowerColor: hex(preset.palette.flowerColor ?? 0xf6d9e8),
     flowerCore: hex(preset.palette.flowerCore ?? 0xf2c455),
     fruitDensity: p.fruitDensity ?? 0,
-    fruitSize: p.fruitSize ?? 1,
+    fruitSize: p.fruitSize ?? 0.65,
     fruitColor: hex(preset.palette.fruitColor ?? 0xb8231f),
-    fruitGloss: 0.55,
+    fruitRipeness: 0.9,
+    fruitBlush: 0.25,
+    fruitWax: 0.15,
+    fruitGloss: 0.5,
 
     barkDetail: 0.55,
     moss: 0.4,
@@ -52,6 +55,8 @@ export function paramsFromPreset(id: string): AppParams {
     windDirection: 35,
     sunElevation: 17,
     sunAzimuth: 140,
+    sunIntensity: 5,
+    skyLight: 1,
     haze: 0.26,
     exposure: 1,
 
