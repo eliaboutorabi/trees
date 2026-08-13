@@ -131,7 +131,13 @@ export class ProceduralSky {
       for (let i = 0; i < width; i++) {
         const u = (i + 0.5) / width;
         const phi = (u - 0.5) * Math.PI * 2;
-        const x = -Math.cos(phi) * cosLat;
+        // This has to invert exactly what three does when it samples an
+        // equirect map: `u = atan2(dir.z, dir.x) / 2pi + 0.5`. Negating x here
+        // — as this did — mirrors the whole sky about the X axis, so the
+        // painted sun sits on the opposite side from the directional light that
+        // was placed using the same azimuth. The shadows were right; the sky
+        // was the lie.
+        const x = Math.cos(phi) * cosLat;
         const z = Math.sin(phi) * cosLat;
 
         const up = clamp01(y);
