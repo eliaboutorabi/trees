@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { HugeiconsIcon } from '@hugeicons/svelte';
   import type { IconSvgElement } from '@hugeicons/svelte';
+  import Icon from './Icon.svelte';
   import { ArrowDown01Icon } from '@hugeicons/core-free-icons';
 
   interface Props {
@@ -17,10 +17,10 @@
 <details {open}>
   <summary>
     <span class="title">
-      {#if icon}<HugeiconsIcon {icon} size={15} strokeWidth={1.8} />{/if}
+      {#if icon}<Icon {icon} size={15} strokeWidth={1.8} />{/if}
       {title}
     </span>
-    <span class="chevron"><HugeiconsIcon icon={ArrowDown01Icon} size={14} strokeWidth={2} /></span>
+    <span class="chevron"><Icon icon={ArrowDown01Icon} size={14} strokeWidth={2} /></span>
   </summary>
   <div class="body">
     {@render children()}

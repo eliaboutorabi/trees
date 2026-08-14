@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { HugeiconsIcon } from '@hugeicons/svelte';
   import {
     ArrowLeft01Icon,
     ArrowRight01Icon,
@@ -26,6 +25,7 @@
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, presets } from './params.svelte';
   import { shareUrl, takeIncomingState } from './share';
+  import Icon from './components/Icon.svelte';
   import Section from './components/Section.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -355,12 +355,12 @@
           onclick={redraw}
           title={pending ? 'Apply pending grammar changes (R)' : 'Rebuild the tree (R)'}
         >
-          <HugeiconsIcon icon={Rotate01Icon} size={15} strokeWidth={2} />
+          <Icon icon={Rotate01Icon} size={15} strokeWidth={2} />
           <span>Redraw</span>
         </button>
         <span class="divider"></span>
         <button class="icon" onclick={replay} title="Replay growth (space)" aria-label="Replay growth">
-          <HugeiconsIcon icon={PlayIcon} size={16} strokeWidth={1.9} />
+          <Icon icon={PlayIcon} size={16} strokeWidth={1.9} />
         </button>
         <input
           class="scrub"
@@ -377,10 +377,10 @@
         />
         <span class="pct">{Math.round(growth * 100)}%</span>
         <button class="icon" onclick={() => studio?.frameTree()} title="Reframe camera" aria-label="Reframe camera">
-          <HugeiconsIcon icon={FocusIcon} size={16} strokeWidth={1.8} />
+          <Icon icon={FocusIcon} size={16} strokeWidth={1.8} />
         </button>
         <button class="icon" onclick={screenshot} title="Save PNG" aria-label="Save PNG">
-          <HugeiconsIcon icon={Download01Icon} size={16} strokeWidth={1.8} />
+          <Icon icon={Download01Icon} size={16} strokeWidth={1.8} />
         </button>
         <button
           class="icon"
@@ -389,11 +389,11 @@
           title="Copy a link to this tree"
           aria-label="Copy a link to this tree"
         >
-          <HugeiconsIcon icon={linkCopied ? Tick02Icon : CopyLinkIcon} size={16} strokeWidth={1.8} />
+          <Icon icon={linkCopied ? Tick02Icon : CopyLinkIcon} size={16} strokeWidth={1.8} />
         </button>
         <span class="divider"></span>
         <button class="icon" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
-          <HugeiconsIcon icon={UndoIcon} size={16} strokeWidth={1.8} />
+          <Icon icon={UndoIcon} size={16} strokeWidth={1.8} />
         </button>
       </div>
     {/if}
@@ -402,7 +402,7 @@
   <aside class="panel" class:closed={!panelOpen}>
     <!-- The panel lives on the right, so an open panel closes to the right. -->
     <button class="toggle" onclick={() => (panelOpen = !panelOpen)} aria-label={panelOpen ? 'Hide panel' : 'Show panel'}>
-      <HugeiconsIcon icon={panelOpen ? ArrowRight01Icon : ArrowLeft01Icon} size={16} strokeWidth={2} />
+      <Icon icon={panelOpen ? ArrowRight01Icon : ArrowLeft01Icon} size={16} strokeWidth={2} />
     </button>
 
     <div class="panel__inner">
@@ -436,10 +436,10 @@
         <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
         <div class="row">
           <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
-          <button class="ghost" onclick={shuffleSeed} title="New random seed"><HugeiconsIcon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
+          <button class="ghost" onclick={shuffleSeed} title="New random seed"><Icon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
         </div>
 
-        <h4 class="sub"><HugeiconsIcon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
+        <h4 class="sub"><Icon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
         <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows — a surface gradient, so it reads at any zoom" />
         <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
       </Section>
@@ -467,13 +467,13 @@
           Flowers and fruit hang from the same twigs the leaves do, so any species can carry
           them. Everything here is live.
         </p>
-        <h4 class="sub"><HugeiconsIcon icon={FlowerIcon} size={13} strokeWidth={1.6} /> Flowers</h4>
+        <h4 class="sub"><Icon icon={FlowerIcon} size={13} strokeWidth={1.6} /> Flowers</h4>
         <Slider label="Amount" bind:value={params.flowerDensity} min={0} max={1} />
         <Slider label="Size" bind:value={params.flowerSize} min={0.2} max={2.5} />
         <Swatch label="Petal" bind:value={params.flowerColor} />
         <Swatch label="Throat" bind:value={params.flowerCore} />
 
-        <h4 class="sub"><HugeiconsIcon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
+        <h4 class="sub"><Icon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
         <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
         <Slider label="Size" bind:value={params.fruitSize} min={0.15} max={2} />
         <Swatch label="Skin" bind:value={params.fruitColor} />
@@ -489,17 +489,17 @@
           atmosphere its light crosses, so it reddens and dims as it sets. Every
           control here is live.
         </p>
-        <h4 class="sub"><HugeiconsIcon icon={SunIcon} size={13} strokeWidth={1.6} /> Sun</h4>
+        <h4 class="sub"><Icon icon={SunIcon} size={13} strokeWidth={1.6} /> Sun</h4>
         <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
         <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
         <Slider label="Strength" bind:value={params.sunIntensity} min={0} max={12} step={0.1} hint="Brightness of the direct beam, before the atmosphere takes its cut" />
 
-        <h4 class="sub"><HugeiconsIcon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
+        <h4 class="sub"><Icon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
         <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
         <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
         <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
 
-        <h4 class="sub"><HugeiconsIcon icon={CloudFastWindIcon} size={13} strokeWidth={1.6} /> Wind</h4>
+        <h4 class="sub"><Icon icon={CloudFastWindIcon} size={13} strokeWidth={1.6} /> Wind</h4>
         <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
         <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
         <Slider label="Bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="The direction the wind pushes the tree toward" />
