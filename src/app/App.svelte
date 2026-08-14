@@ -311,7 +311,7 @@
 />
 
 <div class="app">
-  <div class="stage" bind:this={stage}>
+  <div class="stage" class:wide={!panelOpen} bind:this={stage}>
     <canvas bind:this={canvas}></canvas>
 
     {#if unsupported}
@@ -563,14 +563,35 @@
   .app {
     position: fixed;
     inset: 0;
-    display: flex;
     overflow: hidden;
+    /* The strip the panel is about to slide back over. Matching the panel's own
+       colour is what stops the slide from flashing the page background. */
+    background: var(--panel-solid);
   }
 
+  /*
+   * The stage is sized by `right`, and that change is deliberately *not*
+   * transitioned.
+   *
+   * It used to be a flex sibling of the panel, so animating the panel's margin
+   * animated the stage's width — and the ResizeObserver dutifully resized the
+   * renderer on every frame of it. One click on the toggle measured 20 resizes
+   * at 19 distinct widths, each one tearing down and rebuilding every
+   * viewport-sized render target in the post chain. Roughly 700 GPU texture
+   * reallocations to slide a sidebar.
+   *
+   * Now the panel is out of flow and slides on `transform`, which is composited
+   * and touches no layout at all, while the stage snaps to its final width in
+   * one step. Same motion on screen, one resize.
+   */
   .stage {
-    position: relative;
-    flex: 1;
-    min-width: 0;
+    position: absolute;
+    inset: 0;
+    right: 21.5rem;
+  }
+
+  .stage.wide {
+    right: 0;
   }
 
   canvas {
@@ -785,18 +806,21 @@
   /* ------------------------------------------------------------ panel */
 
   .panel {
-    position: relative;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
     width: 21.5rem;
-    flex-shrink: 0;
+    z-index: 5;
     background: var(--panel);
     backdrop-filter: blur(26px) saturate(1.35);
     -webkit-backdrop-filter: blur(26px) saturate(1.35);
     border-left: 1px solid var(--hairline);
-    transition: margin-right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .panel.closed {
-    margin-right: -21.5rem;
+    transform: translateX(100%);
   }
 
   .panel__inner {
@@ -1086,12 +1110,9 @@
   }
 
   @media (max-width: 780px) {
-    .panel {
-      position: absolute;
+    /* Too narrow to give up a third of it — the panel floats over the scene. */
+    .stage {
       right: 0;
-      top: 0;
-      bottom: 0;
-      z-index: 5;
     }
     .scrub {
       width: 8rem;

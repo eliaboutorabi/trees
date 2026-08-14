@@ -134,6 +134,9 @@ export class TreeStudio {
   private growthSpeed = 0.32;
   private lastTime = 0;
   private frameTimes: number[] = [];
+  /** Last size handed to the renderer, so a no-op resize stays a no-op. */
+  private viewWidth = 0;
+  private viewHeight = 0;
 
   // Adaptive resolution. Profiling showed this scene is almost entirely
   // fill-rate bound — hiding every leaf, branch and shadow changes the frame
@@ -382,11 +385,25 @@ export class TreeStudio {
 
   // ---------------------------------------------------------------- frame
 
+  /**
+   * Match the drawing buffer to the stage.
+   *
+   * Cheap to call, but never free: the post chain owns 35 render targets and a
+   * quarter of a gigabyte of textures, and every one that depends on the
+   * viewport is destroyed and rebuilt here. A caller that fires this on each
+   * frame of a CSS transition is asking for hundreds of GPU texture
+   * reallocations to animate a sidebar. The size guard makes repeat calls at a
+   * settled size free, but it cannot help a size that is genuinely changing
+   * every frame — that is the caller's problem to avoid.
+   */
   resize(): void {
     if (!this.renderer) return;
     const parent = this.canvas.parentElement;
     const width = parent?.clientWidth || window.innerWidth;
     const height = parent?.clientHeight || window.innerHeight;
+    if (width === this.viewWidth && height === this.viewHeight) return;
+    this.viewWidth = width;
+    this.viewHeight = height;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
