@@ -163,6 +163,7 @@ export class Tree {
       leafShape: params.leafShape,
       maxLeaves: this.options.maxLeaves,
       maxOrnaments: this.options.maxOrnaments,
+      seed: params.seed,
     });
 
     this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);

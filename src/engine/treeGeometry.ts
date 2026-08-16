@@ -14,6 +14,7 @@
 import { BufferAttribute, BufferGeometry, Quaternion, Vector3 } from 'three';
 import type { LeafPlacement, Skeleton } from './lsystem/turtle';
 import { CanopyOcclusion } from './occlusion';
+import { emitRoots, flareScale, planRoots, type RootPlan } from './roots';
 
 export interface TreeGeometryOptions {
   /** 0 broad · 1 needle · 2 blossom · 3 lance. */
@@ -21,6 +22,8 @@ export interface TreeGeometryOptions {
   maxLeaves: number;
   /** Sites baked for flowers and for fruit. Density then culls on the GPU. */
   maxOrnaments?: number;
+  /** Seeds the root flare, so Shuffle reshuffles the buttress too. */
+  seed?: number;
 }
 
 /**
@@ -129,7 +132,11 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   const kept = selectLeaves(skel, opts);
   const field = buildOcclusionField(skel, kept, template, blossomTpl);
 
-  const branches = buildBranches(skel, field);
+  // The flare and the roots are one structure, so they share one plan: the
+  // trunk bulges toward each root's bearing and each root leaves from inside
+  // its own bulge.
+  const plan = planRoots(skel.radius[0] ?? skel.maxRadius, skel.height, opts.seed ?? 1337);
+  const branches = buildBranches(skel, field, plan);
   const foliage = buildFoliage(skel, kept, template, blossomTpl, field);
 
   // Flowers and fruit hang off the same attachment points as the leaves, so any
@@ -298,7 +305,7 @@ function buildOcclusionField(
 
 // ---------------------------------------------------------------- branches
 
-function buildBranches(skel: Skeleton, field: CanopyOcclusion): { buf: Buffers } {
+function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): { buf: Buffers } {
   const buf = newBuffers();
   const { pos, parent, radius, arc, count } = skel;
   if (count === 0) return { buf };
@@ -341,15 +348,14 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion): { buf: Buffers }
   const radii: number[] = [];
   const arcs: number[] = [];
 
-  const emitStrand = (ring: number[], firstRadiusCap: number, strandSeed: number) => {
-    const n = ring.length;
-    if (n < 2) return;
+  const emitStrand = (ring: number[], firstRadiusCap: number, strandSeed: number, isTrunk = false) => {
+    if (ring.length < 2) return;
 
     centers.length = 0;
     radii.length = 0;
     arcs.length = 0;
     let maxR = 0;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < ring.length; i++) {
       const node = ring[i];
       centers.push(pos[node * 3], pos[node * 3 + 1], pos[node * 3 + 2]);
       const r = i === 0 ? Math.min(radius[node], firstRadiusCap) : radius[node];
@@ -358,7 +364,20 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion): { buf: Buffers }
       if (r > maxR) maxR = r;
     }
 
-    const segs = radialSegmentsFor(maxR / rootRadius);
+    if (isTrunk) {
+      // Carry the trunk below the soil line. Its lowest ring is an open end,
+      // and left at ground level any dip in the terrain — or a camera dropped
+      // to grazing — looks straight up inside the tree.
+      centers.unshift(centers[0], centers[1] - plan.bury, centers[2]);
+      radii.unshift(radii[0]);
+      arcs.unshift(arcs[0]);
+    }
+
+    const n = radii.length;
+    // The flare more than doubles the trunk's width at the soil line, and the
+    // lobes are the whole point — at the trunk's usual segment count they would
+    // read as facets rather than as swellings.
+    const segs = isTrunk ? 28 : radialSegmentsFor(maxR / rootRadius);
     const ringVerts = segs + 1;
     const base = buf.position.length / 3;
 
@@ -426,7 +445,9 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion): { buf: Buffers }
         );
 
         // Nibble the silhouette so branches are not perfect cylinders.
-        const rr = r * (1 + SILHOUETTE_WOBBLE * 0.13 * silhouetteWobble(strandSeed * 0.137, a, t));
+        let rr = r * (1 + SILHOUETTE_WOBBLE * 0.13 * silhouetteWobble(strandSeed * 0.137, a, t));
+        // ...and swell the foot of the trunk into a buttress.
+        if (isTrunk) rr *= flareScale(plan, cy, dir.x, dir.z);
 
         vNormal.copy(dir).addScaledVector(tangent, -slope).normalize();
 
@@ -471,8 +492,12 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion): { buf: Buffers }
       node = continuation[node];
     }
     // A fork should not start at full parent thickness or it looks swollen.
-    emitStrand(ring, radius[i] * 1.7, ++strandIndex);
+    emitStrand(ring, radius[i] * 1.7, ++strandIndex, p < 0);
   }
+
+  // Roots ride in the same buffer as the wood, so the whole tree stays one
+  // draw call and picks up the bark material for free.
+  emitRoots(buf, plan, field, 0.41);
 
   return { buf };
 }

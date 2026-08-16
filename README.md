@@ -402,6 +402,38 @@ worse and are now sliders rather than constants: the unripe green, which was
 hard-coded far enough up that a pure red went olive on its shaded half, and the
 pale wax bloom, which is lovely on an apple and poison on a berry.
 
+### Roots
+
+A trunk that meets the ground at a right angle reads as a post pushed into the
+soil, and bark detail does not rescue it — the tell is the silhouette. So the
+base flares, and the flare is *lobed*: each swelling is a major lateral root
+pushing the trunk outward before it leaves. Flare and roots come from one plan
+in `engine/roots.ts`, because they are the same structure above and below the
+soil line; each root leaves from *inside* its own bulge, so the join is buried
+in solid wood and cannot show a seam. Roots ride in the wood buffer, so the
+whole tree is still one draw call.
+
+Three things went wrong before it looked right, and all three are about rates
+rather than sizes:
+
+- **Leaving from high on the flare and sinking gently** gives a mangrove on
+  stilts — the tree stands on arches with daylight underneath.
+- **Sinking gently from low down** is worse: the roots lie along the grass like
+  logs, because a tube whose *centre* is just below zero still has its whole
+  upper half above ground. The root has to be properly buried within a segment
+  or two of crossing.
+- **Travelling outward too fast** — anything below about `t^0.7` — defeats both
+  fixes, because the root covers most of its reach before the dive has taken it
+  anywhere. What should show is a hump about a trunk-radius wide, arching out of
+  the flare and straight back under. The remaining reach happens underground,
+  where it is free.
+
+Growth timing matters as much as shape. Born early, as they first were, the
+roots snap to full reach while the trunk is still a sliver, so the tree spends
+its youth as a starfish around a hollow centre and then grows a trunk up through
+the middle of it. Birth is now delayed and spread along each root, so it extends
+ring by ring, pushed outward while the trunk thickens.
+
 ### Grass
 
 Two tricks from game foliage rendering do nearly all the work, both in
