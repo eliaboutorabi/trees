@@ -122,6 +122,17 @@ export function createTreeUniforms() {
     /** 0 matte like a plum, 1 polished like an apple. */
     fruitGloss: uniform(0.5),
 
+    // Pointer response. A world-space ball of influence rather than a picked
+    // object: see `hoverAt` for why that is the whole trick.
+    hoverPoint: uniform(new Vector3(0, -1000, 0)),
+    hoverRadius: uniform(1.1),
+    /** 0 while the pointer is away, eased to 1 — never switched. */
+    hoverStrength: uniform(0),
+    /** How far foliage parts, in world units, at full strength. */
+    hoverPush: uniform(0.09),
+    /** Peak turn of a single leaf about its stem, in radians. */
+    hoverTurn: uniform(0.5),
+
     leafBase: uniform(new Color(0x2f5320)),
     leafTip: uniform(new Color(0x86a83c)),
     leafAutumn: uniform(new Color(0xc06a1e)),
@@ -166,6 +177,30 @@ export function proceduralBump(height: FloatNode, scale: FloatNode | number): Ve
   const surfaceGrad = det.sign().mul(grad.x.mul(r1).add(grad.y.mul(r2)));
 
   return det.abs().mul(n).sub(surfaceGrad).normalize();
+}
+
+/**
+ * How strongly the tree responds to the pointer at a given point in space.
+ *
+ * Deliberately a *field*, not a pick. Raycasting for the leaf under the cursor
+ * and highlighting that one leaf gives exactly the discrete, snapping response
+ * this is trying to avoid — the effect would jump from leaf to leaf, and a
+ * raycast against baked geometry would be wrong anyway, because growth and wind
+ * both move the mesh on the GPU where a CPU raycast cannot see it.
+ *
+ * Instead the pointer contributes one world-space point and everything falls
+ * off smoothly with distance from it. Nothing is ever selected, so nothing can
+ * pop: move the cursor and the response slides across the canopy, and thousands
+ * of leaves each answer a little.
+ *
+ * Evaluate this at a vertex's *pivot* rather than at the vertex. Neighbouring
+ * geometry then shares almost the same weight, which is what keeps a leaf rigid
+ * and keeps it attached to the twig carrying it — the same reasoning the wind
+ * relies on.
+ */
+export function hoverAt(u: TreeUniforms, pivot: Vec3Node): FloatNode {
+  const near = float(1).sub(pivot.sub(u.hoverPoint).length().div(u.hoverRadius).clamp(0, 1));
+  return smoothstep(0, 1, near).pow(1.4).mul(u.hoverStrength);
 }
 
 /** Rodrigues' rotation of `v` about a unit `axis`. Preserves length. */
@@ -241,5 +276,40 @@ export function growthPosition(u: TreeUniforms, opts: GrowthOptions) {
 
   const bendAxis = vec3(0, 1, 0).cross(windDir).normalize();
   const bend = drive.mul(u.wind).mul(flex).mul(extend).mul(u.windBend);
-  return rotateAboutAxis(displaced, bendAxis, bend);
+  const swayed = rotateAboutAxis(displaced, bendAxis, bend);
+
+  // -------------------------------------------------------------- pointer
+  //
+  // The pivot is put through the same wind rotation before it is measured
+  // against the pointer. Comparing the *rest* pivot instead would leave a
+  // gusting canopy responding where it used to be, which on a windy preset is
+  // most of a leaf's length away from where it is drawn.
+  const pivot = rotateAboutAxis(center, bendAxis, bend);
+
+  // Only what can actually move. Foliage always can; wood is compliant in
+  // proportion to how thin it is, taken from the vertex's own distance to the
+  // strand axis — which is precisely the branch radius there. So twigs stir and
+  // the trunk does not, without needing another attribute to say which is which.
+  const compliance = opts.flutter
+    ? float(1)
+    : smoothstep(0.14, 0.02, positionLocal.sub(center).length());
+  const near = hoverAt(u, pivot).mul(compliance).mul(extend);
+
+  // Part, rather than highlight. Foliage eases away from the pointer and lifts
+  // a little, the way a canopy opens around a hand pushed into it. The lift is
+  // what keeps it from reading as a flat repulsion field.
+  const away = pivot.sub(u.hoverPoint);
+  const outward = away.div(away.length().max(0.001));
+  const parted = swayed.add(outward.add(vec3(0, 0.55, 0)).mul(near).mul(u.hoverPush));
+
+  if (!opts.flutter) return parted;
+
+  // Each leaf also turns on its own stem, about its own axis and by its own
+  // amount. Turning them all alike is what would make this read as a machine
+  // sweeping over the canopy rather than as leaves catching a disturbance.
+  const fs = seed.fract();
+  const turnAxis = vec3(fs.mul(23.0).sin(), 0.55, fs.mul(9.0).cos()).normalize();
+  const turn = near.mul(u.hoverTurn).mul(fs.mul(0.7).add(0.5));
+  const pivoted = rotateAboutAxis(parted.sub(pivot), turnAxis, turn);
+  return pivot.add(pivoted);
 }

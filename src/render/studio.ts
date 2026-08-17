@@ -10,7 +10,9 @@ import {
   MathUtils,
   PCFSoftShadowMap,
   PerspectiveCamera,
+  Raycaster,
   Scene,
+  Vector2,
   Vector3,
 } from 'three';
 import { AgXToneMapping, WebGPURenderer } from 'three/webgpu';
@@ -106,6 +108,8 @@ const MAX_ORNAMENTS = 1_800;
 const _v1 = new Vector3();
 const _v2 = new Vector3();
 const _m1 = new Matrix4();
+const _v3 = new Vector3();
+const _v4 = new Vector3();
 const UP_AXIS = new Vector3(0, 1, 0);
 
 export class TreeStudio {
@@ -159,6 +163,16 @@ export class TreeStudio {
   private lookToggles = { bloom: true, dof: true, grain: true, antialias: true };
   private pendingCapture: ((url: string) => void) | null = null;
   private disposed = false;
+
+  // Pointer response. Kept as a smoothly chased point rather than a hit test —
+  // see `updateHover`.
+  private readonly raycaster = new Raycaster();
+  private readonly pointer = new Vector2();
+  private pointerInside = false;
+  private readonly hoverPoint = new Vector3(0, -1000, 0);
+  private readonly hoverTarget = new Vector3(0, -1000, 0);
+  private hoverStrength = 0;
+  private hoverWanted = 0;
 
   stats: StudioStats = {
     modules: 0,
@@ -223,6 +237,9 @@ export class TreeStudio {
     this.camera.position.set(9, 5, 12);
     this.controls.target.set(0, 3.2, 0);
     this.controls.update();
+
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
 
     this.resize();
     // A handle for profiling from the console — hiding a mesh and watching the
@@ -415,6 +432,83 @@ export class TreeStudio {
     });
   }
 
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.pointerInside = true;
+  };
+
+  private readonly onPointerLeave = (): void => {
+    this.pointerInside = false;
+  };
+
+  /**
+   * Chase the point on the tree the pointer is over.
+   *
+   * Not a hit test against the mesh, for two reasons. Growth and wind both move
+   * this geometry in the vertex shader, so the triangles a CPU raycast would
+   * test are not the triangles on screen; and picking a *surface* would make
+   * the response snap between leaves as the cursor crosses gaps in the canopy.
+   * A point floating inside the crown, with the shader falling off smoothly
+   * around it, has neither problem.
+   *
+   * What it aims at matters, though. Taking the entry point on a bounding
+   * sphere — the obvious first try — leaves the influence sitting in empty air
+   * beside the crown whenever the cursor is anywhere but dead centre, because
+   * that sphere is mostly not tree. Measuring against the trunk *axis* instead
+   * lands it inside the canopy wherever the cursor is, and covers the trunk for
+   * free, since the axis runs the full height of the tree.
+   *
+   * Both the point and the strength are eased with an exponential chase, which
+   * is frame-rate independent: at 30fps and at 144fps the response takes the
+   * same amount of *time*, so it cannot feel different on a slower machine.
+   */
+  private updateHover(dt: number): void {
+    const height = Math.max(1, this.treeHeight);
+    const radius = Math.max(0.5, this.treeRadius);
+
+    this.hoverWanted = 0;
+    if (this.pointerInside) {
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const ray = this.raycaster.ray;
+
+      // Closest approach between the cursor ray and the trunk axis.
+      const o = _v1.copy(ray.origin);
+      const d = ray.direction;
+      const axis = _v2.set(0, height, 0);
+      const b = d.dot(axis);
+      const c = axis.dot(axis);
+      const dw = d.dot(o);
+      const e = axis.dot(o);
+      const denom = c - b * b;
+
+      let s = Math.abs(denom) < 1e-6 ? 0 : (e - b * dw) / denom;
+      s = MathUtils.clamp(s, 0, 1);
+      const t = Math.max(0, b * s - dw);
+
+      const onAxis = _v3.copy(axis).multiplyScalar(s);
+      const onRay = _v4.copy(d).multiplyScalar(t).add(o);
+      const miss = onRay.distanceTo(onAxis);
+
+      // Pull toward the camera so the influence sits on the near side of the
+      // crown, where the leaves you can actually see are.
+      ray.at(Math.max(0, t - radius * 0.55), this.hoverTarget);
+      // Fades out as the cursor leaves the tree rather than switching off, so
+      // there is no edge to catch.
+      this.hoverWanted = 1 - MathUtils.smoothstep(miss, radius * 0.95, radius * 1.75);
+    }
+
+    // Faster to follow the cursor than to fade in, so the response tracks the
+    // pointer closely but never blinks on.
+    this.hoverPoint.lerp(this.hoverTarget, 1 - Math.exp(-dt * 14));
+    this.hoverStrength += (this.hoverWanted - this.hoverStrength) * (1 - Math.exp(-dt * 7));
+
+    this.tree.setHover(this.hoverPoint, Math.max(0.55, radius * 0.34), this.hoverStrength);
+  }
+
   private frame(timeMs: number): void {
     if (this.disposed) return;
     const dt = this.lastTime ? Math.min(0.05, (timeMs - this.lastTime) / 1000) : 0.016;
@@ -427,6 +521,7 @@ export class TreeStudio {
     }
 
     this.controls.update();
+    this.updateHover(dt);
 
     // Keep the focal plane on whatever the camera is orbiting.
     const focus = this.camera.position.distanceTo(this.controls.target);
@@ -662,6 +757,8 @@ export class TreeStudio {
 
   dispose(): void {
     this.disposed = true;
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
     this.renderer?.setAnimationLoop(null);
     this.tree.dispose();
     this.landscape.dispose();

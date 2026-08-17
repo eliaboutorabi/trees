@@ -402,6 +402,42 @@ worse and are now sliders rather than constants: the unripe green, which was
 hard-coded far enough up that a pure red went olive on its shaded half, and the
 pale wax bloom, which is lovely on an apple and poison on a berry.
 
+### Hovering the canopy
+
+Move the pointer over the tree and the foliage and thin branches near it part,
+turn on their stems and brighten very slightly. The trunk ignores you.
+
+The instinct is to raycast for the leaf under the cursor and highlight it. That
+is wrong twice over. Growth and wind both move this geometry in the vertex
+shader, so the triangles a CPU raycast tests are not the triangles on screen;
+and picking a *surface* makes the response snap from leaf to leaf as the cursor
+crosses gaps in the canopy, which is exactly the discrete, weird feel worth
+avoiding.
+
+So nothing is ever selected. The pointer contributes one world-space point, and
+`hoverAt` falls off smoothly with distance from it — thousands of leaves each
+answer a little, and the response slides across the crown instead of jumping.
+Three details make it hold together:
+
+- **Evaluate the weight at a vertex's pivot, not at the vertex.** Neighbouring
+  geometry then shares almost the same weight, which keeps a leaf rigid and
+  keeps it attached to its twig. Same reasoning as the wind.
+- **Put the pivot through the wind rotation first.** Comparing the rest pivot
+  leaves a gusting canopy responding where it used to be — most of a leaf's
+  length away on a windy preset.
+- **Take compliance from the vertex's distance to its own strand axis**, which
+  is the branch radius there. Twigs stir, the trunk does not, and no extra
+  attribute is needed to tell them apart.
+
+Aiming it is its own problem. Intersecting a bounding sphere — the obvious first
+try — leaves the influence in empty air beside the crown whenever the cursor is
+off centre, because that sphere is mostly not tree; measured on an oak, the
+target landed a full canopy-radius outside the foliage. Measuring closest
+approach to the *trunk axis* instead lands it inside the canopy wherever the
+cursor is, and covers the trunk for free. Both the point and the strength are
+then eased with an exponential chase, which is frame-rate independent — the
+response takes the same wall-clock time at 30fps as at 144.
+
 ### Roots
 
 A trunk that meets the ground at a right angle reads as a post pushed into the

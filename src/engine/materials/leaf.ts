@@ -8,7 +8,7 @@
  */
 import { DoubleSide, MeshStandardNodeMaterial } from 'three/webgpu';
 import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv } from 'three/tsl';
-import { growthPosition, treeParams, type TreeUniforms } from './shared';
+import { growthPosition, hoverAt, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
 export function createLeafMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
@@ -78,7 +78,18 @@ export function createLeafMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   // shining through it.
   const scatter = backLit.mul(float(0.3).add(looksIntoSun.mul(0.7))).mul(thinness).mul(exposure);
 
-  material.emissiveNode = base.mul(u.sunColor).mul(scatter).mul(u.translucency).mul(1.7);
+  // A leaf that turns toward the pointer would catch more light, so it also
+  // brightens very slightly. Movement alone is easy to miss in a dense canopy
+  // and impossible to see at all on a leaf already in deep shade; a touch of
+  // light is what makes the response read from across the tree. Kept well under
+  // the scattering term so it never looks like a selection highlight.
+  const near = hoverAt(u, vec3Attribute('aCenter'));
+  material.emissiveNode = base
+    .mul(u.sunColor)
+    .mul(scatter)
+    .mul(u.translucency)
+    .mul(1.7)
+    .add(base.mul(near).mul(0.16));
 
   return material;
 }

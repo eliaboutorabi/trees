@@ -203,6 +203,21 @@ export class Tree {
     this.uniforms.sunColor.value.copy(color);
   }
 
+  /**
+   * Where the pointer is touching the tree, in the tree's own space.
+   *
+   * Not a selection — a soft ball of influence. Foliage and thin branches near
+   * `point` part and turn, falling off to nothing at `radius`, so there is
+   * nothing to snap between. `strength` is expected to be eased by the caller
+   * rather than switched, which is what makes entering and leaving smooth; see
+   * `TreeStudio` for the frame-rate independent easing this wants.
+   */
+  setHover(point: Vector3, radius: number, strength: number): void {
+    this.uniforms.hoverPoint.value.copy(point);
+    this.uniforms.hoverRadius.value = Math.max(1e-3, radius);
+    this.uniforms.hoverStrength.value = Math.min(1, Math.max(0, strength));
+  }
+
   /** Species colours — bark, foliage, blossom, fruit. */
   applyPalette(palette: Palette): void {
     const u = this.uniforms;
