@@ -98,7 +98,19 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
   // a control too.
   const view = cameraPosition.sub(positionWorld).normalize();
   const grazing = float(1).sub(view.dot(normalWorld).clamp(0, 1)).pow(5.0);
-  material.colorNode = mix(skin.mul(shade.oneMinus()), vec3(0.58, 0.56, 0.52), grazing.mul(u.fruitWax).mul(0.45));
+  // The stalk and the blossom end. The stalk rides in the same mesh as the
+  // fruit, tagged with a UV outside [0, 1] rather than given a material of its
+  // own — a dozen triangles do not justify a second draw call. The calyx is
+  // just the dark scar at the bottom, which is `st.y` near zero for both fruit
+  // shapes, so berries get a blossom end out of it too.
+  const woody = step(1.05, st.y);
+  const calyx = smoothstep(0.05, 0.0, st.y).mul(woody.oneMinus());
+  const dressed = mix(
+    mix(skin.mul(shade.oneMinus()), vec3(0.13, 0.09, 0.05), calyx.mul(0.8)),
+    vec3(0.17, 0.115, 0.062),
+    woody,
+  );
+  material.colorNode = mix(dressed, vec3(0.58, 0.56, 0.52), grazing.mul(u.fruitWax).mul(0.45).mul(woody.oneMinus()));
 
   /*
    * Gloss controls how much sky the skin mirrors, not just how sharply.
@@ -118,8 +130,35 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
    * genuinely dims the rim. Fruit skin is a thin waxy cuticle over water, so
    * reflecting less than a polished dielectric is also the honest answer.
    */
-  material.specularIntensityNode = mix(float(0.12), float(0.85), u.fruitGloss);
-  material.roughnessNode = mix(float(0.68), float(0.13), u.fruitGloss).add(belly.mul(0.08));
+  /*
+   * Why the specular has to be kept on such a short leash.
+   *
+   * A saturated red skin has *near-zero* green and blue. Measured on a pure red
+   * with every other term switched off, the sky's reflection adds around 0.012
+   * linear to all three channels — about 7% of the red already there, and so
+   * invisible in red, but it takes green and blue from nothing to something and
+   * the fruit turns dusty rose. Saturation is destroyed by the channels that are
+   * dark, not by the one that is bright.
+   *
+   * A photograph of a real apple survives this because the apple reflects a
+   * *structured* world — mostly the dark leaves around it, with the sky only in
+   * a small highlight. Ours reflects a smooth, uniformly bright sky over its
+   * whole upper hemisphere, because that is all the environment map contains.
+   *
+   * The canopy occlusion already knows how much sky each fruit can see, so it
+   * gates the reflection. A fruit buried in the crown stops mirroring an open
+   * sky it cannot actually see, which is both the physical answer and the one
+   * that keeps it red.
+   */
+  const sky = occlusion.mul(u.occlusionStrength).mul(0.8).oneMinus();
+  // A stalk is dry wood: matte, and barely reflective at all.
+  material.specularIntensityNode = mix(float(0.06), float(0.5), u.fruitGloss)
+    .mul(sky)
+    .mul(woody.mul(0.85).oneMinus());
+  material.roughnessNode = mix(float(0.68), float(0.13), u.fruitGloss)
+    .add(belly.mul(0.08))
+    .add(woody.mul(0.5))
+    .clamp(0.05, 1);
   material.metalnessNode = float(0);
 
   return material;

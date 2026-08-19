@@ -384,6 +384,25 @@ The rank doubles as the per-ornament random seed, so one scalar drives both the
 culling and the colour and size variation — a crown of identically coloured
 berries reads as plastic.
 
+**Berries are spheres; apples are not.** A sphere does not read as an apple and
+no amount of shading rescues it — what the eye recognises is the silhouette.
+Four things carry it, all geometry: wider than tall with the widest point *above*
+the equator, a deep stem well, a shallower calyx basin opposite it, and five
+faint lobes from the carpels inside. The stalk rides in the same mesh, tagged
+with a UV outside [0, 1] so the shader can give it bark colour — a dozen
+triangles do not justify a second draw call.
+
+The wells are the fiddly part. Subtracting a Gaussian from `y` only makes a dent
+if it is *steeper* than the sphere's own curvature; a wide, gentle one is
+absorbed into the profile and does nothing. The first attempt used a width of
+0.62 and carved a well 0.02 radii deep, which is to say none. Rings also have to
+be spaced by `(1 - cos(pi v)) / 2` rather than uniformly, or barely one sample
+lands inside the well and it renders as a notch.
+
+An apple also has a top and a bottom, so unlike a berry it cannot inherit
+whatever rotation the leaf beside it happened to get. Fruit shapes with an axis
+are placed upright, with a random spin and a few degrees of lean.
+
 **Why fruit renders pale, and what actually fixes it.** Pick a saturated red and
 the fruit still comes out salmon. It is tempting to chase the albedo, and that is
 the wrong end: bisecting it by setting `scene.environmentIntensity` to zero makes
@@ -397,7 +416,17 @@ Roughness is not the lever. Lowering it sharpens the reflection but does not
 shrink it; the sphere still faces every part of the sky. `specularIntensity`
 (hence `MeshPhysicalNodeMaterial`) is — it scales F0 *and* F90, so it genuinely
 dims the rim, and a thin waxy cuticle over water reflecting less than a polished
-dielectric is the honest answer anyway. Two art terms were quietly making it
+dielectric is the honest answer anyway. It is also gated by canopy occlusion,
+for a reason worth stating plainly: saturation is destroyed by the channels that
+are *dark*, not by the one that is bright. A saturated red skin has near-zero
+green and blue, and the sky's reflection adds about 0.012 linear to all three —
+invisible in red, but it takes green and blue from nothing to something and the
+fruit turns dusty rose. A photograph of a real apple survives this because the
+apple reflects a structured world, mostly the dark leaves around it, with sky
+only in a small highlight; ours reflects a smooth, uniformly bright sky over its
+whole upper hemisphere, because that is all the environment map holds. Gating on
+occlusion stops a fruit buried in the crown from mirroring an open sky it cannot
+see. Two art terms were quietly making it
 worse and are now sliders rather than constants: the unripe green, which was
 hard-coded far enough up that a pure red went olive on its shaded half, and the
 pale wax bloom, which is lovely on an apple and poison on a berry.

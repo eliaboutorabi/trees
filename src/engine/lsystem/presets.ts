@@ -49,6 +49,8 @@ export interface PresetParams {
   /** Ornament scale, relative to what the leaf size implies. */
   flowerSize?: number;
   fruitSize?: number;
+  /** 0 berry · 1 apple. A berry is a sphere; an apple has a top and a bottom. */
+  fruitShape?: 0 | 1;
 }
 
 export interface Preset {
@@ -320,6 +322,7 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
       fruitDensity: 0.22,
       // An apple is a good deal larger than the leaf beside it; a berry is not.
       fruitSize: 0.75,
+      fruitShape: 1,
     },
     palette: {
       barkDark: 0x241a13,
@@ -332,7 +335,7 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
       blossom: 0xfbe4ea,
       flowerColor: 0xfdeef2,
       flowerCore: 0xf0c25a,
-      fruitColor: 0x8f1d13,
+      fruitColor: 0xa32617,
     },
   },
   {

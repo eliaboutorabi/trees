@@ -24,6 +24,8 @@ export interface TreeGeometryOptions {
   maxOrnaments?: number;
   /** Seeds the root flare, so Shuffle reshuffles the buttress too. */
   seed?: number;
+  /** 0 berry · 1 apple. */
+  fruitShape?: 0 | 1;
 }
 
 /**
@@ -143,7 +145,15 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   // species can carry them without the grammar knowing anything about it.
   const sites = selectOrnamentSites(kept, opts.maxOrnaments ?? 2600);
   const flowers = buildOrnaments(skel, sites, flowerTemplate(), field, { droop: 0 });
-  const fruit = buildOrnaments(skel, sites, berryTemplate(), field, { droop: 1.05, seedShift: 0.37 });
+  // A berry is a sphere and can point anywhere, but an apple has a top and a
+  // bottom, so it has to hang upright rather than inherit whatever rotation the
+  // leaf beside it happened to get.
+  const apples = opts.fruitShape === 1;
+  const fruit = buildOrnaments(skel, sites, apples ? appleTemplate() : berryTemplate(), field, {
+    droop: apples ? 1.25 : 1.05,
+    seedShift: 0.37,
+    upright: apples,
+  });
 
   return {
     branches: toGeometry(branches.buf),
@@ -187,7 +197,7 @@ function buildOrnaments(
   sites: { leaf: LeafPlacement; rank: number }[],
   tpl: LeafTemplate,
   field: CanopyOcclusion,
-  opts: { droop: number; seedShift?: number },
+  opts: { droop: number; seedShift?: number; upright?: boolean },
 ): Buffers | null {
   if (sites.length === 0) return null;
 
@@ -197,6 +207,9 @@ function buildOrnaments(
   const v = new Vector3();
   const nrm = new Vector3();
   const shift = opts.seedShift ?? 0;
+  const quat = new Quaternion();
+  const tilt = new Quaternion();
+  const AXIS_Y = new Vector3(0, 1, 0);
 
   for (const { leaf, rank } of sites) {
     const base = buf.position.length / 3;
@@ -210,13 +223,27 @@ function buildOrnaments(
     // ornament because the pivot stays at the anchor: bigger fruit hangs lower.
     const drop = opts.droop * scale;
 
+    // Upright fruit keeps its own axis: a spin about vertical so no two are
+    // turned the same way, plus a few degrees of lean, because a real apple
+    // hangs slightly askew and a grove of perfectly plumb ones looks stamped.
+    let orient = leaf.quat;
+    if (opts.upright) {
+      const h = Math.sin(rank * 127.1 + leaf.seed * 311.7) * 43758.5453;
+      const spin = (h - Math.floor(h)) * Math.PI * 2;
+      const g = Math.sin(rank * 269.5 + leaf.seed * 183.3) * 43758.5453;
+      const lean = ((g - Math.floor(g)) - 0.5) * 0.42;
+      quat.setFromAxisAngle(AXIS_Y, spin);
+      tilt.setFromAxisAngle(v.set(Math.cos(spin * 1.7), 0, Math.sin(spin * 1.7)), lean);
+      orient = quat.premultiply(tilt);
+    }
+
     for (let i = 0; i < tpl.position.length; i += 3) {
       v.set(tpl.position[i], tpl.position[i + 1], tpl.position[i + 2])
         .multiplyScalar(scale)
-        .applyQuaternion(leaf.quat)
+        .applyQuaternion(orient)
         .add(leaf.pos);
       v.y -= drop;
-      nrm.set(tpl.normal[i], tpl.normal[i + 1], tpl.normal[i + 2]).applyQuaternion(leaf.quat);
+      nrm.set(tpl.normal[i], tpl.normal[i + 1], tpl.normal[i + 2]).applyQuaternion(orient);
 
       buf.position.push(v.x, v.y, v.z);
       buf.normal.push(nrm.x, nrm.y, nrm.z);
@@ -659,6 +686,144 @@ function flowerTemplate(): LeafTemplate {
  * most of what makes a small round thing read as three-dimensional once it is
  * only a dozen pixels across.
  */
+/**
+ * An apple.
+ *
+ * A sphere does not read as an apple, and no amount of shading fixes it: what
+ * the eye recognises is the silhouette. Four things carry it, and all four are
+ * geometry.
+ *
+ *   Wider than tall      an apple is about 0.95 as tall as it is wide, and the
+ *                        widest point sits *above* the equator, nearer the stem.
+ *   A deep stem well     the funnel the stalk sits in, and the single most
+ *                        recognisable feature of the fruit.
+ *   A calyx basin        the shallower dimple at the blossom end opposite it.
+ *   Five faint lobes     from the five carpels inside, strongest around the
+ *                        calyx and fading out toward the stem.
+ *
+ * The wells are the fiddly part. Subtracting a Gaussian from `y` only makes a
+ * dent if it is *steeper* than the sphere's own curvature — a wide, gentle one
+ * gets absorbed into the profile and does nothing. The first attempt here used
+ * a width of 0.62 and carved a well 0.02 radii deep, which is to say none. The
+ * numbers below are chosen so the surface actually turns over: the rim lands
+ * near phi = 0.46, which puts a basin about 0.19 radii deep and 0.46 wide.
+ *
+ * Rings are also spaced by `(1 - cos(pi v)) / 2` rather than uniformly, which
+ * clusters them at both poles. Evenly spaced rings put barely one sample inside
+ * the stem well and it renders as a crude notch.
+ */
+function appleTemplate(radius = 0.44, segments = 12, rings = 12): LeafTemplate {
+  const position: number[] = [];
+  const normal: number[] = [];
+  const uv: number[] = [];
+  const index: number[] = [];
+
+  const surface = (u: number, v: number, out: number[]): void => {
+    // Cluster rings toward the poles, where all the shape is.
+    const phi = Math.PI * (1 - Math.cos(Math.PI * Math.min(1, Math.max(0, v)))) * 0.5;
+    const theta = u * Math.PI * 2;
+    const cosPhi = Math.cos(phi);
+    const sinPhi = Math.sin(phi);
+
+    // Widest above the equator, tapering toward the blossom end.
+    let r = sinPhi * (1 + 0.1 * cosPhi);
+    // Five carpels, showing as faint lobes that fade out toward the stem.
+    r *= 1 + 0.04 * Math.cos(5 * theta) * (0.3 + 0.35 * (1 - cosPhi));
+
+    // 1.05 rather than a sphere's 1.0 leaves the finished fruit about 0.9 as
+    // tall as it is wide once the wells have taken their bite, which is the
+    // proportion that reads as an apple rather than as a tomato or a plum.
+    let y = cosPhi * 1.05;
+    y -= 0.34 * Math.exp(-((phi / 0.3) ** 2));
+    y += 0.16 * Math.exp(-(((Math.PI - phi) / 0.42) ** 2));
+
+    out[0] = Math.cos(theta) * r * radius;
+    out[1] = y * radius;
+    out[2] = Math.sin(theta) * r * radius;
+  };
+
+  const a: number[] = [0, 0, 0];
+  const b: number[] = [0, 0, 0];
+  const c: number[] = [0, 0, 0];
+  const d: number[] = [0, 0, 0];
+  const eps = 0.004;
+
+  for (let ri = 0; ri <= rings; ri++) {
+    const v = ri / rings;
+    for (let si = 0; si <= segments; si++) {
+      const u = si / segments;
+      surface(u, v, a);
+      position.push(a[0], a[1], a[2]);
+      uv.push(u, 1 - v);
+
+      // Normals from the surface itself rather than from a sphere — the wells
+      // and lobes are exactly where a sphere's normals would be wrong.
+      if (ri === 0) {
+        // The floor of the stem well faces up, out of the bowl.
+        normal.push(0, 1, 0);
+      } else if (ri === rings) {
+        normal.push(0, -1, 0);
+      } else {
+        surface(u + eps, v, b);
+        surface(u - eps, v, c);
+        surface(u, Math.min(1, v + eps), d);
+        const du = [b[0] - c[0], b[1] - c[1], b[2] - c[2]];
+        surface(u, Math.max(0, v - eps), c);
+        const dv = [d[0] - c[0], d[1] - c[1], d[2] - c[2]];
+        normal.push(
+          du[1] * dv[2] - du[2] * dv[1],
+          du[2] * dv[0] - du[0] * dv[2],
+          du[0] * dv[1] - du[1] * dv[0],
+        );
+      }
+    }
+  }
+
+  const stride = segments + 1;
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
+      const i0 = r * stride + s;
+      const i1 = i0 + stride;
+      index.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1);
+    }
+  }
+
+  // The stalk, rising out of the well. It rides in the same template so the
+  // fruit stays one draw call, and is tagged with a UV outside [0, 1] so the
+  // shader can give it bark colour instead of skin — cheaper than a second
+  // material for a dozen triangles.
+  const stemBase = position.length / 3;
+  const stemSides = 5;
+  const stemRings = 3;
+  surface(0, 0, a);
+  const wellFloor = a[1] - radius * 0.04;
+  for (let r = 0; r <= stemRings; r++) {
+    const t = r / stemRings;
+    const y = wellFloor + t * radius * 0.62;
+    // Leans a little, and thickens where it meets the fruit.
+    const lean = t * t * radius * 0.07;
+    const rr = radius * (0.05 - 0.018 * t);
+    for (let s = 0; s <= stemSides; s++) {
+      const th = (s / stemSides) * Math.PI * 2;
+      const nx = Math.cos(th);
+      const nz = Math.sin(th);
+      position.push(nx * rr + lean, y, nz * rr);
+      normal.push(nx, 0.15, nz);
+      uv.push(s / stemSides, 1.5);
+    }
+  }
+  const stemStride = stemSides + 1;
+  for (let r = 0; r < stemRings; r++) {
+    for (let s = 0; s < stemSides; s++) {
+      const i0 = stemBase + r * stemStride + s;
+      const i1 = i0 + stemStride;
+      index.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1);
+    }
+  }
+
+  return normalizeTemplate(position, normal, uv, index);
+}
+
 function berryTemplate(radius = 0.4, segments = 10, rings = 7): LeafTemplate {
   const position: number[] = [];
   const normal: number[] = [];

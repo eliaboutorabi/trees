@@ -116,11 +116,11 @@ export function createTreeUniforms() {
      */
     fruitRipeness: uniform(0.9),
     /** How far the sunward cheek shifts toward orange. Also once hard-coded. */
-    fruitBlush: uniform(0.25),
+    fruitBlush: uniform(0.18),
     /** The waxy rim dust on a plum. Pale, so a little goes a long way. */
-    fruitWax: uniform(0.15),
+    fruitWax: uniform(0.1),
     /** 0 matte like a plum, 1 polished like an apple. */
-    fruitGloss: uniform(0.5),
+    fruitGloss: uniform(0.45),
 
     // Pointer response. A world-space ball of influence rather than a picked
     // object: see `hoverAt` for why that is the whole trick.

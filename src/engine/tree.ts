@@ -49,6 +49,8 @@ export interface TreeStructure {
   leafScale: number;
   /** 0 broad · 1 needle · 2 blossom · 3 lance. */
   leafShape: 0 | 1 | 2 | 3;
+  /** 0 berry · 1 apple. Changes the baked mesh, so it needs a rebuild. */
+  fruitShape: 0 | 1;
 }
 
 /** Changes that are uniform-only — applied instantly, no rebuild. */
@@ -164,6 +166,7 @@ export class Tree {
       maxLeaves: this.options.maxLeaves,
       maxOrnaments: this.options.maxOrnaments,
       seed: params.seed,
+      fruitShape: params.fruitShape,
     });
 
     this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
@@ -280,6 +283,7 @@ export class Tree {
       axiom: preset.axiom,
       rules: preset.rules,
       seed: 1337,
+      fruitShape: 0,
       ...preset.params,
       ...overrides,
     });

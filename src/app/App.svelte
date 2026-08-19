@@ -76,6 +76,7 @@
       trunkRadius: params.trunkRadius,
       leafScale: params.leafScale,
       leafShape: params.leafShape,
+      fruitShape: params.fruitShape,
     };
   }
 
@@ -95,6 +96,7 @@
     'pipeExponent',
     'seed',
     'leafShape',
+    'fruitShape',
   ] as const;
 
   const pending = $derived.by(() => {
@@ -474,6 +476,17 @@
         <Swatch label="Throat" bind:value={params.flowerCore} />
 
         <h4 class="sub"><Icon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
+        <div class="segmented">
+          {#each [{ v: 0, l: 'Berry' }, { v: 1, l: 'Apple' }] as opt (opt.v)}
+            <button
+              class:active={params.fruitShape === opt.v}
+              onclick={() => (params.fruitShape = opt.v as 0 | 1)}
+              title="Shape ↻ — takes effect on redraw"
+            >
+              {opt.l}
+            </button>
+          {/each}
+        </div>
         <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
         <Slider label="Size" bind:value={params.fruitSize} min={0.15} max={2} />
         <Swatch label="Skin" bind:value={params.fruitColor} />
