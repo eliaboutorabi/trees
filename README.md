@@ -403,6 +403,17 @@ An apple also has a top and a bottom, so unlike a berry it cannot inherit
 whatever rotation the leaf beside it happened to get. Fruit shapes with an axis
 are placed upright, with a random spin and a few degrees of lean.
 
+**Shape is only half of it.** With the silhouette right and the colour finally
+red, the fruit read as *cherries* — because a cherry is a uniform, saturated,
+glossy red ball, and one skin colour paints exactly that. What makes an apple
+recognisable is that its red is never uniform: a yellow-green ground the red only
+partly covers, irregular striping running stem to calyx, and pale lenticel
+freckles scattered over the skin. Two calibration notes, both learned the hard
+way: the stripes need *high* integer harmonics — nine bands around a fruit is
+pumpkin ribbing, not apple striping — and they have to wander along their length,
+or the fruit reads as a melon. Red also has to stay the base with the ground
+showing through it, never the reverse.
+
 **Why fruit renders pale, and what actually fixes it.** Pick a saturated red and
 the fruit still comes out salmon. It is tempting to chase the albedo, and that is
 the wrong end: bisecting it by setting `scene.environmentIntensity` to zero makes

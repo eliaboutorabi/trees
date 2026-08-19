@@ -110,6 +110,13 @@ export function createTreeUniforms() {
     /** The sunward cheek — warmer, not brighter. */
     fruitSun: uniform(new Color(0xd4581a)),
     /**
+     * The ground colour an apple's red is striped *over*. Uniform red reads as
+     * a cherry however good the silhouette is.
+     */
+    fruitGround: uniform(new Color(0x8d8134)),
+    /** 0 plain skin (berries), 1 full striping and lenticels (apples). */
+    fruitMarkings: uniform(0),
+    /**
      * 1 = every fruit is the chosen skin colour; 0 = the crop is still green.
      * This used to be hard-coded high enough that a pure red came out olive on
      * its shaded half, with no way to turn it off.
@@ -120,7 +127,7 @@ export function createTreeUniforms() {
     /** The waxy rim dust on a plum. Pale, so a little goes a long way. */
     fruitWax: uniform(0.1),
     /** 0 matte like a plum, 1 polished like an apple. */
-    fruitGloss: uniform(0.45),
+    fruitGloss: uniform(0.32),
 
     // Pointer response. A world-space ball of influence rather than a picked
     // object: see `hoverAt` for why that is the whole trick.

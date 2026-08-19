@@ -44,7 +44,7 @@ export function paramsFromPreset(id: string): AppParams {
     fruitRipeness: 0.9,
     fruitBlush: 0.18,
     fruitWax: 0.1,
-    fruitGloss: 0.45,
+    fruitGloss: 0.32,
 
     barkDetail: 0.55,
     moss: 0.4,

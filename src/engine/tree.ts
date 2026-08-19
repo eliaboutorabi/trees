@@ -169,6 +169,10 @@ export class Tree {
       fruitShape: params.fruitShape,
     });
 
+    // Skin markings belong to the shape, not to a slider: a berry with apple
+    // striping on it would look like neither.
+    this.uniforms.fruitMarkings.value = params.fruitShape === 1 ? 1 : 0;
+
     this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
     this.bakedLeafScale = Math.max(1e-4, params.leafScale);
 

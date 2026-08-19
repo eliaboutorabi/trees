@@ -11,7 +11,7 @@
  * coloured berries reads as plastic.
  */
 import { DoubleSide, MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv, vec3 } from 'three/tsl';
+import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv, vec2, vec3 } from 'three/tsl';
 import { growthPosition, treeParams, type TreeUniforms } from './shared';
 
 export function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
@@ -98,7 +98,68 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
 
   // Unripeness gathers on the underside and on whatever faces away from the sun.
   const green = belly.mul(0.7).add(sunward.oneMinus().mul(0.3)).clamp(0, 1).mul(u.fruitRipeness.oneMinus());
-  const skin = mix(mix(ripe, u.fruitUnripe, green), mix(ripe, u.fruitSun, 0.6), sunward.mul(u.fruitBlush));
+  const plain = mix(mix(ripe, u.fruitUnripe, green), mix(ripe, u.fruitSun, 0.6), sunward.mul(u.fruitBlush));
+
+  /*
+   * Apple skin, which is the difference between an apple and a cherry.
+   *
+   * With the silhouette right and the colour finally red, the fruit read as
+   * cherries — because a cherry *is* a uniform, saturated, glossy red ball, and
+   * that is exactly what a single skin colour paints. What makes an apple
+   * recognisable close up is that its red is never uniform:
+   *
+   *   Ground colour   a yellow-green the red only partly covers, strongest
+   *                   around the calyx and on the shaded side.
+   *   Striping        the red runs in irregular stripes from stem to calyx
+   *                   rather than washing on evenly.
+   *   Lenticels       pale freckles scattered over the skin. Small, but they
+   *                   are the single most apple-specific marking there is.
+   *
+   * All three are driven by `fruitMarkings`, which the rebuild sets from the
+   * fruit shape, so berries keep their plain skin.
+   */
+  // Stripes run stem-to-calyx but wander as they go; perfectly meridional ones
+  // read as a melon.
+  const around = st.x
+    .mul(Math.PI * 2)
+    .add(vary.mul(6.283))
+    .add(st.y.mul(2.6).add(vary.mul(11.0)).sin().mul(0.4));
+  // Integer harmonics, so the stripes meet themselves cleanly at the UV seam —
+  // and high ones. Broad, low-frequency bands do not read as apple striping at
+  // all; nine of them around a fruit reads as the ribbing on a pumpkin, which
+  // is exactly what the first attempt produced.
+  const stripe = around
+    .mul(17)
+    .sin()
+    .mul(0.45)
+    .add(around.mul(31).sin().mul(0.3))
+    .add(around.mul(53).sin().mul(0.25))
+    .mul(0.5)
+    .add(0.5);
+
+  // Red is the base and the ground colour shows *through* it, not the other way
+  // round: strongest toward the calyx and on the shaded side, and never more
+  // than partial, with the stripes making the boundary ragged.
+  const bare = smoothstep(
+    0.5,
+    1.0,
+    st.y.oneMinus().mul(0.45).add(sunward.oneMinus().mul(0.3)).add(stripe.mul(0.5)),
+  );
+  const striped = mix(plain, u.fruitGround, bare.mul(0.62));
+
+  // Lenticels: one freckle per cell of a coarse grid, jittered and thinned out
+  // so they do not read as a regular dot pattern.
+  const cell = vec2(st.x.mul(30), st.y.mul(19));
+  const id = cell.floor();
+  const rand = (a: number, b: number) => id.dot(vec2(a, b)).sin().mul(43758.5453).fract();
+  const speck = smoothstep(
+    0.17,
+    0.05,
+    cell.fract().sub(vec2(rand(127.1, 311.7).mul(0.6).add(0.2), rand(269.5, 183.3).mul(0.6).add(0.2))).length(),
+  ).mul(step(0.42, rand(419.2, 371.9)));
+  const freckled = mix(striped, striped.mul(0.5).add(vec3(0.26, 0.22, 0.13)), speck.mul(0.8));
+
+  const skin = mix(plain, freckled, u.fruitMarkings);
 
   const shade = occlusion.mul(u.occlusionStrength).mul(0.5);
 
