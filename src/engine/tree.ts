@@ -23,7 +23,7 @@ import { buildTree, type TreeBuild } from './lsystem';
 import type { Palette, Preset } from './lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
 import { createLeafMaterial } from './materials/leaf';
-import { createFlowerMaterial, createFruitMaterial } from './materials/ornament';
+import { createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
 import { createTreeUniforms, type TreeUniforms } from './materials/shared';
 import { buildTreeGeometry } from './treeGeometry';
 
@@ -273,7 +273,12 @@ export class Tree {
     if (p.fruitRipeness !== undefined) u.fruitRipeness.value = p.fruitRipeness;
     if (p.fruitBlush !== undefined) u.fruitBlush.value = p.fruitBlush;
     if (p.fruitWax !== undefined) u.fruitWax.value = p.fruitWax;
-    if (p.fruitGloss !== undefined) u.fruitGloss.value = p.fruitGloss;
+    if (p.fruitGloss !== undefined) {
+      u.fruitGloss.value = p.fruitGloss;
+      // Not a uniform: see the note in `createFruitMaterial` — the node form of
+      // this is inert, so the scalar has to be written directly.
+      this.fruit.specularIntensity = fruitSpecularFor(p.fruitGloss);
+    }
   }
 
   /** Build straight from a preset — structure and palette together. */

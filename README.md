@@ -412,24 +412,39 @@ it has to be the specular half. A smooth sphere reflects the *entire* sky, and
 Fresnel takes reflectance to 1 at the rim, which on a berry a dozen pixels across
 is most of what you can see.
 
+Saturation is destroyed by the channels that are *dark*, not by the one that is
+bright. Measured on a single apple masked out of the frame: with image-based
+lighting off it renders `rgb(47, 4, 2)`, a deep red; with it back on, the same
+fruit is `rgb(116, 47, 37)`. The sky's reflection is nearly achromatic, so it is
+invisible against red and decisive against the other two. A photograph of a real
+apple survives this because the apple reflects a structured world — mostly the
+dark leaves around it, with sky in a small highlight; ours reflects a smooth,
+uniformly bright sky over its whole upper hemisphere, because that is all the
+environment map holds.
+
 Roughness is not the lever. Lowering it sharpens the reflection but does not
-shrink it; the sphere still faces every part of the sky. `specularIntensity`
-(hence `MeshPhysicalNodeMaterial`) is — it scales F0 *and* F90, so it genuinely
-dims the rim, and a thin waxy cuticle over water reflecting less than a polished
-dielectric is the honest answer anyway. It is also gated by canopy occlusion,
-for a reason worth stating plainly: saturation is destroyed by the channels that
-are *dark*, not by the one that is bright. A saturated red skin has near-zero
-green and blue, and the sky's reflection adds about 0.012 linear to all three —
-invisible in red, but it takes green and blue from nothing to something and the
-fruit turns dusty rose. A photograph of a real apple survives this because the
-apple reflects a structured world, mostly the dark leaves around it, with sky
-only in a small highlight; ours reflects a smooth, uniformly bright sky over its
-whole upper hemisphere, because that is all the environment map holds. Gating on
-occlusion stops a fruit buried in the crown from mirroring an open sky it cannot
-see. Two art terms were quietly making it
-worse and are now sliders rather than constants: the unripe green, which was
-hard-coded far enough up that a pure red went olive on its shaded half, and the
-pale wax bloom, which is lovely on an apple and poison on a berry.
+shrink it; the sphere still faces every part of the sky. `specularIntensity` is,
+because it scales F0 *and* F90 — and F90 is the one that matters, since a
+dielectric reflects ~4% head-on and ~100% at grazing.
+
+**And the obvious way to set it does nothing.**
+`MeshPhysicalNodeMaterial.specularIntensityNode` exists, accepts a node, and is
+read by nothing in three: `setupSpecular` uses `materialSpecularIntensity`, a
+`materialReference` to the plain scalar. Assigning the node silently leaves the
+material at its default 1.0, so an apparently-fixed fruit went on rendering with
+a fully mirrored rim through two rounds of tuning. This is the same failure as
+`bumpMap()` on a procedural height field — a node property that reads correctly
+at the call site and cannot reach a pixel — and it is worth assuming any
+`somethingNode` is inert until a measurement says otherwise. `Tree.applyLook`
+writes the scalar. With it genuinely applied, one masked apple went from
+`g/r 0.60, b/r 0.52` — dusty salmon — to `g/r 0.35, b/r 0.24`, which is where a
+photographed red apple sits, and the gloss slider finally spans matte to shiny
+instead of doing nothing at all.
+
+Two art terms were quietly making it worse and are now sliders rather than
+constants: the unripe green, which was hard-coded far enough up that a pure red
+went olive on its shaded half, and the pale wax bloom, which is lovely on an
+apple and poison on a berry.
 
 ### Hovering the canopy
 

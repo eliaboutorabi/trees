@@ -321,7 +321,7 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
       // crop here and has to come down to match.
       fruitDensity: 0.22,
       // An apple is a good deal larger than the leaf beside it; a berry is not.
-      fruitSize: 0.75,
+      fruitSize: 1.25,
       fruitShape: 1,
     },
     palette: {

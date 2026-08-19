@@ -52,6 +52,17 @@ export function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial 
   return material;
 }
 
+/**
+ * Gloss, as the scalar `specularIntensity` the renderer actually reads.
+ *
+ * Well under a polished dielectric's 1.0 even at the top of the slider: the
+ * environment here is an unobstructed sky, and a fruit hanging inside a canopy
+ * does not see one.
+ */
+export function fruitSpecularFor(gloss: number): number {
+  return 0.05 + Math.min(1, Math.max(0, gloss)) * 0.4;
+}
+
 export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
   // Physical rather than standard for one reason: `specularIntensityNode`.
   // See the note on gloss below — it is the control that actually fixes this.
@@ -131,30 +142,31 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
    * reflecting less than a polished dielectric is also the honest answer.
    */
   /*
-   * Why the specular has to be kept on such a short leash.
+   * Why the specular has to be kept on a short leash — and why the obvious way
+   * to do it does nothing.
    *
-   * A saturated red skin has *near-zero* green and blue. Measured on a pure red
-   * with every other term switched off, the sky's reflection adds around 0.012
-   * linear to all three channels — about 7% of the red already there, and so
-   * invisible in red, but it takes green and blue from nothing to something and
-   * the fruit turns dusty rose. Saturation is destroyed by the channels that are
-   * dark, not by the one that is bright.
+   * A saturated red skin has *near-zero* green and blue. Measured on one apple
+   * masked out of the frame: with image-based lighting switched off it renders
+   * rgb(47, 4, 2), a deep red, and with it back on the same fruit is
+   * rgb(116, 47, 37). The sky's reflection is nearly achromatic, so it is
+   * invisible against the red channel and decisive against the other two.
+   * Saturation is destroyed by the channels that are dark, not the bright one.
    *
-   * A photograph of a real apple survives this because the apple reflects a
-   * *structured* world — mostly the dark leaves around it, with the sky only in
-   * a small highlight. Ours reflects a smooth, uniformly bright sky over its
-   * whole upper hemisphere, because that is all the environment map contains.
+   * F90 is the culprit rather than F0. A dielectric reflects ~4% head-on and
+   * ~100% at grazing, and on a sphere the grazing rim is most of what faces the
+   * camera. A photograph of a real apple survives that because the apple is
+   * reflecting dark leaves; ours reflects a smooth, uniformly bright sky over
+   * its whole upper hemisphere, because that is all the environment map holds.
    *
-   * The canopy occlusion already knows how much sky each fruit can see, so it
-   * gates the reflection. A fruit buried in the crown stops mirroring an open
-   * sky it cannot actually see, which is both the physical answer and the one
-   * that keeps it red.
+   * `specularIntensity` scales F0 *and* F90, so it is the right lever — but it
+   * has to be set as a plain material property. `material.specularIntensityNode`
+   * exists on MeshPhysicalNodeMaterial and is never read by anything in three:
+   * `setupSpecular` reads `materialSpecularIntensity`, which is a
+   * `materialReference` to the scalar. Assigning the node silently does nothing,
+   * exactly like `bumpMap()` on a procedural height field. `Tree.applyLook`
+   * drives the scalar from the gloss slider instead.
    */
-  const sky = occlusion.mul(u.occlusionStrength).mul(0.8).oneMinus();
-  // A stalk is dry wood: matte, and barely reflective at all.
-  material.specularIntensityNode = mix(float(0.06), float(0.5), u.fruitGloss)
-    .mul(sky)
-    .mul(woody.mul(0.85).oneMinus());
+  material.specularIntensity = fruitSpecularFor(0.45);
   material.roughnessNode = mix(float(0.68), float(0.13), u.fruitGloss)
     .add(belly.mul(0.08))
     .add(woody.mul(0.5))
