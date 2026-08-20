@@ -101,7 +101,7 @@ export interface StudioStats {
   adaptive: boolean;
 }
 
-const MAX_LEAVES = 42_000;
+const MAX_LEAVES = 26_000;
 const MAX_ORNAMENTS = 1_800;
 
 // Scratch objects for the shadow fit, which runs whenever the sun moves.
