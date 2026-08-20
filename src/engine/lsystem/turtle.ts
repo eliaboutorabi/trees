@@ -299,7 +299,15 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
     leaves,
     maxArc: maxArc || 1,
     maxRadius,
-    height: maxY - Math.min(0, minY),
+    // How tall the tree stands, not its total vertical extent.
+    //
+    // This used to add back anything that dipped below y = 0, which sounds
+    // harmless and is not: a weeping willow's curtains hang nearly four units
+    // into the ground, so the willow reported a height of 12.4 for a tree that
+    // is 8.8 tall. Everything downstream believed it — the camera framed a
+    // twelve-unit tree and pulled back far enough to make the real one look
+    // stunted, and the wind's height normalisation was off by the same margin.
+    height: Math.max(0.001, maxY),
     radiusXZ: Math.max(maxX - minX, maxZ - minZ) * 0.5 || 1,
     center: new Vector3((minX + maxX) * 0.5, (minY + maxY) * 0.5, (minZ + maxZ) * 0.5),
     truncated,

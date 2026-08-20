@@ -68,28 +68,44 @@ export const PRESETS: Preset[] = [
     id: 'oak',
     name: 'Oak',
     blurb: 'Sturdy trunk, wide gnarled crown',
-    axiom: '!(1)A(1)',
-    rules: `# Terminal generation: the last apex becomes a leafy shoot rather than
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 2 -> F(LEN*s*0.85)M(s, k+1)
+M(s, k) -> A(s)
+
+# Terminal generation: the last apex becomes a leafy shoot rather than
 # a single rosette, so leaves spread along the twig instead of bunching
 A(s) : n >= N-1 -> F(LEN*s*0.4)[&(38)L(1.15)]/(137.5)F(LEN*s*0.3)[&(30)L(1.0)]/(137.5)F(LEN*s*0.3)[&(42)L(1.1)]/(137.5)[&(25)L(0.95)][/(150)&(34)L(1.05)]
 
 # Outer crown: same fork, but leafing out as it runs
-A(s) : s > 0.16 && s < 0.52 -> F(LEN*s)[&(52)L(0.85)][/(180)&(46)L(0.8)]/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.80)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.78)]^(rand(1,7))A(s*SHRINK)
+A(s) : s > 0.16 && s < 0.52 -> F(LEN*s)[&(52)L(0.85)][/(180)&(46)L(0.8)]/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.86)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.84)]&(rand(4,12))A(s*SHRINK)
 
 # Structural limbs, still too thick to carry leaves
-A(s) : s > 0.16 -> F(LEN*s)/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.80)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.78)]^(rand(1,7))A(s*SHRINK)
+A(s) : s > 0.16 -> F(LEN*s)/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.86)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.84)]&(rand(5,14))A(s*SHRINK)
 
 # Too thin to branch again
 A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
     params: {
-      iterations: 10,
-      angle: 34,
-      step: 1.15,
+      iterations: 12,
+      angle: 72,
+      step: 1.35,
       shrink: 0.88,
-      trunkRadius: 0.32,
-      tropism: 0.05,
-      pipeExponent: 2.3,
-      leafScale: 0.14,
+      trunkRadius: 0.34,
+      tropism: -0.06,
+      pipeExponent: 2.15,
+      leafScale: 0.115,
       leafShape: 0,
       windiness: 1,
     },
@@ -108,8 +124,14 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
     id: 'willow',
     name: 'Willow',
     blurb: 'Broad dome hung with long trailing shoots',
-    axiom: '!(1)A(1)',
-    rules: `# Salix babylonica: a stout trunk under a broad dome, spread roughly equal
+    axiom: '!(1)M(1, 0)',
+    rules: `# A short stout trunk. Salix babylonica is described as a stout trunk topped by
+# a broad rounded crown - the trunk is short, but it is there, and without one
+# the tree is just a mound of foliage sitting on the grass.
+M(s, k) : k < 2 -> F(LEN*s*0.9)M(s, k+1)
+M(s, k) -> A(s)
+
+# Salix babylonica: a stout trunk under a broad dome, spread roughly equal
 # to height, hung with unbranched shoots 50-70% of the tree's height that
 # sweep down to near ground level. The shoots are the whole silhouette, so
 # nearly every generation is spent making them long rather than branchy.
@@ -128,10 +150,10 @@ A(s) -> C(s, 0)
 # length, so one dropped low simply runs into the ground — the height gained
 # here is what the curtain hangs from. After $ the frame is levelled, so & now
 # tilts toward the sky and ^ toward the ground.
-C(s, k) : k < 6 -> F(LEN*s*1.15)$&(rand(9,17))+(rand(-26,26))C(s*0.95, k+1)
+C(s, k) : k < 6 -> F(LEN*s*1.7)$&(rand(0,6))+(rand(-32,32))C(s*0.965, k+1)
 
 # Only the outer, highest reach of the scaffold arches over and weeps.
-C(s, k) : k < 9 -> F(LEN*s*1.05)$^(rand(4,11))+(rand(-24,24))[V(s)]C(s*0.93, k+1)
+C(s, k) : k < 10 -> F(LEN*s*1.35)$^(rand(5,13))+(rand(-24,24))[V(s)]C(s*0.94, k+1)
 C(s, k) -> V(s)
 
 # A curtain. The $ levels the frame against the horizon first, so the pitch
@@ -143,17 +165,17 @@ V(s) -> [$^(108)T(-1.7)W(s, 0)]
 
 # The shoot itself: unbranched, leafy the whole way, and a decay near 1 so it
 # keeps running for every generation it is given.
-W(s, j) : j < 14 -> F(LEN*s*1.1)[/(70)L(0.95)][/(190)L(0.9)][/(300)L(0.95)]/(137.5)W(s*0.99, j+1)
+W(s, j) : j < 12 -> F(LEN*s*1.1)[/(70)L(0.95)][/(190)L(0.9)][/(300)L(0.95)]/(137.5)W(s*0.99, j+1)
 W(s, j) -> L(0.85)`,
     params: {
-      iterations: 22,
-      angle: 62,
-      step: 0.92,
+      iterations: 27,
+      angle: 84,
+      step: 1.0,
       shrink: 0.9,
-      trunkRadius: 0.26,
+      trunkRadius: 0.3,
       tropism: 0.05,
       pipeExponent: 2.6,
-      leafScale: 0.19,
+      leafScale: 0.13,
       leafShape: 3,
       windiness: 1.5,
     },
@@ -172,26 +194,42 @@ W(s, j) -> L(0.85)`,
     id: 'pine',
     name: 'Pine',
     blurb: 'Conical, four-branch whorls, needle sprays',
-    axiom: '!(1)A(1)',
-    rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.6)][/(120)L(0.6)][/(240)L(0.6)]
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 4 -> F(LEN*s*1.25)M(s, k+1)
+M(s, k) -> A(s)
+
+A(s) : n >= N-1 -> F(LEN*s)[L(0.6)][/(120)L(0.6)][/(240)L(0.6)]
 
 # A whorl of five near-horizontal limbs, then the leader carries on up
-A(s) : s > 0.18 -> F(LEN*s)[&(ANG)B(s*0.55)]/(72)[&(ANG)B(s*0.55)]/(72)[&(ANG)B(s*0.55)]/(72)[&(ANG)B(s*0.55)]/(72)[&(ANG)B(s*0.55)]/(40)A(s*SHRINK)
+A(s) : s > 0.18 -> F(LEN*s)[&(ANG)B(s*0.7)]/(72)[&(ANG)B(s*0.7)]/(72)[&(ANG)B(s*0.7)]/(72)[&(ANG)B(s*0.7)]/(72)[&(ANG)B(s*0.7)]/(40)A(s*SHRINK)
 
 A(s) -> F(LEN*s)[L(0.7)][/(120)L(0.65)][/(240)L(0.7)]
 
 # Limbs never fork — they run outward clothed in needle sprays the whole way
-B(s) : s > 0.05 -> F(LEN*s*0.8)[/(50)&(52)L(0.75)][/(140)&(46)L(0.7)][/(230)&(56)L(0.75)][/(320)&(42)L(0.7)]&(3)B(s*0.86)
+B(s) : s > 0.04 -> F(LEN*s*0.72)[/(40)&(58)L(0.8)][/(105)&(48)L(0.75)][/(170)&(60)L(0.8)][/(235)&(46)L(0.75)][/(300)&(56)L(0.8)][^(24)L(0.7)]&(4)[/(90)&(70)B(s*0.5)]B(s*0.88)
 B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
     params: {
-      iterations: 14,
+      iterations: 20,
       angle: 68,
-      step: 0.85,
+      step: 1.0,
       shrink: 0.93,
-      trunkRadius: 0.3,
+      trunkRadius: 0.26,
       tropism: 0.02,
       pipeExponent: 3.0,
-      leafScale: 0.32,
+      leafScale: 0.15,
       leafShape: 1,
       windiness: 0.55,
     },
@@ -210,25 +248,41 @@ B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
     id: 'birch',
     name: 'Birch',
     blurb: 'Slender and upright, sparse airy canopy',
-    axiom: '!(1)A(1)',
-    rules: `A(s) : n >= N-1 -> F(LEN*s)[L(1.0)][/(96)&(30)L(0.9)][/(192)^(22)L(0.95)][/(288)&(26)L(0.85)]
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 3 -> F(LEN*s*1.3)M(s, k+1)
+M(s, k) -> A(s)
+
+A(s) : n >= N-1 -> F(LEN*s)[L(1.0)][/(96)&(30)L(0.9)][/(192)^(22)L(0.95)][/(288)&(26)L(0.85)]
 
 # Thin shoots leaf out along their length
-A(s) : s > 0.12 && s < 0.42 -> F(LEN*s)[&(56)L(0.85)][/(180)&(50)L(0.8)]/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.72)]^(rand(0,5))A(s*SHRINK)
+A(s) : s > 0.1 && s < 0.5 -> F(LEN*s)[&(56)L(0.85)][/(180)&(50)L(0.8)][/(60)&(64)L(0.8)]/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.78)][/(150)&(ANG*rand(0.8,1.2))A(s*SHRINK*0.66)]&(rand(0,6))A(s*SHRINK)
 
 # A single alternating side shoot per node keeps the crown open
 A(s) : s > 0.12 -> F(LEN*s)/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.72)]^(rand(0,5))A(s*SHRINK)
 
 A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
     params: {
-      iterations: 12,
-      angle: 28,
-      step: 1.0,
-      shrink: 0.9,
-      trunkRadius: 0.22,
-      tropism: 0.14,
+      iterations: 17,
+      angle: 40,
+      step: 1.15,
+      shrink: 0.91,
+      trunkRadius: 0.18,
+      tropism: -0.06,
       pipeExponent: 2.4,
-      leafScale: 0.13,
+      leafScale: 0.1,
       leafShape: 0,
       windiness: 1.25,
     },
@@ -248,8 +302,24 @@ A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
     id: 'sakura',
     name: 'Sakura',
     blurb: 'Low spreading limbs under a cloud of blossom',
-    axiom: '!(1)A(1)',
-    rules: `A(s) : n >= N-1 -> F(LEN*s)[K(1.1)][/(72)&(26)K(1.0)][/(144)^(20)K(1.05)][/(216)&(30)K(0.95)][/(288)^(16)K(1.0)]
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 1 -> F(LEN*s*0.9)M(s, k+1)
+M(s, k) -> A(s)
+
+A(s) : n >= N-1 -> F(LEN*s)[K(1.1)][/(72)&(26)K(1.0)][/(144)^(20)K(1.05)][/(216)&(30)K(0.95)][/(288)^(16)K(1.0)]
 
 # Outer twigs are smothered in blossom
 A(s) : s > 0.17 && s < 0.5 -> F(LEN*s)[&(50)K(0.95)][/(180)&(44)K(0.9)]/(137.5)[&(ANG*rand(0.9,1.4))A(s*SHRINK*0.76)][/(165)&(ANG*rand(0.9,1.4))A(s*SHRINK*0.74)]^(rand(2,10))A(s*SHRINK*0.97)
@@ -258,14 +328,14 @@ A(s) : s > 0.17 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.4))A(s*SHRINK*0.76)][/(165)
 
 A(s) -> F(LEN*s*0.8)[K(1.0)][/(90)&(28)L(0.6)][/(200)^(20)K(0.9)]`,
     params: {
-      iterations: 10,
-      angle: 42,
-      step: 1.05,
+      iterations: 12,
+      angle: 64,
+      step: 1.15,
       shrink: 0.87,
-      trunkRadius: 0.36,
-      tropism: -0.02,
+      trunkRadius: 0.3,
+      tropism: -0.05,
       pipeExponent: 2.2,
-      leafScale: 0.14,
+      leafScale: 0.11,
       leafShape: 2,
       windiness: 1.15,
       // The grammar already smothers the twigs in K blossom, so the ornament
@@ -291,8 +361,24 @@ A(s) -> F(LEN*s*0.8)[K(1.0)][/(90)&(28)L(0.6)][/(200)^(20)K(0.9)]`,
     id: 'apple',
     name: 'Apple',
     blurb: 'Low open orchard crown, heavy with fruit',
-    axiom: '!(1)A(1)',
-    rules: `# An orchard tree is pruned, not wild: a short trunk that forks early into a
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 1 -> F(LEN*s*0.9)M(s, k+1)
+M(s, k) -> A(s)
+
+# An orchard tree is pruned, not wild: a short trunk that forks early into a
 # few scaffold limbs, then an open vase-shaped crown with the fruiting wood
 # out at the edges where the light is. The wide first fork is the whole look.
 
@@ -306,14 +392,14 @@ A(s) : s > 0.15 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.25))A(s*SHRINK*0.80)][/(148
 
 A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
     params: {
-      iterations: 10,
-      angle: 46,
-      step: 1.0,
+      iterations: 12,
+      angle: 68,
+      step: 1.1,
       shrink: 0.86,
-      trunkRadius: 0.26,
-      tropism: 0.03,
+      trunkRadius: 0.22,
+      tropism: -0.04,
       pipeExponent: 2.2,
-      leafScale: 0.165,
+      leafScale: 0.125,
       leafShape: 0,
       windiness: 1,
       // The orchard grammar is deliberately open, so it carries far fewer
@@ -321,7 +407,7 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
       // crop here and has to come down to match.
       fruitDensity: 0.22,
       // An apple is a good deal larger than the leaf beside it; a berry is not.
-      fruitSize: 1.25,
+      fruitSize: 0.72,
       fruitShape: 1,
     },
     palette: {
@@ -342,8 +428,24 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
     id: 'rowan',
     name: 'Rowan',
     blurb: 'Upright and airy, hung with orange berries',
-    axiom: '!(1)A(1)',
-    rules: `# Sorbus aucuparia: a slender, steeply ascending tree with an open oval
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 2 -> F(LEN*s*1.0)M(s, k+1)
+M(s, k) -> A(s)
+
+# Sorbus aucuparia: a slender, steeply ascending tree with an open oval
 # crown. Narrow branch angles and a strong upward tropism are what keep it
 # from spreading into an oak.
 
@@ -355,14 +457,14 @@ A(s) : s > 0.14 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.78)][/(160
 
 A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
     params: {
-      iterations: 11,
-      angle: 30,
-      step: 1.0,
+      iterations: 14,
+      angle: 42,
+      step: 1.15,
       shrink: 0.88,
-      trunkRadius: 0.2,
-      tropism: 0.13,
+      trunkRadius: 0.17,
+      tropism: -0.03,
       pipeExponent: 2.4,
-      leafScale: 0.1,
+      leafScale: 0.082,
       leafShape: 3,
       windiness: 1.2,
       fruitDensity: 0.55,
@@ -386,8 +488,24 @@ A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
     id: 'baobab',
     name: 'Baobab',
     blurb: 'Colossal trunk, stubby crown of thick limbs',
-    axiom: '!(1)A(1)',
-    rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.8)][/(72)&(30)L(0.75)][/(144)^(20)L(0.8)][/(216)&(26)L(0.7)][/(288)^(16)L(0.75)]
+    axiom: '!(1)M(1, 0)',
+    rules: `# A clear bole before anything forks.
+#
+# Nothing here had one: every grammar branched from its first internode, so the
+# crown started at the ground and the tree read as a shrub however tall it was.
+# A trunk is also what fixes the proportions, because it raises height without
+# touching the crown — slenderness and leaf-to-height both come right at once.
+#
+# It costs no crown detail either. While M is rewriting, it is the only symbol in
+# the word, so the canopy still gets its full run of generations as long as N
+# goes up by the same number of bole steps. The bole must also hand the crown
+# the *same* s it used to start from — tapering it here shifts every threshold
+# in the crown rules and quietly thins the canopy out. Trunk thickness comes
+# from the pipe model regardless, so there is nothing to taper for.
+M(s, k) : k < 1 -> F(LEN*s*0.8)M(s, k+1)
+M(s, k) -> A(s)
+
+A(s) : n >= N-1 -> F(LEN*s)[L(0.8)][/(72)&(30)L(0.75)][/(144)^(20)L(0.8)][/(216)&(26)L(0.7)][/(288)^(16)L(0.75)]
 
 # Stubby outer twigs carry the whole canopy
 A(s) : s > 0.10 && s < 0.42 -> F(LEN*s)[&(54)L(0.7)][/(180)&(48)L(0.65)]/(137.5)[&(ANG*rand(0.8,1.3))A(s*SHRINK*0.70)][/(140)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.68)]A(s*SHRINK*0.95)
@@ -396,14 +514,14 @@ A(s) : s > 0.10 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.3))A(s*SHRINK*0.70)][/(140)
 
 A(s) -> F(LEN*s*0.7)[L(0.75)][/(120)&(28)L(0.7)][/(240)^(18)L(0.8)]`,
     params: {
-      iterations: 12,
-      angle: 38,
-      step: 1.1,
+      iterations: 14,
+      angle: 52,
+      step: 1.25,
       shrink: 0.88,
       trunkRadius: 0.62,
-      tropism: 0.08,
+      tropism: -0.08,
       pipeExponent: 1.85,
-      leafScale: 0.115,
+      leafScale: 0.095,
       leafShape: 0,
       windiness: 0.7,
     },

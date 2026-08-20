@@ -104,9 +104,12 @@ export interface TreeInfo extends TreeBuild {
 }
 
 const DEFAULTS: Required<TreeOptions> = {
-  maxLeaves: 26_000,
+  // Raised once the presets grew real trunks and full crowns: at the old caps
+  // every species was being clipped, which shows up as a canopy that thins out
+  // toward the top and a grammar truncated mid-derivation.
+  maxLeaves: 42_000,
   maxOrnaments: 1_800,
-  maxModules: 250_000,
+  maxModules: 420_000,
 };
 
 function toColor(target: Color, value: Color | string | number): void {
