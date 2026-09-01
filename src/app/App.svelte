@@ -477,10 +477,10 @@
 
         <h4 class="sub"><Icon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
         <div class="segmented">
-          {#each [{ v: 0, l: 'Berry' }, { v: 1, l: 'Apple' }] as opt (opt.v)}
+          {#each [{ v: 0, l: 'Berry' }, { v: 1, l: 'Apple' }, { v: 2, l: 'Cone' }] as opt (opt.v)}
             <button
               class:active={params.fruitShape === opt.v}
-              onclick={() => (params.fruitShape = opt.v as 0 | 1)}
+              onclick={() => (params.fruitShape = opt.v as 0 | 1 | 2)}
               title="Shape ↻ — takes effect on redraw"
             >
               {opt.l}

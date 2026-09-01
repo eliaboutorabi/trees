@@ -24,8 +24,8 @@ export interface TreeGeometryOptions {
   maxOrnaments?: number;
   /** Seeds the root flare, so Shuffle reshuffles the buttress too. */
   seed?: number;
-  /** 0 berry · 1 apple. */
-  fruitShape?: 0 | 1;
+  /** 0 berry · 1 apple · 2 pine cone. */
+  fruitShape?: 0 | 1 | 2;
 }
 
 /**
@@ -145,14 +145,16 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   // species can carry them without the grammar knowing anything about it.
   const sites = selectOrnamentSites(kept, opts.maxOrnaments ?? 2600);
   const flowers = buildOrnaments(skel, sites, flowerTemplate(), field, { droop: 0 });
-  // A berry is a sphere and can point anywhere, but an apple has a top and a
-  // bottom, so it has to hang upright rather than inherit whatever rotation the
-  // leaf beside it happened to get.
-  const apples = opts.fruitShape === 1;
-  const fruit = buildOrnaments(skel, sites, apples ? appleTemplate() : berryTemplate(), field, {
-    droop: apples ? 1.25 : 1.05,
+  // A berry is a sphere and can point anywhere, but an apple and a cone both
+  // have a top and a bottom, so they hang upright rather than inheriting
+  // whatever rotation the leaf beside them happened to get.
+  const shape = opts.fruitShape ?? 0;
+  const axial = shape !== 0;
+  const fruitTpl = shape === 2 ? coneTemplate() : shape === 1 ? appleTemplate() : berryTemplate();
+  const fruit = buildOrnaments(skel, sites, fruitTpl, field, {
+    droop: shape === 1 ? 1.25 : shape === 2 ? 0.55 : 1.05,
     seedShift: 0.37,
-    upright: apples,
+    upright: axial,
   });
 
   return {
@@ -817,6 +819,94 @@ function appleTemplate(radius = 0.44, segments = 12, rings = 12): LeafTemplate {
     for (let s = 0; s < stemSides; s++) {
       const i0 = stemBase + r * stemStride + s;
       const i1 = i0 + stemStride;
+      index.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1);
+    }
+  }
+
+  return normalizeTemplate(position, normal, uv, index);
+}
+
+/**
+ * A pine cone.
+ *
+ * Hangs from its stalk rather than standing on it, so unlike the apple this
+ * template is built downward: the attachment is at y = 0 and the tip points at
+ * the ground. Placed upright, it then hangs plumb whatever the twig is doing.
+ *
+ * The profile swells to its widest about 40% of the way down and tapers to a
+ * blunt point — a plain ellipsoid reads as a berry, and a plain cone reads as a
+ * spike. The scales are a spiral: each one is a shingle that bulges at its
+ * lower edge, which is `fract(rows * v + twist * u)` as a sawtooth on the
+ * radius. Only enough of them are cut into the geometry to break the
+ * silhouette; the pattern across the surface is the shader's job, since a cone
+ * is a handful of pixels at any sane viewing distance.
+ */
+function coneTemplate(radius = 0.25, segments = 10, rings = 16): LeafTemplate {
+  const position: number[] = [];
+  const normal: number[] = [];
+  const uv: number[] = [];
+  const index: number[] = [];
+
+  // A pine cone is roughly twice as long as it is wide. At 2.5 the first
+  // version came out at 1.13 and read as a beehive.
+  const ROWS = 9;
+  const TWIST = 5;
+  const LENGTH = 4.6;
+
+  const surface = (u: number, v: number, out: number[]): void => {
+    const t = Math.min(1, Math.max(0, v));
+    const theta = u * Math.PI * 2;
+    // Widest about a third down, then a long taper to the tip.
+    let r = Math.pow(Math.sin(Math.PI * Math.pow(t, 0.62)), 0.85);
+    // Shingled scales, spiralling. The twist is what stops them reading as
+    // stacked rings.
+    const shingle = (ROWS * t + TWIST * u) % 1;
+    r *= 1 + 0.2 * (shingle - 0.45) * Math.sin(Math.PI * t);
+
+    out[0] = Math.cos(theta) * r * radius;
+    out[1] = -t * radius * LENGTH;
+    out[2] = Math.sin(theta) * r * radius;
+  };
+
+  const a: number[] = [0, 0, 0];
+  const b: number[] = [0, 0, 0];
+  const c: number[] = [0, 0, 0];
+  const d: number[] = [0, 0, 0];
+  const eps = 0.004;
+
+  for (let ri = 0; ri <= rings; ri++) {
+    const v = ri / rings;
+    for (let si = 0; si <= segments; si++) {
+      const u = si / segments;
+      surface(u, v, a);
+      position.push(a[0], a[1], a[2]);
+      uv.push(u, 1 - v);
+
+      if (ri === 0) {
+        normal.push(0, 1, 0);
+      } else if (ri === rings) {
+        normal.push(0, -1, 0);
+      } else {
+        surface(u + eps, v, b);
+        surface(u - eps, v, c);
+        surface(u, Math.min(1, v + eps), d);
+        const du = [b[0] - c[0], b[1] - c[1], b[2] - c[2]];
+        surface(u, Math.max(0, v - eps), c);
+        const dv = [d[0] - c[0], d[1] - c[1], d[2] - c[2]];
+        normal.push(
+          du[1] * dv[2] - du[2] * dv[1],
+          du[2] * dv[0] - du[0] * dv[2],
+          du[0] * dv[1] - du[1] * dv[0],
+        );
+      }
+    }
+  }
+
+  const stride = segments + 1;
+  for (let r = 0; r < rings; r++) {
+    for (let sg = 0; sg < segments; sg++) {
+      const i0 = r * stride + sg;
+      const i1 = i0 + stride;
       index.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1);
     }
   }

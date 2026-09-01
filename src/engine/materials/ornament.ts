@@ -161,6 +161,23 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
 
   const skin = mix(plain, freckled, u.fruitMarkings);
 
+  /*
+   * A pine cone is not fruit skin. None of the ripening machinery applies — no
+   * green underside, no sunward blush, no waxy bloom — so it takes the chosen
+   * colour flat, and its scales are shaded rather than modelled: only enough of
+   * them are cut into the geometry to break the silhouette, because a cone is a
+   * handful of pixels at any sane distance. The spiral matches the one the
+   * template uses so the shading sits in the geometry's own grooves.
+   */
+  const shingle = st.y.mul(9).add(st.x.mul(5)).fract();
+  // Dark in the notch under each scale, catching light along its lower lip.
+  const scale = smoothstep(0.0, 0.22, shingle).mul(smoothstep(1.0, 0.62, shingle));
+  const woodyCone = u.fruitColor
+    .mul(vary.mul(0.2).add(0.72))
+    .mul(scale.mul(0.75).add(0.3))
+    .mul(smoothstep(0.0, 0.35, st.y).mul(0.35).add(0.65));
+  const body = mix(skin, woodyCone, u.fruitCone);
+
   const shade = occlusion.mul(u.occlusionStrength).mul(0.5);
 
   // Bloom — the waxy dust on a plum or a fresh apple. It is what stops fruit
@@ -178,11 +195,15 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
   const woody = step(1.05, st.y);
   const calyx = smoothstep(0.05, 0.0, st.y).mul(woody.oneMinus());
   const dressed = mix(
-    mix(skin.mul(shade.oneMinus()), vec3(0.13, 0.09, 0.05), calyx.mul(0.8)),
+    mix(body.mul(shade.oneMinus()), vec3(0.13, 0.09, 0.05), calyx.mul(0.8).mul(u.fruitCone.oneMinus())),
     vec3(0.17, 0.115, 0.062),
     woody,
   );
-  material.colorNode = mix(dressed, vec3(0.58, 0.56, 0.52), grazing.mul(u.fruitWax).mul(0.45).mul(woody.oneMinus()));
+  material.colorNode = mix(
+    dressed,
+    vec3(0.58, 0.56, 0.52),
+    grazing.mul(u.fruitWax).mul(0.45).mul(woody.oneMinus()).mul(u.fruitCone.oneMinus()),
+  );
 
   /*
    * Gloss controls how much sky the skin mirrors, not just how sharply.
@@ -231,6 +252,8 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
   material.roughnessNode = mix(float(0.68), float(0.13), u.fruitGloss)
     .add(belly.mul(0.08))
     .add(woody.mul(0.5))
+    // Dry, fibrous, and not remotely glossy.
+    .add(u.fruitCone.mul(0.45))
     .clamp(0.05, 1);
   material.metalnessNode = float(0);
 

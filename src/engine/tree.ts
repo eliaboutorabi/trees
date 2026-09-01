@@ -49,8 +49,8 @@ export interface TreeStructure {
   leafScale: number;
   /** 0 broad · 1 needle · 2 blossom · 3 lance. */
   leafShape: 0 | 1 | 2 | 3;
-  /** 0 berry · 1 apple. Changes the baked mesh, so it needs a rebuild. */
-  fruitShape: 0 | 1;
+  /** 0 berry · 1 apple · 2 pine cone. Changes the baked mesh, so it needs a rebuild. */
+  fruitShape: 0 | 1 | 2;
 }
 
 /** Changes that are uniform-only — applied instantly, no rebuild. */
@@ -172,6 +172,8 @@ export class Tree {
     // Skin markings belong to the shape, not to a slider: a berry with apple
     // striping on it would look like neither.
     this.uniforms.fruitMarkings.value = params.fruitShape === 1 ? 1 : 0;
+    // A cone is dry wood, not skin: no ripening, no blush, no wax.
+    this.uniforms.fruitCone.value = params.fruitShape === 2 ? 1 : 0;
 
     this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
     this.bakedLeafScale = Math.max(1e-4, params.leafScale);

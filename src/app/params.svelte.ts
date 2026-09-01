@@ -39,7 +39,7 @@ export function paramsFromPreset(id: string): AppParams {
     flowerCore: hex(preset.palette.flowerCore ?? 0xf2c455),
     fruitDensity: p.fruitDensity ?? 0,
     fruitSize: p.fruitSize ?? 0.65,
-    fruitShape: (p.fruitShape ?? 0) as 0 | 1,
+    fruitShape: (p.fruitShape ?? 0) as 0 | 1 | 2,
     fruitColor: hex(preset.palette.fruitColor ?? 0xb8231f),
     fruitRipeness: 0.9,
     fruitBlush: 0.18,

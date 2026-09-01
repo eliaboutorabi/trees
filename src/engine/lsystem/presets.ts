@@ -49,8 +49,8 @@ export interface PresetParams {
   /** Ornament scale, relative to what the leaf size implies. */
   flowerSize?: number;
   fruitSize?: number;
-  /** 0 berry · 1 apple. A berry is a sphere; an apple has a top and a bottom. */
-  fruitShape?: 0 | 1;
+  /** 0 berry · 1 apple · 2 pine cone. A berry is a sphere; the others have an axis. */
+  fruitShape?: 0 | 1 | 2;
 }
 
 export interface Preset {
@@ -180,7 +180,11 @@ A(s) : s > 0.18 -> F(LEN*s)[&(ANG)B(s*0.55)]/(72)[&(ANG)B(s*0.55)]/(72)[&(ANG)B(
 
 A(s) -> F(LEN*s)[L(0.7)][/(120)L(0.65)][/(240)L(0.7)]
 
-# Limbs never fork — they run outward clothed in needle sprays the whole way
+# Near the trunk a limb throws secondary branchlets; further out it just runs.
+# Forking only while s is high bounds the growth - fork at every step and the
+# module count doubles per generation.
+B(s) : s > 0.24 -> F(LEN*s*0.8)[/(50)&(52)L(0.75)][/(140)&(46)L(0.7)][/(230)&(56)L(0.75)][/(320)&(42)L(0.7)][/(85)&(58)B(s*0.5)][/(265)&(54)B(s*0.44)]&(3)B(s*0.88)
+
 B(s) : s > 0.05 -> F(LEN*s*0.8)[/(50)&(52)L(0.75)][/(140)&(46)L(0.7)][/(230)&(56)L(0.75)][/(320)&(42)L(0.7)]&(3)B(s*0.86)
 B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
     params: {
@@ -194,7 +198,11 @@ B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
       leafScale: 0.32,
       leafShape: 1,
       windiness: 0.55,
-    },
+      // Cones hang from the older wood, never thickly.
+      fruitDensity: 0.3,
+      fruitSize: 0.62,
+      fruitShape: 2,
+},
     palette: {
       barkDark: 0x1e120c,
       barkLight: 0x76472d,
@@ -204,7 +212,8 @@ B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
       leafTip: 0x4f7a44,
       leafAutumn: 0x6b7f3a,
       blossom: 0xd8cfae,
-    },
+      fruitColor: 0x7a512b,
+},
   },
   {
     id: 'birch',

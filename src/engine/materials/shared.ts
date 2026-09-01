@@ -116,6 +116,8 @@ export function createTreeUniforms() {
     fruitGround: uniform(new Color(0x8d8134)),
     /** 0 plain skin (berries), 1 full striping and lenticels (apples). */
     fruitMarkings: uniform(0),
+    /** 1 for a pine cone: dry wood rather than skin, with shaded scale rows. */
+    fruitCone: uniform(0),
     /**
      * 1 = every fruit is the chosen skin colour; 0 = the crop is still green.
      * This used to be hard-coded high enough that a pure red came out olive on
