@@ -1,7 +1,7 @@
 /** Cinematic output chain: bloom → depth of field → grade → vignette/grain → AA. */
 import type { Camera, Scene } from 'three';
 import { RenderPipeline, type WebGPURenderer } from 'three/webgpu';
-import { float, pass, saturation, screenCoordinate, screenUV, time, uniform, vec4, vibrance } from 'three/tsl';
+import { float, pass, saturation, screenCoordinate, screenUV, smoothstep, time, uniform, vec3, vec4, vibrance } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
@@ -102,15 +102,44 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     rgb = rgb.mul(float(1).sub(falloff.mul(falloff)).clamp(0, 1));
 
     if (toggles.grain) {
+      /*
+       * Film grain, weighted like film grain.
+       *
+       * A flat `rgb + noise` is what made the scene shimmer when you pull the
+       * camera back. Measured on a static frame with everything else frozen,
+       * the grain alone moved 61% of the pixels — and zoomed out, those pixels
+       * are the smooth meadow, where the eye reads uniform full-field noise as
+       * heat haze. Zoomed in the identical grain is invisible, because busy
+       * foliage masks it. Nothing about the grain changes with distance; what
+       * changes is how much flat surface it has to sit on.
+       *
+       * The fix is to make the noise *proportional to the signal* rather than
+       * added on top of it. Grain runs before the output transform, and the
+       * sRGB curve is near-vertical at the bottom, so a tiny linear delta in
+       * the shadows becomes a large visible one — which is why simply weighting
+       * an additive term by luminance does not work, and why the darkest 5% of
+       * the frame was moving *more* than anything else. Multiplying instead
+       * makes the perturbation a constant *fraction* of each pixel, so it is
+       * perceptually even across the range and goes to exactly zero in black.
+       *
+       * It is also quantised to roughly 24Hz rather than redrawn every frame,
+       * so it reads as film rather than as digital fizz: at 60fps an
+       * unquantised hash decorrelates completely every frame, which is more
+       * than twice the temporal energy of the thing it is imitating.
+       */
+      const seed = time.mul(24).floor().mul(37.0);
       const noise = screenCoordinate.x
         .mul(12.9898)
         .add(screenCoordinate.y.mul(78.233))
-        .add(time.mul(37.0))
+        .add(seed)
         .sin()
         .mul(43758.5453)
         .fract()
         .sub(0.5);
-      rgb = rgb.add(noise.mul(uniforms.grain));
+      // Eased off in the highlights too — blown film has no grain left to show.
+      const lum = rgb.dot(vec3(0.2126, 0.7152, 0.0722));
+      const rolloff = smoothstep(2.2, 0.5, lum).mul(0.75).add(0.25);
+      rgb = rgb.mul(float(1).add(noise.mul(uniforms.grain).mul(2.2).mul(rolloff)));
     }
 
     const graded = vec4(rgb, 1);

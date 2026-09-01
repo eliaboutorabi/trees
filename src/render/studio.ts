@@ -18,7 +18,8 @@ import {
 import { AgXToneMapping, WebGPURenderer } from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from '../engine';
-import { createLandscape } from './landscape';
+import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
+import { createMeadow } from './meadow';
 import { createPostPipeline } from './post';
 import { ProceduralSky, sunDirection, type SkySettings } from './sky';
 import { aerialPerspective } from './materials/ground';
@@ -127,6 +128,8 @@ export class TreeStudio {
   private readonly fill = new HemisphereLight(0xbdd4ff, 0x6b5836, 0.35);
   private readonly landscape = createLandscape(this.tree.uniforms);
   private readonly groundUniforms = this.landscape.uniforms;
+  // Wildflowers, and butterflies that perch on the ones actually placed.
+  private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
@@ -200,6 +203,7 @@ export class TreeStudio {
     this.scene.environment = this.sky.environment;
 
     this.scene.add(this.landscape.group);
+    this.scene.add(this.meadow.group);
     this.scene.add(this.tree.group);
 
     this.sun.castShadow = true;
@@ -762,6 +766,7 @@ export class TreeStudio {
     this.renderer?.setAnimationLoop(null);
     this.tree.dispose();
     this.landscape.dispose();
+    this.meadow.dispose();
     this.sky.dispose();
     this.post?.dispose();
     this.controls?.dispose();
