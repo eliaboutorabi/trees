@@ -35,11 +35,31 @@ export interface TreeGeometryOptions {
  */
 const SILHOUETTE_WOBBLE = 0.55;
 
+/** One piece of fruit, so the host can knock it loose by touching it. */
+export interface FruitSite {
+  /** Where it hangs, in the tree's own space. */
+  x: number;
+  y: number;
+  z: number;
+  /** Its rank in [0, 1); above the density uniform it is culled and untouchable. */
+  rank: number;
+  /** Vertex range in the fruit geometry. */
+  start: number;
+  count: number;
+}
+
 export interface TreeGeometryResult {
   branches: BufferGeometry;
   foliage: BufferGeometry | null;
   flowers: BufferGeometry | null;
   fruit: BufferGeometry | null;
+  fruitSites: FruitSite[];
+  /**
+   * How far the fruit body hangs below its anchor, at the size it was baked.
+   * A falling fruit has to stop when its *tip* reaches the ground, not when its
+   * attachment point does, or it buries itself.
+   */
+  fruitHang: number;
   stats: {
     branchVertices: number;
     branchTriangles: number;
@@ -157,11 +177,41 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
     upright: axial,
   });
 
+  const fruitGeo = fruit ? toGeometry(fruit) : null;
+  const perFruit = fruitTpl.position.length / 3;
+  const fruitSites: FruitSite[] = fruitGeo
+    ? sites.map((site, i) => ({
+        x: site.leaf.pos.x,
+        // The body hangs below its anchor, so aim at the middle of it.
+        y: site.leaf.pos.y - (shape === 1 ? 1.25 : shape === 2 ? 0.55 : 1.05) * site.leaf.scale * 0.5,
+        z: site.leaf.pos.z,
+        rank: site.rank,
+        start: i * perFruit,
+        count: perFruit,
+      }))
+    : [];
+  let fruitHang = 0;
+  if (fruitGeo) {
+    // -1 means still attached. Only the fruit mesh carries it, so the wood and
+    // foliage do not pay for an attribute they never read.
+    const fall = new Float32Array(fruitGeo.getAttribute('position').count).fill(-1);
+    fruitGeo.setAttribute('aFall', new BufferAttribute(fall, 1));
+
+    const pos = fruit!.position;
+    const cen = fruit!.center;
+    for (let i = 1; i < pos.length; i += 3) {
+      const below = cen[i] - pos[i];
+      if (below > fruitHang) fruitHang = below;
+    }
+  }
+
   return {
     branches: toGeometry(branches.buf),
     foliage: foliage ? toGeometry(foliage.buf) : null,
     flowers: flowers ? toGeometry(flowers) : null,
-    fruit: fruit ? toGeometry(fruit) : null,
+    fruit: fruitGeo,
+    fruitSites,
+    fruitHang,
     stats: {
       branchVertices: branches.buf.position.length / 3,
       branchTriangles: branches.buf.index.length / 3,

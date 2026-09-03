@@ -12,7 +12,8 @@
  */
 import { DoubleSide, MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv, vec2, vec3 } from 'three/tsl';
-import { growthPosition, treeParams, type TreeUniforms } from './shared';
+import { attribute } from 'three/tsl';
+import { growthPosition, rotateAboutAxis, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
 export function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
@@ -73,12 +74,53 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
   const keep = step(rank, u.fruitDensity);
   const vary = rank.mul(131.7).fract();
 
-  material.positionNode = growthPosition(u, {
+  const hanging = growthPosition(u, {
     thickenBase: 0.2,
     flutter: true,
     // Fruit ripens later than it sets, so size still eases in with growth.
     radial: u.fruitSize.mul(vary.mul(0.36).add(0.82)).mul(keep),
   });
+
+  /*
+   * Knocked loose.
+   *
+   * `aFall` holds the moment this piece of fruit came off, stamped by the host
+   * when the pointer touched it, or -1 while it is still on the tree. That has
+   * to be per-fruit state on the CPU: a shader cannot remember that something
+   * was hit, and computing "falls while touched" statelessly would yo-yo the
+   * fruit back onto the branch the moment the cursor moved away.
+   *
+   * The clock is `fallClock`, advanced by the host on the same `dt` it renders
+   * with, rather than TSL's `time` — the CPU writes a number this subtracts
+   * from, so the two must be the same clock or every fruit jumps as it detaches.
+   *
+   * Flight is clamped at the landing time rather than the position. Clamping
+   * `y` would flatten the fruit onto the ground plane as each vertex hit it,
+   * and freezing the spin by a height test would snap it back upright; capping
+   * the *elapsed time* freezes fall and tumble together, still and intact.
+   */
+  const fall = attribute<'float'>('aFall', 'float');
+  const loose = step(0, fall);
+  const anchor = vec3Attribute('aCenter');
+
+  const GRAVITY = 4.6;
+  const REST = 0.06;
+  // Stop when the *tip* reaches the ground. Clamping the anchor there instead
+  // plants the whole cone underground, since the body hangs below it — which is
+  // exactly what the first version did: they fell, and vanished.
+  const restY = float(REST).add(u.fruitHang.mul(u.fruitSize));
+  const drop = anchor.y.sub(restY).max(0);
+  const landsAt = drop.div(GRAVITY).max(0).sqrt();
+  const age = u.fallClock.sub(fall).max(0).min(landsAt);
+
+  const spin = age.mul(vary.mul(3.0).add(2.2));
+  const axis = vec3(vary.mul(19.0).sin(), 0.35, vary.mul(11.0).cos()).normalize();
+  const tumbled = anchor.add(rotateAboutAxis(hanging.sub(anchor), axis, spin));
+  // A cone does not drop plumb — it drifts as it goes.
+  const drift = vec3(vary.mul(23.0).sin(), 0, vary.mul(29.0).cos()).mul(age.mul(0.22));
+  const fallen = tumbled.add(drift).sub(vec3(0, age.mul(age).mul(GRAVITY), 0));
+
+  material.positionNode = mix(hanging, fallen, loose);
 
   // No piece of fruit is one flat colour — the shaded underside stays green
   // longer than the crown, and the cheek that gets the most sun turns first.

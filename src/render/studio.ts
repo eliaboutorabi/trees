@@ -510,7 +510,14 @@ export class TreeStudio {
     this.hoverPoint.lerp(this.hoverTarget, 1 - Math.exp(-dt * 14));
     this.hoverStrength += (this.hoverWanted - this.hoverStrength) * (1 - Math.exp(-dt * 7));
 
-    this.tree.setHover(this.hoverPoint, Math.max(0.55, radius * 0.34), this.hoverStrength);
+    const reach = Math.max(0.55, radius * 0.34);
+    this.tree.setHover(this.hoverPoint, reach, this.hoverStrength);
+
+    // Touching the tree shakes its fruit down. Only once the response has
+    // actually arrived, so brushing past the edge of the crown does not strip
+    // it; and against a tighter radius than the foliage uses, so what falls is
+    // what you were pointing at.
+    if (this.hoverStrength > 0.6) this.tree.knockFruit(this.hoverPoint, reach * 0.62);
   }
 
   private frame(timeMs: number): void {
@@ -525,6 +532,8 @@ export class TreeStudio {
     }
 
     this.controls.update();
+    // One clock for anything the CPU and the shader both have to agree on.
+    this.tree.tick(dt);
     this.updateHover(dt);
 
     // Keep the focal plane on whatever the camera is orbiting.

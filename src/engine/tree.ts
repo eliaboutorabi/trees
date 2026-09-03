@@ -25,7 +25,7 @@ import { createBarkMaterial } from './materials/bark';
 import { createLeafMaterial } from './materials/leaf';
 import { createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
 import { createTreeUniforms, type TreeUniforms } from './materials/shared';
-import { buildTreeGeometry } from './treeGeometry';
+import { buildTreeGeometry, type FruitSite } from './treeGeometry';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
 export interface TreeStructure {
@@ -129,6 +129,8 @@ export class Tree {
   private meshes: Mesh[] = [];
   private flowerMesh: Mesh | null = null;
   private fruitMesh: Mesh | null = null;
+  /** Fruit that is still on the tree, so a touch only has to test those. */
+  private hangingFruit: FruitSite[] = [];
 
   /** What the current mesh was baked at, so live sliders can express a ratio. */
   private bakedTrunkRadius = 1;
@@ -186,6 +188,8 @@ export class Tree {
     // shader invocation, and most trees carry neither flowers nor fruit.
     this.flowerMesh = this.addMesh(geo.flowers, this.flower, this.uniforms.flowerDensity.value > 0.001);
     this.fruitMesh = this.addMesh(geo.fruit, this.fruit, this.uniforms.fruitDensity.value > 0.001);
+    this.hangingFruit = geo.fruitSites.slice();
+    this.uniforms.fruitHang.value = geo.fruitHang;
 
     this.height = Math.max(1, build.skeleton.height);
     this.radius = Math.max(0.5, build.skeleton.radiusXZ);
@@ -199,6 +203,58 @@ export class Tree {
       vertices: geo.stats.branchVertices + geo.stats.leafVertices,
       ornamentSites: geo.stats.ornamentSites,
     };
+  }
+
+  /**
+   * Advance the clock that falling fruit is timed against.
+   *
+   * Call it once per frame with the same `dt` used to render. It is a uniform
+   * rather than TSL's own `time` because `knockFruit` writes timestamps into a
+   * vertex attribute that the shader subtracts from — both sides have to be
+   * reading the same clock.
+   */
+  tick(dt: number): void {
+    this.uniforms.fallClock.value += dt;
+  }
+
+  /**
+   * Shake loose any fruit within `radius` of `point`, in the tree's own space.
+   *
+   * Returns how many came off. Each one is stamped with the current clock and
+   * dropped from the hanging list, so it is tested once and never again — the
+   * cost is proportional to the fruit still on the tree, not to how long the
+   * pointer lingers.
+   */
+  knockFruit(point: Vector3, radius: number): number {
+    const mesh = this.fruitMesh;
+    if (!mesh || this.hangingFruit.length === 0) return 0;
+    const attr = mesh.geometry.getAttribute('aFall');
+    if (!attr) return 0;
+
+    const now = this.uniforms.fallClock.value;
+    const density = this.uniforms.fruitDensity.value;
+    const r2 = radius * radius;
+    const data = attr.array as Float32Array;
+    let knocked = 0;
+    let write = 0;
+
+    for (let i = 0; i < this.hangingFruit.length; i++) {
+      const f = this.hangingFruit[i];
+      // Fruit culled by the density slider is not drawn, so it cannot be hit.
+      const dx = f.x - point.x;
+      const dy = f.y - point.y;
+      const dz = f.z - point.z;
+      if (f.rank <= density && dx * dx + dy * dy + dz * dz <= r2) {
+        for (let v = f.start; v < f.start + f.count; v++) data[v] = now;
+        knocked++;
+        continue;
+      }
+      this.hangingFruit[write++] = f;
+    }
+    this.hangingFruit.length = write;
+
+    if (knocked > 0) attr.needsUpdate = true;
+    return knocked;
   }
 
   /** 0 = seed, 1 = fully grown. One uniform; nothing is rebuilt. */

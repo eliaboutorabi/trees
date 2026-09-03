@@ -118,6 +118,18 @@ export function createTreeUniforms() {
     fruitMarkings: uniform(0),
     /** 1 for a pine cone: dry wood rather than skin, with shaded scale rows. */
     fruitCone: uniform(0),
+    /** How far the fruit hangs below its anchor, at the baked size. */
+    fruitHang: uniform(0),
+    /**
+     * Seconds, advanced by the host on the same `dt` it renders with.
+     *
+     * Deliberately *not* TSL's `time`. A knocked cone stores the moment it came
+     * loose in a vertex attribute, and the CPU has to write a number the shader
+     * will later subtract from — so both sides must read one clock. Guessing at
+     * the renderer's internal timer instead would make every cone jump the
+     * instant it detached.
+     */
+    fallClock: uniform(0),
     /**
      * 1 = every fruit is the chosen skin colour; 0 = the crop is still green.
      * This used to be hard-coded high enough that a pure red came out olive on
@@ -213,7 +225,7 @@ export function hoverAt(u: TreeUniforms, pivot: Vec3Node): FloatNode {
 }
 
 /** Rodrigues' rotation of `v` about a unit `axis`. Preserves length. */
-function rotateAboutAxis(v: Vec3Node, axis: Vec3Node, angle: FloatNode): Vec3Node {
+export function rotateAboutAxis(v: Vec3Node, axis: Vec3Node, angle: FloatNode): Vec3Node {
   const c = angle.cos();
   const s = angle.sin();
   return v.mul(c).add(axis.cross(v).mul(s)).add(axis.mul(axis.dot(v).mul(c.oneMinus())));
