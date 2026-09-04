@@ -522,7 +522,12 @@ export class TreeStudio {
 
   private frame(timeMs: number): void {
     if (this.disposed) return;
-    const dt = this.lastTime ? Math.min(0.05, (timeMs - this.lastTime) / 1000) : 0.016;
+    // Clamped at both ends. The ceiling keeps a tab that was backgrounded for a
+    // minute from teleporting the growth and the falling fruit on its first
+    // frame back; the floor matters because a negative dt runs `1 - exp(-dt*k)`
+    // off to -Infinity, and one NaN in the hover uniform blanks every vertex of
+    // the tree.
+    const dt = this.lastTime ? MathUtils.clamp((timeMs - this.lastTime) / 1000, 0, 0.05) : 0.016;
     this.lastTime = timeMs;
 
     if (this.growth < this.growthTarget) {

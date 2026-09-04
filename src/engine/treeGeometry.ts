@@ -43,9 +43,8 @@ export interface FruitSite {
   z: number;
   /** Its rank in [0, 1); above the density uniform it is culled and untouchable. */
   rank: number;
-  /** Vertex range in the fruit geometry. */
-  start: number;
-  count: number;
+  /** Index into the fall-time array the material reads. */
+  id: number;
 }
 
 export interface TreeGeometryResult {
@@ -186,16 +185,30 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
         y: site.leaf.pos.y - (shape === 1 ? 1.25 : shape === 2 ? 0.55 : 1.05) * site.leaf.scale * 0.5,
         z: site.leaf.pos.z,
         rank: site.rank,
-        start: i * perFruit,
-        count: perFruit,
+        id: i,
       }))
     : [];
   let fruitHang = 0;
   if (fruitGeo) {
-    // -1 means still attached. Only the fruit mesh carries it, so the wood and
-    // foliage do not pay for an attribute they never read.
-    const fall = new Float32Array(fruitGeo.getAttribute('position').count).fill(-1);
-    fruitGeo.setAttribute('aFall', new BufferAttribute(fall, 1));
+    /*
+     * Which piece of fruit each vertex belongs to — a *static* index, written
+     * once and never touched again.
+     *
+     * The obvious design was to store the fall time itself here and rewrite it
+     * when the fruit was knocked. That does not work: on this renderer, mutating
+     * a geometry attribute after the mesh has drawn never reaches the GPU. It is
+     * not specific to one attribute either — lifting half the fruit by rewriting
+     * `aCenter` and `position` moved nothing on screen, while the same values
+     * supplied at build time render fine. So the id is baked here and the
+     * mutable half lives in a uniform array the material indexes into, which
+     * three re-syncs from its backing JS array every render.
+     */
+    const count = fruitGeo.getAttribute('position').count;
+    const ids = new Float32Array(count);
+    for (let i = 0; i < sites.length; i++) {
+      for (let v = i * perFruit; v < (i + 1) * perFruit && v < count; v++) ids[v] = i;
+    }
+    fruitGeo.setAttribute('aFruitId', new BufferAttribute(ids, 1));
 
     const pos = fruit!.position;
     const cen = fruit!.center;

@@ -12,7 +12,7 @@
  */
 import { DoubleSide, MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv, vec2, vec3 } from 'three/tsl';
-import { attribute } from 'three/tsl';
+import { attribute, uniformArray } from 'three/tsl';
 import { growthPosition, rotateAboutAxis, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
 export function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
@@ -64,7 +64,31 @@ export function fruitSpecularFor(gloss: number): number {
   return 0.05 + Math.min(1, Math.max(0, gloss)) * 0.4;
 }
 
-export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
+export interface FruitMaterial {
+  material: MeshPhysicalNodeMaterial;
+  /**
+   * Push the fall times to the GPU. Call it after mutating the array.
+   *
+   * `uniformArray` declares itself `NodeUpdateType.RENDER`, which reads as "the
+   * renderer keeps this in sync for you" — and in this pipeline it does not:
+   * the node's own `update()`, the one that copies the plain JS array into the
+   * padded vec4 buffer, is never called, so the buffer stays at its initial
+   * contents forever. The *upload* of that buffer does happen every frame, so
+   * doing the copy by hand is the whole fix.
+   *
+   * Returns false if the buffer does not exist yet — it is allocated when the
+   * material is first built, which is a frame or two after it is constructed.
+   * The caller should keep its changes pending and try again.
+   */
+  syncFall(): boolean;
+}
+
+/**
+ * @param fallTimes One slot per fruit site, indexed by the static `aFruitId`
+ *   attribute: the clock reading when that fruit was knocked loose, or -1 while
+ *   it is still hanging. Mutate it in place and call `syncFall`.
+ */
+export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): FruitMaterial {
   // Physical rather than standard for one reason: `specularIntensityNode`.
   // See the note on gloss below — it is the control that actually fixes this.
   const material = new MeshPhysicalNodeMaterial();
@@ -84,11 +108,18 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
   /*
    * Knocked loose.
    *
-   * `aFall` holds the moment this piece of fruit came off, stamped by the host
-   * when the pointer touched it, or -1 while it is still on the tree. That has
-   * to be per-fruit state on the CPU: a shader cannot remember that something
-   * was hit, and computing "falls while touched" statelessly would yo-yo the
-   * fruit back onto the branch the moment the cursor moved away.
+   * The fall time is per-fruit state that only the CPU can hold: a shader
+   * cannot remember that something was hit, and computing "falls while touched"
+   * statelessly would yo-yo the fruit back onto the branch the moment the cursor
+   * moved away. So the host stamps the moment of the touch, and this reads it.
+   *
+   * It travels as a *uniform array* indexed by the vertex's fruit id, not as a
+   * per-vertex attribute — which is what the obvious version did, and it drew
+   * nothing at all. On this renderer a geometry attribute is uploaded once and
+   * later writes to it never reach the GPU, `needsUpdate` or not; the same
+   * values supplied at build time render correctly. The uniform buffer behind a
+   * uniform array *is* re-uploaded every frame — see `syncFall` for the one
+   * piece of that the renderer leaves to the caller.
    *
    * The clock is `fallClock`, advanced by the host on the same `dt` it renders
    * with, rather than TSL's `time` — the CPU writes a number this subtracts
@@ -99,7 +130,11 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
    * and freezing the spin by a height test would snap it back upright; capping
    * the *elapsed time* freezes fall and tumble together, still and intact.
    */
-  const fall = attribute<'float'>('aFall', 'float');
+  const fruitId = attribute<'float'>('aFruitId', 'float');
+  const fallArray = uniformArray(fallTimes, 'float');
+  // `element()` is typed as an element of an array of unknown node type, so the
+  // scalar-ness of the 'float' argument is lost on the way out; assert it back.
+  const fall = fallArray.element(fruitId.toInt()) as unknown as ReturnType<typeof float>;
   const loose = step(0, fall);
   const anchor = vec3Attribute('aCenter');
 
@@ -299,5 +334,13 @@ export function createFruitMaterial(u: TreeUniforms): MeshPhysicalNodeMaterial {
     .clamp(0.05, 1);
   material.metalnessNode = float(0);
 
-  return material;
+  return {
+    material,
+    syncFall: () => {
+      const node = fallArray as unknown as { value: Float32Array | null; update(): void };
+      if (node.value === null) return false;
+      node.update();
+      return true;
+    },
+  };
 }
