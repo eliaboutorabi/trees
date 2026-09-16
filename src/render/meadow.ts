@@ -230,6 +230,52 @@ const vec3Attr = (name: string) => attribute<'vec3'>(name, 'vec3');
 const vec4Attr = (name: string) => attribute<'vec4'>(name, 'vec4');
 
 /**
+ * The species that can show up in the meadow.
+ *
+ * Six of them, and every one differs in the three things that actually read at
+ * this size: colour, silhouette and beat. Vein and spot detail does not — a
+ * butterfly here is a few pixels across and fades out entirely by 42m — so the
+ * budget goes on `inner`/`outer`, which is what the eye picks a species out by
+ * from across a lawn, and on wing proportions, which is what it picks out when
+ * the colour has gone flat against the sun.
+ *
+ * `edge` is how abruptly `inner` gives way to `outer`. Low is a wash (a monarch
+ * grading from orange into its border); high is a crisp tip (a cabbage white,
+ * which is plain white until it is suddenly black).
+ */
+interface Species {
+  /** Near the body. */
+  inner: readonly [number, number, number];
+  /** At the wing tip. */
+  outer: readonly [number, number, number];
+  /** 0 a soft gradient · 1 a sharply marked tip. */
+  edge: number;
+  /** Relative to the base wing template. */
+  fore: number;
+  hind: number;
+  /** Trailing point on the hindwing. Only the swallowtail has one. */
+  tail: number;
+  /** Multiplies the individual's own size and flap rate. */
+  size: number;
+  flap: number;
+}
+
+const SPECIES: readonly Species[] = [
+  // Monarch: orange panes inside a dark border, and a big slow wing.
+  { inner: [0.95, 0.5, 0.11], outer: [0.26, 0.08, 0.04], edge: 0.35, fore: 1.06, hind: 1.0, tail: 0, size: 1.14, flap: 0.78 },
+  // Cabbage white: plain until the black tip.
+  { inner: [0.97, 0.96, 0.9], outer: [0.28, 0.27, 0.25], edge: 0.92, fore: 0.94, hind: 0.96, tail: 0, size: 0.86, flap: 1.3 },
+  // Common blue: small, bright, and never still.
+  { inner: [0.45, 0.6, 0.97], outer: [0.13, 0.2, 0.55], edge: 0.5, fore: 0.82, hind: 0.86, tail: 0, size: 0.68, flap: 1.5 },
+  // Swallowtail: the largest, the slowest, and the only tailed one.
+  { inner: [0.98, 0.87, 0.33], outer: [0.15, 0.12, 0.07], edge: 0.62, fore: 1.12, hind: 1.18, tail: 0.15, size: 1.3, flap: 0.64 },
+  // Red admiral: dark, with the band far enough out to catch the light.
+  { inner: [0.17, 0.06, 0.05], outer: [0.8, 0.15, 0.09], edge: 0.72, fore: 1.0, hind: 0.92, tail: 0, size: 0.96, flap: 1.05 },
+  // Brimstone: soft sulphur, and a hindwing as pointed as the fore.
+  { inner: [0.88, 0.91, 0.47], outer: [0.55, 0.6, 0.24], edge: 0.28, fore: 0.98, hind: 1.04, tail: 0.04, size: 0.94, flap: 1.0 },
+];
+
+/**
  * One merged mesh holding every butterfly.
  *
  * Each carries two perch points and a period. Its cycle is
@@ -237,6 +283,10 @@ const vec4Attr = (name: string) => attribute<'vec4'>(name, 'vec4');
  * crosses to the other for the rest, and swaps ends every cycle — so it works
  * its way back and forth between two real flowers forever, and no two are in
  * step because the seed offsets the phase.
+ *
+ * Species is baked in rather than looked up in the shader: the whole point is
+ * that two butterflies differ, so branching every vertex through a palette
+ * would be paying per frame for something that is decided once.
  */
 function butterflyGeometry(perches: Vector3[], count: number, seed: number): BufferGeometry | null {
   if (perches.length < 2) return null;
@@ -247,24 +297,48 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
   const params: number[] = [];
   const perchA: number[] = [];
   const perchB: number[] = [];
+  // rgb + one spare scalar each, so the two colours cost two buffers, not four.
+  const wingInner: number[] = [];
+  const wingOuter: number[] = [];
   const index: number[] = [];
 
   // Forewing and hindwing, as two quads per side. `spanT` is 0 at the hinge and
   // 1 at the wing tip, so the flap can bend the wing rather than swing it rigid.
-  const wing = (side: number): { p: number[]; uv: number[]; span: number[] }[] => [
+  // The species stretches each pane independently, which is what separates a
+  // blue's stubby round wing from a swallowtail's long one in silhouette.
+  const wing = (side: number, sp: Species): { p: number[]; uv: number[]; span: number[] }[] => [
     {
-      p: [0, 0, 0.06, side * 0.32, 0, 0.2, side * 0.34, 0, -0.04, 0, 0, -0.02],
+      p: [0, 0, 0.06, side * 0.32 * sp.fore, 0, 0.2 * sp.fore, side * 0.34 * sp.fore, 0, -0.04, 0, 0, -0.02],
       uv: [0.5, 1, 1, 0.85, 1, 0.35, 0.5, 0.45],
       span: [0, 1, 1, 0],
     },
     {
-      p: [0, 0, -0.02, side * 0.34, 0, -0.04, side * 0.24, 0, -0.26, 0, 0, -0.16],
+      p: [
+        0, 0, -0.02,
+        side * 0.34 * sp.hind, 0, -0.04,
+        side * 0.24 * sp.hind, 0, -0.26 * sp.hind - sp.tail,
+        0, 0, -0.16 - sp.tail * 0.35,
+      ],
       uv: [0.5, 0.45, 1, 0.35, 0.9, 0, 0.5, 0.05],
       span: [0, 1, 1, 0],
     },
   ];
 
+  // Even two of the same species are not identical — a little each way on every
+  // channel, which at this size reads as one being older or in shadow.
+  const tinted = (c: readonly [number, number, number], k: number) =>
+    c.map((v) => Math.min(1, Math.max(0, v * (1 + (rng() - 0.5) * k)))) as [number, number, number];
+
+  // Walk the species in order from a random start rather than drawing at
+  // random: with 16 butterflies over 6 species, random draws routinely give
+  // four monarchs and no blue at all, which is exactly the sameness this is
+  // meant to fix.
+  const firstSpecies = (rng() * SPECIES.length) | 0;
+
   for (let b = 0; b < count; b++) {
+    const sp = SPECIES[(firstSpecies + b) % SPECIES.length];
+    const inner = tinted(sp.inner, 0.18);
+    const outer = tinted(sp.outer, 0.18);
     const ia = (rng() * perches.length) | 0;
     let ib = (rng() * perches.length) | 0;
     // Pick a second flower that is a reasonable flight away, so the crossing
@@ -279,7 +353,10 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
     const period = 7 + rng() * 7;
     // Bigger than life — a true-to-scale butterfly here is under a pixel — but
     // small enough to still read as an insect rather than a bird.
-    const scale = 0.3 + rng() * 0.16;
+    const scale = (0.3 + rng() * 0.12) * sp.size;
+    // A small butterfly beats faster than a large one whatever the species, so
+    // the individual's own size feeds back into its wingbeat.
+    const flap = sp.flap * (1.05 - (scale - 0.3) * 0.7) * (0.92 + rng() * 0.16);
 
     const push = (p: number[], uvArr: number[], span: number[], side: number) => {
       const base = position.length / 3;
@@ -289,11 +366,13 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
         params.push(s, side, span[i], period);
         perchA.push(A.x, A.y, A.z);
         perchB.push(B.x, B.y, B.z);
+        wingInner.push(inner[0], inner[1], inner[2], flap);
+        wingOuter.push(outer[0], outer[1], outer[2], sp.edge);
       }
       index.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
 
-    for (const side of [1, -1]) for (const w of wing(side)) push(w.p, w.uv, w.span, side);
+    for (const side of [1, -1]) for (const w of wing(side, sp)) push(w.p, w.uv, w.span, side);
     // Body: a slim dark spindle that never flaps.
     push(
       [-0.022 * 1, 0, 0.16, 0.022, 0, 0.16, 0.016, 0, -0.2, -0.016, 0, -0.2].map((v, i) => (i % 3 === 0 ? v : v)),
@@ -309,6 +388,11 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
   g.setAttribute('aParams', new BufferAttribute(new Float32Array(params), 4));
   g.setAttribute('aPerchA', new BufferAttribute(new Float32Array(perchA), 3));
   g.setAttribute('aPerchB', new BufferAttribute(new Float32Array(perchB), 3));
+  // Seven vertex buffers with position and uv; WebGPU guarantees eight, so the
+  // two colours ride as vec4s with their spare lane carrying a scalar rather
+  // than as vec3s plus a buffer nobody has room for.
+  g.setAttribute('aWingInner', new BufferAttribute(new Float32Array(wingInner), 4));
+  g.setAttribute('aWingOuter', new BufferAttribute(new Float32Array(wingOuter), 4));
   g.setIndex(index);
   g.computeBoundingSphere();
   // Every vertex is relocated in the shader, so the baked bounds mean nothing.
@@ -327,6 +411,8 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   const period = p.w;
   const A = vec3Attr('aPerchA');
   const B = vec3Attr('aPerchB');
+  const inner = vec4Attr('aWingInner');
+  const outer = vec4Attr('aWingOuter');
   // `positionLocal`, not `attribute('position')`: the node system binds the
   // former as the vertex stage's local position and only guarantees that one.
   const local = positionLocal;
@@ -364,7 +450,7 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   // Flap hard in flight, and just breathe while perched. `spanT` is 0 at the
   // hinge, so the wing bends rather than swinging rigid, and `side` is 0 on the
   // body, which therefore never flaps.
-  const flapRate = mix(float(2.6), float(19.0), flying);
+  const flapRate = mix(float(2.6), float(19.0), flying).mul(inner.w);
   const beat = sin(time.mul(flapRate).add(seed.mul(40.0)));
   const swing = mix(float(0.3), float(1.15), flying).mul(beat).mul(spanT).mul(side.abs());
 
@@ -389,9 +475,12 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   // No real lighting on something this small: a wing pattern, dimmed as it
   // turns edge-on, tinted by the sun so it belongs in the scene.
   const st = uv();
-  const edge = smoothstep(0.35, 1.0, st.y.add(st.x.sub(0.5).abs()));
+  // Where the tip colour starts, not just how strong it is: pushing the near
+  // end of the ramp outward turns a gradient into a border.
+  const ramp = mix(float(0.1), float(0.78), outer.w);
+  const edge = smoothstep(ramp, 1.0, st.y.add(st.x.sub(0.5).abs()));
   const body = smoothstep(0.02, 0.0, spanT.add(st.y.sub(0.5).abs().mul(0.001)));
-  const wingCol = mix(vec3(0.95, 0.72, 0.24), vec3(0.42, 0.13, 0.06), edge);
+  const wingCol = mix(inner.xyz, outer.xyz, edge);
   const facing = cs.abs().mul(0.55).add(0.45);
   const lit = wingCol.mul(facing).mul(u.sunColor.mul(0.55).add(0.55));
   material.colorNode = mix(lit, vec3(0.06, 0.045, 0.035), body);
