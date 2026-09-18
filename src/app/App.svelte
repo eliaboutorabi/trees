@@ -313,7 +313,7 @@
 />
 
 <div class="app">
-  <div class="stage" class:wide={!panelOpen} bind:this={stage}>
+  <div class="stage" bind:this={stage}>
     <canvas bind:this={canvas}></canvas>
 
     {#if unsupported}
@@ -350,6 +350,7 @@
         {#if stats.truncated}<span class="warn">capped</span>{/if}
       </div>
 
+      <div class="rail" class:shifted={panelOpen}>
       <div class="transport">
         <button
           class="redraw"
@@ -397,6 +398,7 @@
         <button class="icon" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
           <Icon icon={UndoIcon} size={16} strokeWidth={1.8} />
         </button>
+      </div>
       </div>
     {/if}
   </div>
@@ -577,34 +579,30 @@
     position: fixed;
     inset: 0;
     overflow: hidden;
-    /* The strip the panel is about to slide back over. Matching the panel's own
-       colour is what stops the slide from flashing the page background. */
+    /* Only ever seen in the moment before the first frame lands; the canvas
+       covers it edge to edge after that. */
     background: var(--panel-solid);
   }
 
   /*
-   * The stage is sized by `right`, and that change is deliberately *not*
-   * transitioned.
+   * The scene owns the whole window, and the panel floats over it.
    *
    * It used to be a flex sibling of the panel, so animating the panel's margin
    * animated the stage's width — and the ResizeObserver dutifully resized the
    * renderer on every frame of it. One click on the toggle measured 20 resizes
    * at 19 distinct widths, each one tearing down and rebuilding every
    * viewport-sized render target in the post chain. Roughly 700 GPU texture
-   * reallocations to slide a sidebar.
+   * reallocations to slide a sidebar. Taking the panel out of flow cut that to
+   * one resize per toggle; giving the stage the full window cuts it to none.
    *
-   * Now the panel is out of flow and slides on `transform`, which is composited
-   * and touches no layout at all, while the stage snaps to its final width in
-   * one step. Same motion on screen, one resize.
+   * The reason is not really performance, though. A tree framed in two thirds
+   * of the window is a tree that jumps sideways every time you reach for a
+   * slider, and reframes itself under you when you put the panel back. Now the
+   * camera has one viewport, the panel is glass, and the tree never moves.
    */
   .stage {
     position: absolute;
     inset: 0;
-    right: 21.5rem;
-  }
-
-  .stage.wide {
-    right: 0;
   }
 
   canvas {
@@ -700,11 +698,34 @@
 
   /* -------------------------------------------------------- transport */
 
-  .transport {
+  /*
+   * The strip the controls centre themselves in. It ends where the panel
+   * begins, so they stay clear of it: the tree is allowed to sit behind the
+   * glass, a button is not, because a click there lands on the panel instead.
+   *
+   * Centring in a shrinking strip rather than shifting by a fixed amount is
+   * what keeps the pill on screen — half the panel's width is a big nudge in a
+   * 900px window, and it used to push the left end of the bar off the edge.
+   * Animating `right` here relaid out one pill; it is the renderer that must
+   * not be resized, and the ResizeObserver watches the stage, not this.
+   */
+  .rail {
     position: absolute;
-    left: 50%;
+    left: 0;
+    right: 0;
     bottom: 1.6rem;
-    transform: translateX(-50%);
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    transition: right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .rail.shifted {
+    right: 21.5rem;
+  }
+
+  .transport {
+    pointer-events: auto;
     display: flex;
     align-items: center;
     gap: 0.85rem;
@@ -825,10 +846,27 @@
     bottom: 0;
     width: 21.5rem;
     z-index: 5;
-    background: var(--panel);
-    backdrop-filter: blur(26px) saturate(1.35);
-    -webkit-backdrop-filter: blur(26px) saturate(1.35);
-    border-left: 1px solid var(--hairline);
+    /*
+     * Glass, now that there is a scene behind it rather than a reserved strip.
+     *
+     * The tint is doing two jobs at once: it has to stay dark enough to read
+     * 0.65rem labels against a sunlit meadow, and light enough that the tree is
+     * still legibly there. The blur is what buys that — it strips the high
+     * frequencies out of the backdrop, so what is left is a smooth wash that
+     * text sits on cleanly, and a much lighter tint than a sharp backdrop would
+     * need. Hence a wide radius with a fairly low alpha, rather than the
+     * reverse.
+     */
+    background: linear-gradient(
+      to bottom,
+      rgba(26, 20, 15, 0.62),
+      rgba(18, 13, 10, 0.52) 22%,
+      rgba(18, 13, 10, 0.52)
+    );
+    backdrop-filter: blur(34px) saturate(1.5);
+    -webkit-backdrop-filter: blur(34px) saturate(1.5);
+    border-left: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: -24px 0 60px rgba(0, 0, 0, 0.32);
     transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -850,12 +888,13 @@
     top: 1.5rem;
     width: 30px;
     height: 46px;
-    border: 1px solid var(--hairline);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-right: none;
     border-radius: 8px 0 0 8px;
-    background: var(--panel);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(18, 13, 10, 0.52);
+    backdrop-filter: blur(34px) saturate(1.5);
+    -webkit-backdrop-filter: blur(34px) saturate(1.5);
+    box-shadow: -10px 0 26px rgba(0, 0, 0, 0.26);
     color: var(--ink-dim);
     cursor: pointer;
     display: grid;
@@ -1122,13 +1161,25 @@
     font-variant-numeric: tabular-nums;
   }
 
-  @media (max-width: 780px) {
-    /* Too narrow to give up a third of it — the panel floats over the scene. */
-    .stage {
-      right: 0;
+  /* The pill has to fit the strip beside the panel, not just the window. */
+  @media (max-width: 1040px) {
+    .transport {
+      gap: 0.6rem;
+      padding: 0.5rem 0.75rem;
     }
     .scrub {
       width: 8rem;
+    }
+    .redraw span {
+      display: none;
+    }
+  }
+
+  @media (max-width: 780px) {
+    /* The panel covers most of the width here, so there is no clear strip to
+       centre in. Leave the controls where they are and let it sit over them. */
+    .rail.shifted {
+      right: 0;
     }
   }
 </style>
