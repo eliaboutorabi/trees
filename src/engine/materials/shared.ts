@@ -39,6 +39,22 @@ import type Node from 'three/src/nodes/core/Node.js';
 
 export type TreeUniforms = ReturnType<typeof createTreeUniforms>;
 
+/**
+ * Resolution of the leaf-litter grid.
+ *
+ * Shaking a tree has to be remembered, and per-leaf state is not affordable:
+ * at 26,000 leaves a float each is 416KB padded, several times over what a
+ * uniform buffer is guaranteed to hold. So the canopy is divided into cells and
+ * the fall time is stored per *cell* — 896 floats, 14KB — which the shader reads
+ * through the leaf's own anchor. Shaking a branch sheds the cluster around it,
+ * which is what shaking a branch does; a per-leaf delay inside each cell keeps
+ * them from leaving in lockstep.
+ *
+ * The cell index is a pure function of position, so no attribute carries it.
+ */
+export const LEAF_GRID = { x: 8, y: 14, z: 8 } as const;
+export const LEAF_GRID_CELLS = LEAF_GRID.x * LEAF_GRID.y * LEAF_GRID.z;
+
 // `attribute()` infers its node type from the argument, which widens to
 // `string` and loses every operator. Pinning the type parameter keeps the
 // returned node fully typed.
@@ -75,6 +91,26 @@ export function createTreeUniforms() {
 
     /** 0 = high summer, 1 = full autumn. */
     autumn: uniform(0),
+
+    // ------------------------------------------------------------- season
+    /** Settled snow, 0–1. Lies on upward-facing surfaces only. */
+    snow: uniform(0),
+    /** Snow is never pure white: it takes the colour of whatever is lighting it. */
+    snowColor: uniform(new Color(0xeef1f6)),
+    /** Flakes in the air. Separate from settled snow so it can stop snowing. */
+    snowfall: uniform(0),
+    /** Fraction of the meadow still in flower, and carrying butterflies. */
+    meadowBloom: uniform(1),
+    /**
+     * The leaf-litter grid: corner, and the reciprocal of one cell's size. Set
+     * on rebuild from the canopy's own bounds, so the cells scale with the tree.
+     */
+    leafGridMin: uniform(new Vector3(-4, 0, -4)),
+    leafGridInvCell: uniform(new Vector3(1, 1, 1)),
+    /** What a leaf dries to: on the ground, or still clinging on in December. */
+    litterColor: uniform(new Color(0x6b4a24)),
+    /** How far past turning the leaves still on the tree have gone, 0–1. */
+    leafDry: uniform(0),
 
     barkDark: uniform(new Color(0x2b2018)),
     barkLight: uniform(new Color(0x8a755c)),
@@ -245,10 +281,17 @@ export interface GrowthOptions {
 }
 
 /**
- * Returns a replacement for `positionLocal`: the vertex, grown into place and
- * moved by the wind.
+ * The vertex, grown into place and moved by the wind.
+ *
+ * `pivot` comes back alongside it because a leaf that lets go has to leave from
+ * where it is actually drawn, not from where it would hang in still air — on a
+ * windy preset those are most of a leaf's length apart, and detaching from the
+ * rest pose makes every leaf jump the instant it comes off.
  */
-export function growthPosition(u: TreeUniforms, opts: GrowthOptions) {
+export function growthPosition(
+  u: TreeUniforms,
+  opts: GrowthOptions,
+): { position: Vec3Node; pivot: Vec3Node } {
   const origin = vec3Attribute('aOrigin');
   const center = vec3Attribute('aCenter');
   const { birth, flex, seed } = treeParams();
@@ -323,7 +366,7 @@ export function growthPosition(u: TreeUniforms, opts: GrowthOptions) {
   const outward = away.div(away.length().max(0.001));
   const parted = swayed.add(outward.add(vec3(0, 0.55, 0)).mul(near).mul(u.hoverPush));
 
-  if (!opts.flutter) return parted;
+  if (!opts.flutter) return { position: parted, pivot };
 
   // Each leaf also turns on its own stem, about its own axis and by its own
   // amount. Turning them all alike is what would make this read as a machine
@@ -332,5 +375,5 @@ export function growthPosition(u: TreeUniforms, opts: GrowthOptions) {
   const turnAxis = vec3(fs.mul(23.0).sin(), 0.55, fs.mul(9.0).cos()).normalize();
   const turn = near.mul(u.hoverTurn).mul(fs.mul(0.7).add(0.5));
   const pivoted = rotateAboutAxis(parted.sub(pivot), turnAxis, turn);
-  return pivot.add(pivoted);
+  return { position: pivot.add(pivoted), pivot };
 }

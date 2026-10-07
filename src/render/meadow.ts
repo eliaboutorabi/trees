@@ -34,6 +34,7 @@ import {
   positionWorld,
   sin,
   smoothstep,
+  step,
   time,
   uv,
   vec3,
@@ -137,11 +138,15 @@ function createFlowerMaterial(u: TreeUniforms, fadeStart = 20, fadeEnd = 44): Me
   material.roughness = 0.88;
 
   const t = uv().y;
-  const lod = smoothstep(fadeEnd, fadeStart, cameraPosition.sub(positionWorld).length());
-
   // Same trick the grass uses: the golden ratio turns consecutive instance
   // indices into well-spread phases, so neighbours never beat in step.
   const idx = instanceIndex.toFloat();
+
+  // The season thins the meadow by hash rather than by index, so what is left
+  // in late autumn is scattered over the whole field instead of being the first
+  // third of it.
+  const inSeason = step(idx.mul(0.6180339887).fract(), u.meadowBloom);
+  const lod = smoothstep(fadeEnd, fadeStart, cameraPosition.sub(positionWorld).length()).mul(inSeason);
   const phase = idx.mul(0.6180339887).fract().mul(Math.PI * 2);
   const speed = u.windSpeed.mul(1.9);
   const gust = sin(time.mul(speed).add(phase))
@@ -489,7 +494,10 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   const dist = cameraPosition.sub(positionWorld).length();
   material.opacity = 1;
   material.transparent = true;
-  material.opacityNode = smoothstep(42, 24, dist);
+  // They go with the flowers they live off. Scaled rather than faded would be
+  // better still, but at this size a fade over a second reads the same and
+  // costs one multiply.
+  material.opacityNode = smoothstep(42, 24, dist).mul(smoothstep(0, 0.35, u.meadowBloom));
 
   return material;
 }

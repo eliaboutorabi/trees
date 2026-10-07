@@ -24,7 +24,7 @@ import type { Palette, Preset } from './lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
 import { createLeafMaterial } from './materials/leaf';
 import { createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
-import { createTreeUniforms, type TreeUniforms } from './materials/shared';
+import { createTreeUniforms, LEAF_GRID, LEAF_GRID_CELLS, type TreeUniforms } from './materials/shared';
 import { buildTreeGeometry, type FruitSite } from './treeGeometry';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
@@ -61,6 +61,14 @@ export interface LiveParams {
   windDirection?: number;
   autumn?: number;
   translucency?: number;
+  /** Settled snow on the branches and the remaining leaves, 0–1. */
+  snow?: number;
+  /**
+   * Whether the leaves are ready to let go. 0 holds them on however hard the
+   * tree is shaken; 1 is autumn. It is a season, not a slider: a summer oak
+   * does not shed its canopy because something brushed past it.
+   */
+  leafFall?: number;
   barkDetail?: number;
   moss?: number;
   occlusionStrength?: number;
@@ -142,6 +150,20 @@ export class Tree {
   private readonly syncFall: () => boolean;
   private fallDirty = false;
 
+  /**
+   * When each canopy cell was shaken, or -1 while its leaves are attached.
+   * Per cell rather than per leaf — see `LEAF_GRID`. Mutated in place, never
+   * replaced: its identity is baked into the foliage material.
+   */
+  private readonly leafGrid: number[] = new Array(LEAF_GRID_CELLS).fill(-1);
+  private readonly syncLeafFall: () => boolean;
+  private leafGridDirty = false;
+  /** Set by the season. Leaves only come off a tree that is ready to drop them. */
+  private shedding = 0;
+  /** World-space corner and cell size of the litter grid, mirroring the uniforms. */
+  private readonly gridMin = new Vector3(-4, 0, -4);
+  private readonly gridCell = new Vector3(1, 1, 1);
+
   /** What the current mesh was baked at, so live sliders can express a ratio. */
   private bakedTrunkRadius = 1;
   private bakedLeafScale = 1;
@@ -154,7 +176,9 @@ export class Tree {
     this.uniforms = createTreeUniforms();
     this.fallTimes = new Array(this.options.maxOrnaments).fill(-1);
     this.bark = createBarkMaterial(this.uniforms);
-    this.foliage = createLeafMaterial(this.uniforms);
+    const foliage = createLeafMaterial(this.uniforms, this.leafGrid);
+    this.foliage = foliage.material;
+    this.syncLeafFall = foliage.syncFall;
     this.flower = createFlowerMaterial(this.uniforms);
     const fruit = createFruitMaterial(this.uniforms, this.fallTimes);
     this.fruit = fruit.material;
@@ -210,6 +234,18 @@ export class Tree {
     this.height = Math.max(1, build.skeleton.height);
     this.radius = Math.max(0.5, build.skeleton.radiusXZ);
 
+    // Fit the litter grid to the canopy it has to cover, with a margin for the
+    // wind. A grid sized once for a generic tree would be mostly empty cells
+    // for a bush and would clip the crown off a baobab.
+    const reach = this.radius * 1.25 + 0.5;
+    this.gridMin.set(-reach, -0.2, -reach);
+    this.gridCell.set((reach * 2) / LEAF_GRID.x, (this.height * 1.1 + 0.4) / LEAF_GRID.y, (reach * 2) / LEAF_GRID.z);
+    this.uniforms.leafGridMin.value.copy(this.gridMin);
+    this.uniforms.leafGridInvCell.value.set(1 / this.gridCell.x, 1 / this.gridCell.y, 1 / this.gridCell.z);
+    // A new tree starts with its leaves on.
+    this.leafGrid.fill(-1);
+    this.leafGridDirty = true;
+
     return {
       ...build,
       height: this.height,
@@ -232,6 +268,7 @@ export class Tree {
     this.uniforms.fallClock.value += dt;
     // Once a frame at most, and only when something actually came loose.
     if (this.fallDirty && this.syncFall()) this.fallDirty = false;
+    if (this.leafGridDirty && this.syncLeafFall()) this.leafGridDirty = false;
   }
 
   /**
@@ -268,6 +305,54 @@ export class Tree {
     this.hangingFruit.length = write;
 
     return knocked;
+  }
+
+  /**
+   * Shake the canopy around `point`, in the tree's own space, and let whatever
+   * leaves are there fall. Returns how many cells were newly shaken.
+   *
+   * Does nothing unless the season has set `leafFall` — leaves hold on in
+   * summer. Cells are stamped once and never restamped, so a leaf that has gone
+   * stays gone however long the pointer lingers, and the litter under the tree
+   * only ever grows.
+   */
+  shakeLeaves(point: Vector3, radius: number): number {
+    if (this.shedding <= 0) return 0;
+
+    const { gridMin: min, gridCell: cell } = this;
+    const lo = (v: number, c: number, o: number, n: number) =>
+      Math.max(0, Math.min(n - 1, Math.floor((v - radius - o) / c)));
+    const hi = (v: number, c: number, o: number, n: number) =>
+      Math.max(0, Math.min(n - 1, Math.floor((v + radius - o) / c)));
+
+    const now = this.uniforms.fallClock.value;
+    const r2 = radius * radius;
+    let shaken = 0;
+
+    for (let y = lo(point.y, cell.y, min.y, LEAF_GRID.y); y <= hi(point.y, cell.y, min.y, LEAF_GRID.y); y++) {
+      const cy = min.y + (y + 0.5) * cell.y - point.y;
+      for (let z = lo(point.z, cell.z, min.z, LEAF_GRID.z); z <= hi(point.z, cell.z, min.z, LEAF_GRID.z); z++) {
+        const cz = min.z + (z + 0.5) * cell.z - point.z;
+        for (let x = lo(point.x, cell.x, min.x, LEAF_GRID.x); x <= hi(point.x, cell.x, min.x, LEAF_GRID.x); x++) {
+          const cx = min.x + (x + 0.5) * cell.x - point.x;
+          // Against the cell's centre, so a touch sheds the cluster it is
+          // inside rather than clipping a cell in half along a flat edge.
+          if (cx * cx + cy * cy + cz * cz > r2) continue;
+          const i = (y * LEAF_GRID.z + z) * LEAF_GRID.x + x;
+          if (this.leafGrid[i] >= 0) continue;
+          this.leafGrid[i] = now;
+          this.leafGridDirty = true;
+          shaken++;
+        }
+      }
+    }
+    return shaken;
+  }
+
+  /** Put every leaf back on the tree. */
+  regrowLeaves(): void {
+    this.leafGrid.fill(-1);
+    this.leafGridDirty = true;
   }
 
   /** 0 = seed, 1 = fully grown. One uniform; nothing is rebuilt. */
@@ -323,6 +408,8 @@ export class Tree {
       (u.windDir.value as Vector2).set(Math.sin(rad), Math.cos(rad));
     }
     if (p.autumn !== undefined) u.autumn.value = p.autumn;
+    if (p.snow !== undefined) u.snow.value = p.snow;
+    if (p.leafFall !== undefined) this.shedding = p.leafFall;
     if (p.translucency !== undefined) u.translucency.value = p.translucency;
     if (p.barkDetail !== undefined) u.barkBump.value = p.barkDetail;
     if (p.moss !== undefined) u.mossAmount.value = p.moss;

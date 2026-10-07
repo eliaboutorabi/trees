@@ -22,6 +22,8 @@ import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
 import { createMeadow } from './meadow';
 import { createPostPipeline } from './post';
 import { ProceduralSky, sunDirection, type SkySettings } from './sky';
+import { getSeason, snowTintFor, type Season } from './season';
+import { createSnowfall } from './weather';
 import { aerialPerspective } from './materials/ground';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
@@ -29,11 +31,16 @@ export type StructureParams = TreeStructure;
 
 /** Uniform-only changes — applied instantly, no rebuild. */
 export interface LookParams {
+  season: Season;
   wind: number;
   windSpeed: number;
   windDirection: number;
   autumn: number;
   translucency: number;
+  /** Settled snow on branches, grass and ground, 0–1. */
+  snow: number;
+  /** Whether shaking the tree sheds leaves. Set by the season, not by hand. */
+  leafFall: number;
   barkDetail: number;
   moss: number;
   /** Rescaled against the baked mesh rather than rebuilt. */
@@ -130,10 +137,12 @@ export class TreeStudio {
   private readonly groundUniforms = this.landscape.uniforms;
   // Wildflowers, and butterflies that perch on the ones actually placed.
   private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
+  private readonly snowfall = createSnowfall(this.tree.uniforms);
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
 
+  private season: Season = 'summer';
   private treeHeight = 8;
   private treeRadius = 3;
   private growth = 0;
@@ -204,6 +213,7 @@ export class TreeStudio {
 
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
+    this.scene.add(this.snowfall);
     this.scene.add(this.tree.group);
 
     this.sun.castShadow = true;
@@ -318,6 +328,10 @@ export class TreeStudio {
 
   applyLook(params: LookParams): void {
     this.tree.applyLook(params);
+    this.applySeason(params.season);
+    // One slider for every surface that holds snow, so the tree, the sward and
+    // the ground under them are never dressed for different weather.
+    this.groundUniforms.snowCover.value = params.snow;
 
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = params.exposure;
@@ -332,6 +346,40 @@ export class TreeStudio {
     this.refreshPost();
     this.controls.autoRotate = params.autoRotate;
     this.applyQuality(params.quality);
+  }
+
+  /**
+   * Everything a season owns that is not already a slider.
+   *
+   * The foliage, wind and sky values a season implies are written into the
+   * parameters themselves, so the sliders show them and stay editable. What is
+   * left here is the scene dressing with no control of its own: the ground
+   * palette, the snow, and how much of the meadow is still in flower.
+   */
+  private applySeason(id: Season): void {
+    const season = getSeason(id);
+    const u = this.tree.uniforms;
+
+    // A canopy you stripped last autumn is back next spring. Without this the
+    // gaps you shook into it persist through every later season, which is both
+    // wrong and impossible to undo without a redraw.
+    if (id !== this.season) {
+      this.season = id;
+      this.tree.regrowLeaves();
+    }
+
+    u.snowfall.value = season.snowfall;
+    u.leafDry.value = season.leafDry;
+    u.meadowBloom.value = season.meadowBloom;
+    u.snowColor.value.copy(snowTintFor(id));
+
+    const g = this.groundUniforms;
+    g.grassDeep.value.setHex(season.grassDeep);
+    g.grassMid.value.setHex(season.grassMid);
+    g.grassDry.value.setHex(season.grassDry);
+    g.dirt.value.setHex(season.dirt);
+    g.horizon.value.setHex(season.horizon);
+    g.aerialFar.value.setHex(season.aerialFar);
   }
 
   applySky(params: SkyParams): void {
@@ -518,6 +566,9 @@ export class TreeStudio {
     // it; and against a tighter radius than the foliage uses, so what falls is
     // what you were pointing at.
     if (this.hoverStrength > 0.6) this.tree.knockFruit(this.hoverPoint, reach * 0.62);
+    // Leaves come away more readily than fruit, and over a wider patch: a hand
+    // pushed into an autumn canopy takes a handful with it, not one leaf.
+    if (this.hoverStrength > 0.45) this.tree.shakeLeaves(this.hoverPoint, reach * 0.95);
   }
 
   private frame(timeMs: number): void {

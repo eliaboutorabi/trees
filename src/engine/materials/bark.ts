@@ -1,11 +1,11 @@
 /** Procedural bark — furrows, ridges, moss and young-twig blending, no textures. */
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { float, mix, mx_fractal_noise_float, positionGeometry, smoothstep, uv, vec3 } from 'three/tsl';
+import { float, mix, mx_fractal_noise_float, normalWorld, positionGeometry, smoothstep, uv, vec3 } from 'three/tsl';
 import { growthPosition, proceduralBump, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
 export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
-  material.positionNode = growthPosition(u, { thickenBase: 0.34, flutter: false, radial: u.radiusScale });
+  material.positionNode = growthPosition(u, { thickenBase: 0.34, flutter: false, radial: u.radiusScale }).position;
 
   const st = uv();
   const center = vec3Attribute('aCenter');
@@ -84,7 +84,14 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const canopyShade = occlusion.mul(u.occlusionStrength).mul(u.leafCull.mul(0.7).add(0.3)).mul(0.55);
   // A light touch on the albedo too: weathered ridges bleach, sheltered
   // crevices hold their colour and their damp.
-  material.colorNode = withLenticels.mul(mix(float(0.78), float(1.06), height)).mul(canopyShade.oneMinus());
+  const weathered = withLenticels.mul(mix(float(0.78), float(1.06), height)).mul(canopyShade.oneMinus());
+
+  // Snow lies on what faces up, and lodges in the furrows first — a dusting
+  // picks out the bark's relief before it buries it, which is what makes a
+  // snowy branch read as a branch rather than as a white tube.
+  const upward = smoothstep(0.1, 0.72, normalWorld.y);
+  const settled = upward.mul(u.snow).mul(height.oneMinus().mul(0.35).add(0.65)).clamp(0, 1);
+  material.colorNode = mix(weathered, u.snowColor, settled.mul(0.92));
 
   // Ridges are worn smooth by weather and handling; the crevices they shelter
   // stay rough. A single roughness over the whole surface is a large part of
@@ -93,12 +100,18 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
     .sub(height.mul(0.3))
     .sub(twigness.mul(0.2))
     .sub(mossMask.mul(0.05))
+    .add(settled.mul(0.25))
     .clamp(0.35, 1);
   material.metalnessNode = float(0);
   // The slider is 0–1; a screen-space height gradient is a small number, so it
   // takes a large multiplier before furrows read as depth rather than as a
   // faint sheen. Twigs keep a little relief but nowhere near a mature trunk's.
-  material.normalNode = proceduralBump(height, u.barkBump.mul(22).mul(twigness.oneMinus().mul(0.88).add(0.12)));
+  // Snow fills the furrows, so the relief it would otherwise exaggerate goes
+  // away with it.
+  material.normalNode = proceduralBump(
+    height,
+    u.barkBump.mul(22).mul(twigness.oneMinus().mul(0.88).add(0.12)).mul(settled.mul(0.8).oneMinus()),
+  );
 
   return material;
 }

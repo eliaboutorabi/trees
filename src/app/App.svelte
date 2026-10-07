@@ -6,6 +6,7 @@
     Camera01Icon,
     CloudFastWindIcon,
     CloudFogIcon,
+    SnowIcon,
     Download01Icon,
     FocusIcon,
     CherryIcon,
@@ -23,7 +24,8 @@
   } from '@hugeicons/core-free-icons';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
-  import { applyPreset, params, presets } from './params.svelte';
+  import { applyPreset, applySeason, params, presets } from './params.svelte';
+  import { getSeason, SEASONS, type Season } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
   import Section from './components/Section.svelte';
@@ -124,6 +126,14 @@
   /** Put every control on this species back where it started. */
   function resetToDefaults() {
     choosePreset(params.presetId);
+  }
+
+  /** A season is a dressing of the same tree, so nothing is re-derived. */
+  function chooseSeason(id: Season) {
+    applySeason(id);
+    if (!studio) return;
+    // The canopy and the sky both moved; reframe nothing, rebuild nothing.
+    studio.applyPalette(getPreset(params.presetId).palette);
   }
 
   function choosePreset(id: string) {
@@ -247,11 +257,14 @@
   // Look — uniform writes only, so these land immediately, every frame if need be.
   $effect(() => {
     const look = {
+      season: params.season,
       wind: params.wind,
       windSpeed: params.windSpeed,
       windDirection: params.windDirection,
       autumn: params.autumn,
       translucency: params.translucency,
+      snow: params.snow,
+      leafFall: params.leafFall,
       barkDetail: params.barkDetail,
       moss: params.moss,
       trunkRadius: params.trunkRadius,
@@ -429,6 +442,20 @@
       </div>
       <p class="blurb">{activePreset.blurb}</p>
 
+      <div class="seasons">
+        {#each SEASONS as s (s.id)}
+          <button
+            class="chip season"
+            class:active={s.id === params.season}
+            onclick={() => chooseSeason(s.id)}
+            title={s.blurb}
+          >
+            {s.name}
+          </button>
+        {/each}
+      </div>
+      <p class="blurb">{getSeason(params.season).blurb}</p>
+
       <Section title="Form" icon={Tree01Icon} open>
         <p class="help">Controls marked ↻ re-derive the grammar — press Redraw (or <kbd>R</kbd>) to apply. Everything else is live.</p>
         <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
@@ -513,6 +540,9 @@
         <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
         <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
         <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
+
+        <h4 class="sub"><Icon icon={SnowIcon} size={13} strokeWidth={1.6} /> Snow</h4>
+        <Slider label="Cover" bind:value={params.snow} min={0} max={1} hint="Settles on the branches, the sward and the ground — all three together" />
 
         <h4 class="sub"><Icon icon={CloudFastWindIcon} size={13} strokeWidth={1.6} /> Wind</h4>
         <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
@@ -921,6 +951,18 @@
     text-transform: uppercase;
     color: var(--ink-faint);
     margin-bottom: 1.15rem;
+  }
+
+  .seasons {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0.55rem;
+  }
+
+  .chip.season {
+    flex: 1;
+    padding-inline: 0;
+    font-size: 0.68rem;
   }
 
   .species {

@@ -1,4 +1,5 @@
 import { DEFAULT_PRESET_ID, getPreset, PRESETS } from '../engine';
+import { getSeason, type Season } from '../render/season';
 import type { Quality, StudioParams } from '../render/studio';
 
 export interface AppParams extends StudioParams {
@@ -12,10 +13,15 @@ export const presets = PRESETS;
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
-export function paramsFromPreset(id: string): AppParams {
+export function paramsFromPreset(id: string, season: Season = 'summer'): AppParams {
   const preset = getPreset(id);
   const p = preset.params;
+  const s = getSeason(season);
+  // A conifer keeps its needles through the winter; everything else does not.
+  const evergreen = p.leafShape === 1;
+  const blossom = p.flowerDensity ?? 0;
   return {
+    season,
     presetId: preset.id,
 
     axiom: preset.axiom,
@@ -31,9 +37,11 @@ export function paramsFromPreset(id: string): AppParams {
 
     leafScale: p.leafScale,
     leafShape: p.leafShape,
-    leafDensity: 1,
+    leafDensity: evergreen ? s.needleDensity : s.leafDensity,
 
-    flowerDensity: p.flowerDensity ?? 0,
+    // Spring puts blossom on a species that carries none by default; autumn and
+    // winter take it off one that does.
+    flowerDensity: evergreen ? blossom * s.blossom : Math.max(blossom * s.blossom, s.blossomFloor),
     flowerSize: p.flowerSize ?? 1,
     flowerColor: hex(preset.palette.flowerColor ?? 0xf6d9e8),
     flowerCore: hex(preset.palette.flowerCore ?? 0xf2c455),
@@ -48,17 +56,19 @@ export function paramsFromPreset(id: string): AppParams {
 
     barkDetail: 0.55,
     moss: 0.4,
-    autumn: 0,
-    translucency: 1,
+    autumn: s.autumn,
+    translucency: s.translucency,
+    snow: s.snow,
+    leafFall: s.leafFall,
 
-    wind: 0.35 * p.windiness,
+    wind: 0.35 * p.windiness * s.wind,
     windSpeed: 1,
     windDirection: 35,
-    sunElevation: 17,
+    sunElevation: s.sunElevation,
     sunAzimuth: 140,
-    sunIntensity: 5,
-    skyLight: 1,
-    haze: 0.26,
+    sunIntensity: s.sunIntensity,
+    skyLight: s.skyLight,
+    haze: s.haze,
     exposure: 1,
 
     bloom: 0.5,
@@ -94,6 +104,20 @@ export const STRUCTURAL_KEYS = [
   'barkDetail',
 ] as const satisfies readonly (keyof AppParams)[];
 
-export function applyPreset(id: string): void {
-  Object.assign(params, paramsFromPreset(id));
+export function applyPreset(id: string, season: Season = params.season): void {
+  Object.assign(params, paramsFromPreset(id, season));
+}
+
+/**
+ * Switch season without losing the species.
+ *
+ * Everything a season touches is rewritten from the preset rather than nudged
+ * from where it is, so Spring → Winter → Spring lands back exactly on Spring.
+ * The price is that hand-tuned foliage and sky settings are lost when the
+ * season changes — which is the same bargain picking a species already makes,
+ * and the alternative is a scene that drifts a little further from every season
+ * each time you cycle through them.
+ */
+export function applySeason(season: Season): void {
+  Object.assign(params, paramsFromPreset(params.presetId, season));
 }

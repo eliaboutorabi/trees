@@ -28,7 +28,7 @@ export function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial 
     thickenBase: 0.4,
     flutter: true,
     radial: u.flowerSize.mul(vary.mul(0.3).add(0.85)).mul(keep),
-  });
+  }).position;
 
   // Petals pale toward the tip and the throat carries the stamens' colour.
   const throat = smoothstep(0.42, 0.02, st.y);
@@ -103,7 +103,7 @@ export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): Fruit
     flutter: true,
     // Fruit ripens later than it sets, so size still eases in with growth.
     radial: u.fruitSize.mul(vary.mul(0.36).add(0.82)).mul(keep),
-  });
+  }).position;
 
   /*
    * Knocked loose.

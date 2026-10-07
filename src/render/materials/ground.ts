@@ -102,6 +102,11 @@ export function createGroundMaterial() {
      */
     snowStart: uniform(104),
     snowEnd: uniform(168),
+    /**
+     * Snow down here, where the tree is, 0–1. Separate from the altitude band
+     * above: that one is a permanent feature of the range, this one is weather.
+     */
+    snowCover: uniform(0),
   };
 
   const material = new MeshStandardNodeMaterial();
@@ -177,7 +182,12 @@ export function createGroundMaterial() {
   // never settle, so it is gated on slope as well, and the line itself is
   // pushed around by the macro noise so it is not a perfect contour.
   const altitude = smoothstep(uniforms.snowStart, uniforms.snowEnd, p.y.add(region.sub(0.5).mul(26)));
-  const snowMask = altitude.mul(smoothstep(0.62, 0.24, slope));
+  // Snow settles on what is flat enough to hold it, and the macro noise ragged
+  // the edge so a half-covered field breaks up into drifts and bare patches
+  // instead of fading evenly to white.
+  const lying = smoothstep(0.55, 0.12, slope);
+  const drifts = uniforms.snowCover.mul(1.35).sub(patch.mul(0.3)).sub(detail.mul(0.12)).clamp(0, 1);
+  const snowMask = altitude.mul(smoothstep(0.62, 0.24, slope)).max(lying.mul(drifts));
   const surface = mix(bedrock, uniforms.snow, snowMask);
 
   // Macro variation: a very low frequency tint, warm on the highs and cool in
@@ -220,7 +230,10 @@ export function createGroundMaterial() {
   // haze into the albedo and then lighting the result makes distant geometry
   // *brighter* the hazier it gets, which is how a treeline ends up glowing.
   // `scene.fogNode` runs on the shaded output instead. See `aerialPerspective`.
-  material.colorNode = surface.mul(shade).mul(tint);
+  // The macro tint is what gives bare ground its variation; snow has none of
+  // it, so it is eased out where the cover is complete or the field goes
+  // blotchy green-and-white.
+  material.colorNode = surface.mul(mix(shade, float(1), snowMask)).mul(mix(tint, vec3(1, 1, 1), snowMask));
   // Dry grass and bare soil catch a little more light than lush growth does.
   material.roughnessNode = float(0.97)
     .sub(dryness.mul(0.12))

@@ -68,7 +68,11 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
   // Shrinking first rather than cutting straight to nothing is what makes the
   // transition invisible: overdraw falls off gradually and there is no pop.
   const clumpDist = cameraPosition.sub(positionWorld).length();
-  const lod = smoothstep(fadeEnd, fadeStart, clumpDist);
+  // Snow buries the sward rather than painting it: the blades shrink into it
+  // and only the tips that are still clear of the drift keep swaying. Whitening
+  // full-height grass instead gives a white shag carpet, not a snowfield.
+  const buried = u.snow.mul(0.93);
+  const lod = smoothstep(fadeEnd, fadeStart, clumpDist).mul(buried.oneMinus());
 
   if (sway > 0) {
     // Instance index is the only per-instance value available without spending
@@ -87,7 +91,7 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
     // Folding the LOD factor into the sway means a clump that is nearly gone
     // also stops moving, so the trig result is thrown away rather than paid for
     // twice.
-    const lean = gust.mul(u.wind).mul(sway).mul(t.mul(t).mul(0.65).add(t.mul(0.35))).mul(lod);
+    const lean = gust.mul(u.wind).mul(sway).mul(t.mul(t).mul(0.65).add(t.mul(0.35))).mul(lod).mul(buried.oneMinus());
     const dir = u.windDir.normalize();
     material.positionNode = vec3(
       positionLocal.x.add(dir.x.mul(lean).mul(positionLocal.y)),
@@ -100,7 +104,8 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
 
   // Root-to-tip occlusion. `instanceColor` is multiplied in automatically by
   // the node material, so per-clump tint still comes through.
-  material.colorNode = vec3(1).mul(mix(rootShade, 1, t.pow(0.75)));
+  // What is left above the snow is capped with it.
+  material.colorNode = mix(vec3(1).mul(mix(rootShade, 1, t.pow(0.75))), u.snowColor, u.snow.mul(t.mul(0.4).add(0.6)).mul(0.9));
 
   return material;
 }
