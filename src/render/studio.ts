@@ -180,6 +180,8 @@ export class TreeStudio {
   // see `updateHover`.
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
+  private readonly lastPointer = new Vector2();
+  private dragging = false;
   private pointerInside = false;
   private readonly hoverPoint = new Vector3(0, -1000, 0);
   private readonly hoverTarget = new Vector3(0, -1000, 0);
@@ -490,7 +492,12 @@ export class TreeStudio {
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
+    // Arriving from outside is not a sweep across the canvas.
+    if (!this.pointerInside) this.lastPointer.copy(this.pointer);
     this.pointerInside = true;
+    // A held button is the camera being orbited, which moves the pointer fast
+    // and the tree not at all.
+    this.dragging = event.buttons !== 0;
   };
 
   private readonly onPointerLeave = (): void => {
@@ -566,9 +573,13 @@ export class TreeStudio {
     // it; and against a tighter radius than the foliage uses, so what falls is
     // what you were pointing at.
     if (this.hoverStrength > 0.6) this.tree.knockFruit(this.hoverPoint, reach * 0.62);
-    // Leaves come away more readily than fruit, and over a wider patch: a hand
-    // pushed into an autumn canopy takes a handful with it, not one leaf.
-    if (this.hoverStrength > 0.45) this.tree.shakeLeaves(this.hoverPoint, reach * 0.95);
+    // Rustling, not touching: how hard the canopy is shaken follows how fast
+    // the pointer is moving through it, so a hand resting on the tree brings
+    // down the odd leaf and a brisk sweep brings down a shower.
+    const motion = this.pointer.distanceTo(this.lastPointer) / Math.max(dt, 1e-3);
+    this.lastPointer.copy(this.pointer);
+    const rustle = this.dragging ? 0 : MathUtils.clamp(motion / 1.6, 0, 1);
+    this.tree.shakeLeaves(this.hoverStrength * (0.12 + 0.88 * rustle));
   }
 
   private frame(timeMs: number): void {

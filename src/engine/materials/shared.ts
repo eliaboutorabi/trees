@@ -40,20 +40,28 @@ import type Node from 'three/src/nodes/core/Node.js';
 export type TreeUniforms = ReturnType<typeof createTreeUniforms>;
 
 /**
- * Resolution of the leaf-litter grid.
+ * The leaf release queue.
  *
- * Shaking a tree has to be remembered, and per-leaf state is not affordable:
- * at 26,000 leaves a float each is 416KB padded, several times over what a
- * uniform buffer is guaranteed to hold. So the canopy is divided into cells and
- * the fall time is stored per *cell* — 896 floats, 14KB — which the shader reads
- * through the leaf's own anchor. Shaking a branch sheds the cluster around it,
- * which is what shaking a branch does; a per-leaf delay inside each cell keeps
- * them from leaving in lockstep.
+ * Every leaf has its own place in a queue — a hash of its seed, so the queue
+ * runs in no spatial order at all — and the tree sheds at a *rate*: a trickle
+ * in still air, more in each gust, more again while something is rustling the
+ * crown. The host accumulates that rate into the fraction of the canopy that
+ * has let go, and records the moment the running total passed each bucket of
+ * the queue. A leaf looks its bucket up and falls from that moment.
  *
- * The cell index is a pure function of position, so no attribute carries it.
+ * So leaves come away from all over the crown, a few at a time, and how many
+ * depends on how hard the tree is being moved rather than on where the pointer
+ * happened to be. The first version did the opposite — it stamped a region of
+ * the canopy and dropped every leaf in it — and a touch punched a hole in the
+ * crown and emptied it in one clump.
+ *
+ * 8,192 buckets is about two leaves each at full density. They are stored four
+ * to a vec4 because a uniform buffer pads every element to sixteen bytes: as
+ * plain floats the same table is 128KB, twice what a uniform buffer is
+ * guaranteed to hold, while packed it is 32KB.
  */
-export const LEAF_GRID = { x: 8, y: 14, z: 8 } as const;
-export const LEAF_GRID_CELLS = LEAF_GRID.x * LEAF_GRID.y * LEAF_GRID.z;
+export const LEAF_RELEASE_SLOTS = 2048;
+export const LEAF_RELEASE_BUCKETS = LEAF_RELEASE_SLOTS * 4;
 
 // `attribute()` infers its node type from the argument, which widens to
 // `string` and loses every operator. Pinning the type parameter keeps the
@@ -101,12 +109,6 @@ export function createTreeUniforms() {
     snowfall: uniform(0),
     /** Fraction of the meadow still in flower, and carrying butterflies. */
     meadowBloom: uniform(1),
-    /**
-     * The leaf-litter grid: corner, and the reciprocal of one cell's size. Set
-     * on rebuild from the canopy's own bounds, so the cells scale with the tree.
-     */
-    leafGridMin: uniform(new Vector3(-4, 0, -4)),
-    leafGridInvCell: uniform(new Vector3(1, 1, 1)),
     /** What a leaf dries to: on the ground, or still clinging on in December. */
     litterColor: uniform(new Color(0x6b4a24)),
     /** How far past turning the leaves still on the tree have gone, 0–1. */

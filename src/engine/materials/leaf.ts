@@ -14,17 +14,19 @@ import {
   normalWorld,
   positionLocal,
   positionWorld,
-  sin,
   smoothstep,
   step,
   uniformArray,
   uv,
   vec3,
+  vec4,
 } from 'three/tsl';
+import type { Vector4 } from 'three';
+import type Node from 'three/src/nodes/core/Node.js';
 import {
   growthPosition,
   hoverAt,
-  LEAF_GRID,
+  LEAF_RELEASE_BUCKETS,
   rotateAboutAxis,
   treeParams,
   vec3Attribute,
@@ -34,25 +36,35 @@ import {
 export interface LeafMaterial {
   material: MeshStandardNodeMaterial;
   /**
-   * Push the litter grid to the GPU. Same hand-rolled sync the fruit needs, and
-   * for the same reason — see `createFruitMaterial`.
+   * Push the release queue to the GPU. Same hand-rolled sync the fruit needs,
+   * and for the same reason — see `createFruitMaterial`.
    */
   syncFall(): boolean;
 }
 
-/** Metres per second. A leaf reaches terminal velocity almost at once, so this
- *  is a speed and not an acceleration: leaves that accelerate like fruit read
- *  as wet paper, which is the single thing that gives falling foliage away. */
-const DESCENT = 1.15;
-/** Where a leaf comes to rest. Just clear of the ground so it is not z-fighting. */
-const LITTER_Y = 0.02;
+/**
+ * Metres per second, on average. A leaf reaches terminal velocity almost at
+ * once, so this is a speed and not an acceleration: leaves that accelerate like
+ * fruit read as wet paper. Each leaf varies around it by ±30%, because a shower
+ * that all falls at one speed descends as a sheet.
+ */
+const DESCENT = 1.0;
+/** Where a leaf comes to rest — clear of the ground by more than its flattened thickness. */
+const LITTER_Y = 0.035;
+/** How far one unit of wind carries a leaf, in metres per second. */
+const WIND_CARRY = 2.4;
+/** Seconds over which the leaves sharing a bucket of the release queue come away. */
+const RELEASE_SPREAD = 0.45;
+
+type FloatNode = Node<'float'>;
+type Vec4Node = Node<'vec4'>;
 
 /**
- * @param fallGrid One slot per canopy cell: the clock reading when that cell
- *   was shaken, or -1 while its leaves are still attached. `LEAF_GRID_CELLS`
- *   long; see the note on `LEAF_GRID` for why the state is per cell.
+ * @param releaseTimes The release queue: when the tree's running shed passed
+ *   each bucket, or -1 for buckets it has not reached. `LEAF_RELEASE_SLOTS`
+ *   long, four buckets to a slot. See `LEAF_RELEASE_SLOTS`.
  */
-export function createLeafMaterial(u: TreeUniforms, fallGrid: number[]): LeafMaterial {
+export function createLeafMaterial(u: TreeUniforms, releaseTimes: Vector4[]): LeafMaterial {
   const material = new MeshStandardNodeMaterial();
   material.side = DoubleSide;
   const st = uv();
@@ -71,64 +83,119 @@ export function createLeafMaterial(u: TreeUniforms, fallGrid: number[]): LeafMat
     radial,
   });
 
-  /*
-   * Shaken loose.
-   *
-   * The leaf reads its cell out of the litter grid and falls from the moment
-   * that cell was shaken, staggered by its own seed so a cluster comes away
-   * over about half a second rather than all at once.
-   *
-   * Everything about the descent is the opposite of the fruit's. Fruit
-   * accelerates, drops plumb and lands where it was hanging; a leaf is at
-   * terminal velocity within its own length, see-saws about its long axis the
-   * whole way down, and ends up metres downwind. Giving leaves the fruit's
-   * parabola is what makes them read as something heavy painted to look like a
-   * leaf.
-   */
+  // ---------------------------------------------------------- letting go
+  //
+  // The leaf's place in the queue is a hash of its seed, so neighbours are
+  // nowhere near each other in line and the crown thins evenly all over. The
+  // bucket's release time comes out of a packed vec4 by a one-hot dot product,
+  // which is how a dynamic lane index is taken without a branch.
   const center = vec3Attribute('aCenter');
-  const cellMax = vec3(LEAF_GRID.x - 1, LEAF_GRID.y - 1, LEAF_GRID.z - 1);
-  const cell = center.sub(u.leafGridMin).mul(u.leafGridInvCell).floor().clamp(vec3(0, 0, 0), cellMax);
-  const cellIndex = cell.y.mul(LEAF_GRID.z).add(cell.z).mul(LEAF_GRID.x).add(cell.x);
-  // Same cast as the fruit's: `element()` loses the scalar-ness of 'float'.
-  const fallArray = uniformArray(fallGrid, 'float');
-  const shaken = fallArray.element(cellIndex.toInt()) as unknown as ReturnType<typeof float>;
+  const order = seed.mul(431.71).fract();
+  const queued = order.mul(LEAF_RELEASE_BUCKETS);
+  const bucket = queued.floor();
+  const slot = bucket.div(4).floor();
+  const lane = bucket.sub(slot.mul(4));
+  const releaseArray = uniformArray(releaseTimes, 'vec4');
+  // `element()` loses the element type on the way out; assert it back.
+  const four = releaseArray.element(slot.toInt()) as unknown as Vec4Node;
+  const pick = vec4(
+    float(1).sub(step(0.5, lane)),
+    step(0.5, lane).sub(step(1.5, lane)),
+    step(1.5, lane).sub(step(2.5, lane)),
+    step(2.5, lane),
+  );
+  const released = four.dot(pick);
+  const letGo = released.add(queued.fract().mul(RELEASE_SPREAD));
+  const loose = step(0, released).mul(step(letGo, u.fallClock));
 
-  const letGo = shaken.add(seed.mul(0.55));
-  const loose = step(0, shaken).mul(step(letGo, u.fallClock));
-  const landsAt = center.y.sub(LITTER_Y).max(0).div(DESCENT);
+  // Three more decorrelated draws, for the leaf's own way of falling.
+  const r1 = seed.mul(53.17).fract();
+  const r2 = seed.mul(91.33).fract();
+  const r3 = seed.mul(17.71).fract();
+
+  const speed = float(DESCENT).mul(r1.mul(0.6).add(0.7));
+  const landsAt = center.y.sub(LITTER_Y).max(0).div(speed);
   const age = u.fallClock.sub(letGo).max(0).min(landsAt);
 
   /*
    * The leaf leaves from where it was drawn and settles where still air would
    * have put it — `settle` carries it from the swaying pivot to the fixed
    * anchor, and from the fluttering blade to the rest blade, over the first
-   * half second. Without that first half a leaf detaches with a jerk on a windy
-   * preset; without the second, a leaf lying on the ground goes on flapping in
-   * time with a tree it is no longer attached to.
+   * half second. Every other motion below starts from zero and is scaled in by
+   * the same ramp, so nothing pops at the moment of release.
    */
   const settle = smoothstep(0, 0.5, age);
+  const aloft = smoothstep(0, 0.6, landsAt.sub(age));
+  const landed = aloft.oneMinus();
   const anchor = mix(pivot, center, settle);
   const blade = mix(hanging.sub(pivot), positionLocal.sub(center).mul(radial), settle);
 
-  const wind = vec3(u.windDir.x, 0, u.windDir.y).normalize();
-  // Side to side across the line of fall, which is what a falling leaf does;
-  // drifting only downwind gives a shower of darts.
-  const across = vec3(wind.z, 0, wind.x.negate());
-  const swing = sin(age.mul(2.3).add(seed.mul(37.0))).mul(0.38);
-  const drift = wind.mul(u.wind.mul(0.9).add(0.25)).mul(age.mul(0.55));
-  const descent = vec3(0, age.mul(DESCENT), 0);
+  /*
+   * Carried by the wind — the same wind the tree is swaying in.
+   *
+   * The branches are driven by `0.38 + 0.62·gust`, where the gust is a sum of
+   * three sines in time. A leaf in that air drifts at a speed proportional to
+   * it, so its displacement is the *integral* of the drive over its flight,
+   * and the integral of a sum of sines is a sum of cosines: closed form, no
+   * state, exact for any frame rate. So leaves surge downwind in exactly the
+   * gusts that bend the crown, hang almost still in the lulls between them,
+   * and a high leaf, longer in the air, is carried further than a low one.
+   *
+   * Taken over a fixed window — release to release-plus-age, with age frozen
+   * at touchdown — so a leaf lying in the grass is not slid along by gusts that
+   * blow after it has landed.
+   */
+  const windDir = vec3(u.windDir.x, 0, u.windDir.y).normalize();
+  const across = vec3(windDir.z, 0, windDir.x.negate());
+  const ws = u.windSpeed.max(0.05);
+  const gustIntegral = (t: FloatNode): FloatNode => {
+    const c = t.mul(ws);
+    return c
+      .cos()
+      .mul(-0.5)
+      .sub(c.mul(1.63).add(1.3).cos().mul(0.3 / 1.63))
+      .sub(c.mul(0.37).cos().mul(0.2 / 0.37))
+      .div(ws);
+  };
+  const driveRun = age.mul(0.38).add(gustIntegral(letGo.add(age)).sub(gustIntegral(letGo)).mul(0.62));
+  const catchesWind = r2.mul(0.8).add(0.6);
+  const carried = windDir.mul(u.wind.mul(WIND_CARRY).mul(catchesWind).mul(driveRun));
 
-  const spinAxis = vec3(seed.mul(19.0).sin(), 0.28, seed.mul(5.0).cos()).normalize();
-  const tumbled = rotateAboutAxis(blade, spinAxis, age.mul(seed.mul(2.1).add(1.5)));
+  // Turbulence. The air under a canopy is not a steady stream, so each leaf
+  // also wanders on two slow incommensurate sines of its own, across the wind
+  // and along it, by more the windier it is. Offset by their starting value so
+  // they begin at zero.
+  const stir = u.wind.mul(0.9).add(0.22);
+  const phaseA = r1.mul(6.283);
+  const phaseB = r3.mul(6.283);
+  const wanderA = age.mul(r3.mul(0.5).add(0.55)).add(phaseA).sin().sub(phaseA.sin());
+  const wanderB = age.mul(r2.mul(0.4).add(0.4)).add(phaseB).sin().sub(phaseB.sin());
+  const wander = across.mul(wanderA).add(windDir.mul(wanderB.mul(0.6))).mul(stir).mul(0.75);
 
-  // Flattened onto the ground over the last third of a second. Squashing the
-  // blade's own vertical extent lays it down whatever angle it was tumbling
-  // through, which a rotation to horizontal could not do without knowing that
-  // angle.
-  const landed = smoothstep(landsAt.sub(0.3), landsAt, age);
-  const lying = vec3(tumbled.x, tumbled.y.mul(mix(float(1), float(0.08), landed)), tumbled.z);
+  /*
+   * The see-saw. A falling leaf glides one way, stalls, tips, and glides back —
+   * a pendulum about a horizontal axis of its own. It rises a little at the end
+   * of each glide (twice per period, hence the doubled phase), and rocks as it
+   * goes, tilted hardest mid-glide. The rise is faded out before touchdown so
+   * the landing height stays exact.
+   */
+  const swingDir = vec3(phaseB.cos(), 0, phaseB.sin());
+  const swingRate = r1.mul(1.5).add(2.1);
+  const swingPhase = age.mul(swingRate).add(r2.mul(6.283));
+  const glide = swingDir.mul(swingPhase.sin().mul(r3.mul(0.22).add(0.2))).mul(settle);
+  const rise = swingPhase.mul(2).cos().oneMinus().mul(0.05).mul(settle).mul(aloft);
 
-  const fallen = anchor.sub(descent).add(across.mul(swing)).add(drift).add(lying);
+  const rockAxis = vec3(swingDir.z.negate(), 0, swingDir.x);
+  const yawed = rotateAboutAxis(blade, vec3(0, 1, 0), age.mul(r2.sub(0.5).mul(2.4)));
+  const rocked = rotateAboutAxis(yawed, rockAxis, swingPhase.cos().mul(0.7).mul(settle).mul(aloft));
+
+  // Laid down over the last moments of the fall. Squashing the blade's own
+  // vertical extent lays it flat whatever angle it was tumbling through, which
+  // a rotation to horizontal could not do without knowing that angle.
+  const lying = vec3(rocked.x, rocked.y.mul(mix(float(1), float(0.08), landed)), rocked.z);
+
+  const descent = vec3(0, age.mul(speed).sub(rise), 0);
+  const fallen = anchor.sub(descent).add(glide).add(wander).add(carried).add(lying);
   material.positionNode = mix(hanging, fallen, loose);
 
   // Veins: a bright midrib plus a fan of laterals.
@@ -208,7 +275,7 @@ export function createLeafMaterial(u: TreeUniforms, fallGrid: number[]): LeafMat
   return {
     material,
     syncFall: () => {
-      const node = fallArray as unknown as { value: Float32Array | null; update(): void };
+      const node = releaseArray as unknown as { value: Float32Array | null; update(): void };
       if (node.value === null) return false;
       node.update();
       return true;
