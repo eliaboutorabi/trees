@@ -27,6 +27,7 @@ import {
   growthPosition,
   hoverAt,
   LEAF_RELEASE_BUCKETS,
+  MAX_GUESTS,
   rotateAboutAxis,
   treeParams,
   vec3Attribute,
@@ -40,6 +41,8 @@ export interface LeafMaterial {
    * and for the same reason — see `createFruitMaterial`.
    */
   syncFall(): boolean;
+  /** Push the guests to the GPU. */
+  syncGuests(): boolean;
 }
 
 /**
@@ -64,7 +67,11 @@ type Vec4Node = Node<'vec4'>;
  *   each bucket, or -1 for buckets it has not reached. `LEAF_RELEASE_SLOTS`
  *   long, four buckets to a slot. See `LEAF_RELEASE_SLOTS`.
  */
-export function createLeafMaterial(u: TreeUniforms, releaseTimes: Vector4[]): LeafMaterial {
+export function createLeafMaterial(
+  u: TreeUniforms,
+  releaseTimes: Vector4[],
+  guests: Vector4[],
+): LeafMaterial {
   const material = new MeshStandardNodeMaterial();
   material.side = DoubleSide;
   const st = uv();
@@ -77,11 +84,46 @@ export function createLeafMaterial(u: TreeUniforms, releaseTimes: Vector4[]): Le
   // thinning does not also bias the colour and flutter variation.
   const keep = step(rawSeed.mul(97.31).fract(), u.leafCull);
   const radial = u.leafSize.mul(keep);
-  const { position: hanging, pivot } = growthPosition(u, {
+  const { position: swaying, pivot } = growthPosition(u, {
     thickenBase: 0.5,
     flutter: true,
     radial,
   });
+
+  /*
+   * Making room.
+   *
+   * A crown is a shell of leaves right out to its edge — every twig ends in
+   * them — so anything sitting on a twig is behind foliage from everywhere the
+   * camera goes. A bird deals with that by pushing into the leaves, and so do
+   * these: each guest clears a capsule from where it sits out toward the open
+   * air, and the leaves in it fold back toward their stems and lean out of the
+   * way. Measured at the leaf's pivot, so a leaf moves as one piece.
+   *
+   * Unrolled over a fixed number of guests rather than looped: an empty slot
+   * has a radius of zero and contributes nothing, and there is no branch to
+   * diverge on.
+   */
+  const guestArray = uniformArray(guests, 'vec4');
+  let clear: FloatNode = float(0);
+  let shove: Node<'vec3'> = vec3(0, 0, 0);
+  for (let g = 0; g < MAX_GUESTS; g++) {
+    const guest = guestArray.element(g) as unknown as Vec4Node;
+    const seat = vec3(guest.x, guest.y, guest.z);
+    const r = guest.w;
+    // Out of the crown, and a little up: where the window has to open.
+    const outward = vec3(guest.x, 0.35, guest.z).normalize();
+    const reach = 0.85;
+    const toLeaf = pivot.sub(seat);
+    const along = toLeaf.dot(outward).clamp(0, reach);
+    const off = toLeaf.sub(outward.mul(along));
+    const d2 = off.dot(off);
+    const near = float(1).sub(d2.div(r.mul(r).max(1e-4))).max(0);
+    const w = near.mul(near).mul(step(0.001, r));
+    clear = clear.max(w);
+    shove = shove.add(off.div(d2.sqrt().max(0.02)).mul(w));
+  }
+  const hanging = pivot.add(swaying.sub(pivot).mul(clear.mul(0.75).oneMinus())).add(shove.mul(0.22));
 
   // ---------------------------------------------------------- letting go
   //
@@ -272,8 +314,16 @@ export function createLeafMaterial(u: TreeUniforms, releaseTimes: Vector4[]): Le
     // Nothing shines through a leaf lying face down in the grass.
     .mul(loose.mul(0.85).oneMinus());
 
+  const syncArray = (a: unknown) => {
+    const node = a as { value: Float32Array | null; update(): void };
+    if (node.value === null) return false;
+    node.update();
+    return true;
+  };
+
   return {
     material,
+    syncGuests: () => syncArray(guestArray),
     syncFall: () => {
       const node = releaseArray as unknown as { value: Float32Array | null; update(): void };
       if (node.value === null) return false;

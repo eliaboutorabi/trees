@@ -24,7 +24,14 @@ import type { Palette, Preset } from './lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
 import { createLeafMaterial } from './materials/leaf';
 import { createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
-import { createTreeUniforms, LEAF_RELEASE_BUCKETS, LEAF_RELEASE_SLOTS, type TreeUniforms } from './materials/shared';
+import {
+  createTreeUniforms,
+  LEAF_RELEASE_BUCKETS,
+  LEAF_RELEASE_SLOTS,
+  MAX_GUESTS,
+  type TreeUniforms,
+} from './materials/shared';
+import { findPerches, type Perch } from './perches';
 import { buildTreeGeometry, type FruitSite } from './treeGeometry';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
@@ -173,6 +180,10 @@ export class Tree {
   private shakeEnergy = 0;
   /** Set by the season. Leaves only come off a tree that is ready to drop them. */
   private shedding = 0;
+  /** Things sitting in the crown, as xyz + radius. See `setGuests`. */
+  private readonly guests: Vector4[] = Array.from({ length: MAX_GUESTS }, () => new Vector4(0, 0, 0, 0));
+  private readonly syncGuests: () => boolean;
+  private guestsDirty = false;
 
   /** What the current mesh was baked at, so live sliders can express a ratio. */
   private bakedTrunkRadius = 1;
@@ -180,15 +191,18 @@ export class Tree {
 
   height = 0;
   radius = 0;
+  /** Branches something small could sit on. Rebuilt with the tree. */
+  perches: Perch[] = [];
 
   constructor(options: TreeOptions = {}) {
     this.options = { ...DEFAULTS, ...options };
     this.uniforms = createTreeUniforms();
     this.fallTimes = new Array(this.options.maxOrnaments).fill(-1);
     this.bark = createBarkMaterial(this.uniforms);
-    const foliage = createLeafMaterial(this.uniforms, this.releaseTimes);
+    const foliage = createLeafMaterial(this.uniforms, this.releaseTimes, this.guests);
     this.foliage = foliage.material;
     this.syncLeafFall = foliage.syncFall;
+    this.syncGuests = foliage.syncGuests;
     this.flower = createFlowerMaterial(this.uniforms);
     const fruit = createFruitMaterial(this.uniforms, this.fallTimes);
     this.fruit = fruit.material;
@@ -246,6 +260,7 @@ export class Tree {
 
     // A new tree starts with its leaves on.
     this.regrowLeaves();
+    this.perches = findPerches(build.skeleton);
 
     return {
       ...build,
@@ -271,6 +286,7 @@ export class Tree {
     if (this.fallDirty && this.syncFall()) this.fallDirty = false;
     this.advanceShed(dt);
     if (this.releaseDirty && this.syncLeafFall()) this.releaseDirty = false;
+    if (this.guestsDirty && this.syncGuests()) this.guestsDirty = false;
   }
 
   /**
@@ -324,6 +340,23 @@ export class Tree {
     this.shakeEnergy = Math.min(1, Math.max(this.shakeEnergy, amount));
   }
 
+  /**
+   * Things sitting in the crown that the foliage should make room for: a
+   * perched bird, a lantern hung from a branch. Each is a point in tree space
+   * and a radius; the leaves around it fold back and lean away, opening a
+   * window from it out toward the open air. Up to `MAX_GUESTS`; pass fewer and
+   * the rest are cleared. Ease the radius in and out rather than switching it,
+   * or the leaves snap.
+   */
+  setGuests(list: readonly { x: number; y: number; z: number; radius: number }[]): void {
+    for (let i = 0; i < MAX_GUESTS; i++) {
+      const g = list[i];
+      if (g) this.guests[i].set(g.x, g.y, g.z, g.radius);
+      else this.guests[i].set(0, 0, 0, 0);
+    }
+    this.guestsDirty = true;
+  }
+
   /** Put every leaf back on the tree. */
   regrowLeaves(): void {
     for (const v of this.releaseTimes) v.set(-1, -1, -1, -1);
@@ -373,6 +406,44 @@ export class Tree {
       this.releaseDirty = true;
     }
     this.shed = after;
+  }
+
+  /**
+   * Where a point on the tree is right now, given the wind.
+   *
+   * The same two-step sway the vertex shader applies — a gust front travelling
+   * downwind, turned into a lean about the base — evaluated on the CPU against
+   * the same clock, so whatever is placed here moves with the wood under it.
+   * `flex` is the point's wind weight; `Perch.flex` carries it for perches.
+   * Leaf flutter and the pointer's parting are left out: neither moves the
+   * twigs anything would sit on.
+   */
+  swayed(x: number, y: number, z: number, flex: number, out: Vector3): Vector3 {
+    const u = this.uniforms;
+    const dir = u.windDir.value as Vector2;
+    const len = Math.hypot(dir.x, dir.y) || 1;
+    const wx = dir.x / len;
+    const wz = dir.y / len;
+
+    const t = u.fallClock.value * u.windSpeed.value;
+    const travel = (x * wx + z * wz) * 0.2;
+    const gust =
+      0.5 * Math.sin(t - travel) +
+      0.3 * Math.sin(t * 1.63 - travel * 1.7 + 1.3) +
+      0.2 * Math.sin(t * 0.37 - travel * 0.5);
+    const bend = (gust * 0.62 + 0.38) * u.wind.value * flex * u.windBend.value;
+
+    // Rodrigues about up × wind, which is (wz, 0, -wx).
+    const kx = wz;
+    const kz = -wx;
+    const c = Math.cos(bend);
+    const s = Math.sin(bend);
+    const dot = kx * x + kz * z;
+    return out.set(
+      x * c + -kz * y * s + kx * dot * (1 - c),
+      y * c + (kz * x - kx * z) * s,
+      z * c + kx * y * s + kz * dot * (1 - c),
+    );
   }
 
   /** 0 = seed, 1 = fully grown. One uniform; nothing is rebuilt. */

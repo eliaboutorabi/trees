@@ -44,9 +44,11 @@ export type { Preset, PresetParams, Palette } from './lsystem/presets';
 export { buildTreeGeometry } from './treeGeometry';
 export type { TreeGeometryOptions, TreeGeometryResult } from './treeGeometry';
 export { CanopyOcclusion } from './occlusion';
+export { findPerches } from './perches';
+export type { Perch, PerchOptions } from './perches';
 
 // Materials and the shared vertex program.
-export { createTreeUniforms, growthPosition, treeParams } from './materials/shared';
+export { createTreeUniforms, growthPosition, treeParams, MAX_GUESTS } from './materials/shared';
 export type { TreeUniforms, GrowthOptions } from './materials/shared';
 export { createBarkMaterial } from './materials/bark';
 export { createLeafMaterial } from './materials/leaf';

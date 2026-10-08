@@ -28,7 +28,6 @@ import {
   positionLocal,
   positionView,
   smoothstep,
-  time,
   uniform,
   vec2,
   vec3,
@@ -61,6 +60,12 @@ export type TreeUniforms = ReturnType<typeof createTreeUniforms>;
  * guaranteed to hold, while packed it is 32KB.
  */
 export const LEAF_RELEASE_SLOTS = 2048;
+
+/**
+ * Things sitting in the crown that the foliage makes room for — a perched
+ * bird, a lantern. Each is a point and a radius; see `Tree.setGuests`.
+ */
+export const MAX_GUESTS = 16;
 export const LEAF_RELEASE_BUCKETS = LEAF_RELEASE_SLOTS * 4;
 
 // `attribute()` infers its node type from the argument, which widens to
@@ -159,7 +164,8 @@ export function createTreeUniforms() {
     /** How far the fruit hangs below its anchor, at the baked size. */
     fruitHang: uniform(0),
     /**
-     * Seconds, advanced by the host on the same `dt` it renders with.
+     * Seconds, advanced by the host on the same `dt` it renders with. The
+     * tree's wind runs on it too, so the CPU can reproduce the sway.
      *
      * Deliberately *not* TSL's `time`. A knocked cone stores the moment it came
      * loose in a vertex attribute, and the CPU has to write a number the shader
@@ -312,7 +318,12 @@ export function growthPosition(
   const grown = mix(origin, center, extend).add(radial.mul(fill));
 
   // --------------------------------------------------------------- wind
-  const t = time.mul(u.windSpeed);
+  //
+  // On the host's clock rather than TSL's `time`, so the host can say where any
+  // point on the tree is right now — see `Tree.swayed`. That is what lets a bird
+  // sit on a twig and move with it, and it puts falling leaves in exactly the
+  // gusts the crown is bending to, since they integrate the same clock.
+  const t = u.fallClock.mul(u.windSpeed);
   const windDir = vec3(u.windDir.x, 0, u.windDir.y).normalize();
 
   // A gust front travelling downwind, so the whole tree does not pulse at once.

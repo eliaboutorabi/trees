@@ -24,6 +24,7 @@ import { createPostPipeline } from './post';
 import { ProceduralSky, sunDirection, type SkySettings } from './sky';
 import { getSeason, snowTintFor, type Season } from './season';
 import { createSnowfall } from './weather';
+import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
@@ -138,6 +139,7 @@ export class TreeStudio {
   // Wildflowers, and butterflies that perch on the ones actually placed.
   private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
   private readonly snowfall = createSnowfall(this.tree.uniforms);
+  private readonly flock = new Flock(this.tree);
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
@@ -216,6 +218,7 @@ export class TreeStudio {
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
     this.scene.add(this.snowfall);
+    this.scene.add(this.flock.mesh);
     this.scene.add(this.tree.group);
 
     this.sun.castShadow = true;
@@ -580,6 +583,9 @@ export class TreeStudio {
     this.lastPointer.copy(this.pointer);
     const rustle = this.dragging ? 0 : MathUtils.clamp(motion / 1.6, 0, 1);
     this.tree.shakeLeaves(this.hoverStrength * (0.12 + 0.88 * rustle));
+    // Birds put up with the canopy: a hand resting on the tree is tolerated,
+    // a hand moving through it is not.
+    if (this.hoverStrength > 0.6 && rustle > 0.35) this.flock.startle(this.hoverPoint);
   }
 
   private frame(timeMs: number): void {
@@ -602,6 +608,7 @@ export class TreeStudio {
     // One clock for anything the CPU and the shader both have to agree on.
     this.tree.tick(dt);
     this.updateHover(dt);
+    this.flock.update(dt);
 
     // Keep the focal plane on whatever the camera is orbiting.
     const focus = this.camera.position.distanceTo(this.controls.target);
@@ -843,6 +850,7 @@ export class TreeStudio {
     this.tree.dispose();
     this.landscape.dispose();
     this.meadow.dispose();
+    this.flock.dispose();
     this.sky.dispose();
     this.post?.dispose();
     this.controls?.dispose();
