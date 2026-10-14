@@ -26,12 +26,13 @@ import { createLeafMaterial } from './materials/leaf';
 import { createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
 import {
   createTreeUniforms,
-  LEAF_RELEASE_BUCKETS,
-  LEAF_RELEASE_SLOTS,
+  LEAF_SLOTS,
+  MAX_LEAF_IDS,
   MAX_GUESTS,
   type TreeUniforms,
 } from './materials/shared';
 import { findPerches, type Perch } from './perches';
+import { mulberry32 } from '../lib/rng';
 import { buildTreeGeometry, type FruitSite } from './treeGeometry';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
@@ -126,8 +127,20 @@ const DEFAULTS: Required<TreeOptions> = {
 
 /** Fraction of the canopy shed per second in still air, before the breeze. */
 const AMBIENT_SHED = 0.00014;
-/** Added at full rustle. */
-const SHAKE_SHED = 0.0025;
+/** Leaves a second from around the hand, at full rustle. */
+const SHAKE_LOCAL = 52;
+/** And from anywhere else in the crown, because the whole tree trembles. */
+const SHAKE_SPILL = 4;
+/** Size of the cells leaves are hashed into for picking by place. */
+const LEAF_CELL = 0.5;
+
+/** Cells are packed into one number: 1024 per axis, offset to be positive. */
+function packCell(x: number, y: number, z: number): number {
+  return ((x + 512) * 1024 + (y + 512)) * 1024 + (z + 512);
+}
+function cellKey(x: number, y: number, z: number): number {
+  return packCell(Math.floor(x / LEAF_CELL), Math.floor(y / LEAF_CELL), Math.floor(z / LEAF_CELL));
+}
 
 function toColor(target: Color, value: Color | string | number): void {
   if (value instanceof Color) target.copy(value);
@@ -163,21 +176,33 @@ export class Tree {
   private fallDirty = false;
 
   /**
-   * The leaf release queue: when the running shed passed each bucket, four
-   * buckets to a slot, -1 where it has not got to yet. See
-   * `LEAF_RELEASE_SLOTS`. Mutated in place, never replaced — its identity is
-   * baked into the foliage material.
+   * When each leaf lets go, four to a vec4, across two arrays; -1 while it
+   * holds on. Mutated in place, never replaced — their identity is baked into
+   * the foliage material. See `MAX_LEAF_IDS`.
    */
-  private readonly releaseTimes: Vector4[] = Array.from(
-    { length: LEAF_RELEASE_SLOTS },
-    () => new Vector4(-1, -1, -1, -1),
-  );
+  private readonly releaseTimes: [Vector4[], Vector4[]] = [0, 1].map(() =>
+    Array.from({ length: LEAF_SLOTS }, () => new Vector4(-1, -1, -1, -1)),
+  ) as [Vector4[], Vector4[]];
   private readonly syncLeafFall: () => boolean;
   private releaseDirty = false;
-  /** Fraction of the canopy that has let go, 0–1. Only ever rises, until regrown. */
-  private shed = 0;
-  /** How hard the crown is being rustled, 0–1, decaying when it stops. */
+  /** Where each leaf is attached, in id order, and the hash it is culled on. */
+  private leafAnchors: Float32Array = new Float32Array(0);
+  private leafKeys: Float32Array = new Float32Array(0);
+  private leafCount = 0;
+  private fallen = new Uint8Array(0);
+  /** Leaf ids hashed by cell, for finding the ones near a hand. */
+  private leafCells = new Map<number, number[]>();
+  /** Every leaf in a fixed shuffled order, for the trickle that comes from anywhere. */
+  private anywhere = new Uint32Array(0);
+  private anywhereNext = 0;
+  private ambientDebt = 0;
+  private localDebt = 0;
+  private spillDebt = 0;
+  private readonly rng = mulberry32(90211);
+  /** How hard the crown is being rustled, 0–1, decaying when it stops; and where. */
   private shakeEnergy = 0;
+  private readonly shakePoint = new Vector3();
+  private shakeRadius = 1;
   /** Set by the season. Leaves only come off a tree that is ready to drop them. */
   private shedding = 0;
   /** Things sitting in the crown, as xyz + radius. See `setGuests`. */
@@ -230,7 +255,9 @@ export class Tree {
       maxOrnaments: this.options.maxOrnaments,
       seed: params.seed,
       fruitShape: params.fruitShape,
+      leafIdCapacity: MAX_LEAF_IDS,
     });
+    this.indexLeaves(geo.leaves.anchors, geo.leaves.cullKeys);
 
     // Skin markings belong to the shape, not to a slider: a berry with apple
     // striping on it would look like neither.
@@ -326,17 +353,21 @@ export class Tree {
   }
 
   /**
-   * Rustle the crown. `amount` is how hard, 0–1; call it every frame the
-   * pointer is in the canopy, with more for faster movement.
+   * Rustle the crown around `point`, in tree space. `amount` is how hard, 0–1;
+   * call it every frame the pointer is in the canopy, with more for faster
+   * movement.
    *
-   * It raises the rate the whole tree sheds at — it does not pick leaves. Which
-   * leaves come away is the release queue's business, and the queue runs in no
-   * spatial order, so rustling one side of an autumn tree brings a scatter down
-   * from all over it, the way shaking a trunk does. Does nothing unless the
-   * season has set `leafFall`.
+   * Most of what comes down comes from within `radius` of the hand, nearest
+   * first — so shaking one side of the tree thins that side — and a little
+   * spills from anywhere in the crown, because a tree shaken on one side
+   * trembles all over. Does nothing unless the season has set `leafFall`.
    */
-  shakeLeaves(amount: number): void {
+  shakeLeaves(point: Vector3, radius: number, amount: number): void {
     if (this.shedding <= 0) return;
+    if (amount >= this.shakeEnergy * 0.5) {
+      this.shakePoint.copy(point);
+      this.shakeRadius = Math.max(0.3, radius);
+    }
     this.shakeEnergy = Math.min(1, Math.max(this.shakeEnergy, amount));
   }
 
@@ -359,26 +390,132 @@ export class Tree {
 
   /** Put every leaf back on the tree. */
   regrowLeaves(): void {
-    for (const v of this.releaseTimes) v.set(-1, -1, -1, -1);
-    this.shed = 0;
+    for (const half of this.releaseTimes) for (const v of half) v.set(-1, -1, -1, -1);
+    this.fallen.fill(0);
+    this.anywhereNext = 0;
+    this.ambientDebt = this.localDebt = this.spillDebt = 0;
     this.shakeEnergy = 0;
     this.releaseDirty = true;
   }
 
+  /** Take in the new tree's leaves: where they are, and a spatial index of them. */
+  private indexLeaves(anchors: Float32Array, keys: Float32Array): void {
+    this.leafCount = Math.min(keys.length, MAX_LEAF_IDS);
+    this.leafAnchors = anchors;
+    this.leafKeys = keys;
+    this.fallen = new Uint8Array(this.leafCount);
+
+    this.leafCells.clear();
+    for (let i = 0; i < this.leafCount; i++) {
+      const k = cellKey(anchors[i * 3], anchors[i * 3 + 1], anchors[i * 3 + 2]);
+      let list = this.leafCells.get(k);
+      if (!list) this.leafCells.set(k, (list = []));
+      list.push(i);
+    }
+
+    // Fisher–Yates, seeded, so the trickle is in no spatial order at all.
+    this.anywhere = new Uint32Array(this.leafCount);
+    for (let i = 0; i < this.leafCount; i++) this.anywhere[i] = i;
+    for (let i = this.leafCount - 1; i > 0; i--) {
+      const j = (this.rng() * (i + 1)) | 0;
+      const t = this.anywhere[i];
+      this.anywhere[i] = this.anywhere[j];
+      this.anywhere[j] = t;
+    }
+  }
+
+  /** On the tree, and not culled by the density slider. */
+  private attached(id: number): boolean {
+    return this.fallen[id] === 0 && this.leafKeys[id] < this.uniforms.leafCull.value;
+  }
+
+  private release(id: number, at: number): void {
+    this.fallen[id] = 1;
+    const slot = id >> 2;
+    const half = slot < LEAF_SLOTS ? 0 : 1;
+    this.releaseTimes[half][slot - half * LEAF_SLOTS].setComponent(id & 3, at);
+    this.releaseDirty = true;
+  }
+
+  /** The next leaf in the shuffled order that is still up there. */
+  private releaseAnywhere(at: number): boolean {
+    while (this.anywhereNext < this.leafCount) {
+      const id = this.anywhere[this.anywhereNext++];
+      if (this.attached(id)) {
+        this.release(id, at);
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
-   * Advance the running shed by one frame and stamp every bucket it passed.
+   * A leaf near the hand, nearer ones likelier. Gathers what is in reach once
+   * per frame and draws from that, accepting each draw with a falloff from the
+   * centre, so the patch that thins is round and soft-edged rather than a
+   * sphere cut out of the crown.
+   */
+  private releaseNear(near: number[], at: number): boolean {
+    const { x, y, z } = this.shakePoint;
+    const r = this.shakeRadius;
+    for (let tries = 0; tries < 16 && near.length; tries++) {
+      const k = (this.rng() * near.length) | 0;
+      const id = near[k];
+      if (!this.attached(id)) {
+        near[k] = near[near.length - 1];
+        near.pop();
+        continue;
+      }
+      const a = this.leafAnchors;
+      const d = Math.hypot(a[id * 3] - x, a[id * 3 + 1] - y, a[id * 3 + 2] - z) / r;
+      const falloff = (1 - d) * (1 - d);
+      if (this.rng() < falloff) {
+        this.release(id, at);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private gatherNear(): number[] {
+    const { x, y, z } = this.shakePoint;
+    const r = this.shakeRadius;
+    const n = Math.ceil(r / LEAF_CELL);
+    const cx = Math.floor(x / LEAF_CELL);
+    const cy = Math.floor(y / LEAF_CELL);
+    const cz = Math.floor(z / LEAF_CELL);
+    const a = this.leafAnchors;
+    const r2 = r * r;
+    const out: number[] = [];
+    for (let i = -n; i <= n; i++)
+      for (let j = -n; j <= n; j++)
+        for (let k = -n; k <= n; k++) {
+          const list = this.leafCells.get(packCell(cx + i, cy + j, cz + k));
+          if (!list) continue;
+          for (const id of list) {
+            const dx = a[id * 3] - x;
+            const dy = a[id * 3 + 1] - y;
+            const dz = a[id * 3 + 2] - z;
+            if (dx * dx + dy * dy + dz * dz < r2) out.push(id);
+          }
+        }
+    return out;
+  }
+
+  /**
+   * One frame of shedding.
    *
-   * The rate has three parts. A trickle in still air, so an autumn tree is
-   * never entirely static; more in each gust, from the same three sines the
-   * crown sways to, so leaves come off as the branches bend rather than at a
-   * steady drip; and the rustling, which decays over about half a second once
-   * the pointer stops moving. Crossing times are interpolated within the
-   * frame, so a burst of releases is spread smoothly instead of landing on
-   * frame boundaries.
+   * Three streams. A trickle from anywhere in the crown, more in each gust —
+   * the gust is the same three sines the crown sways to, so leaves come off as
+   * the branches bend. Leaves from around the hand while it is moving through
+   * the canopy. And a little spill from anywhere while it does. Each stream
+   * accrues fractional leaves and pays them out whole, at a time spread across
+   * the frame, so a burst is smooth rather than landing on frame boundaries.
    */
   private advanceShed(dt: number): void {
-    if (this.shedding <= 0 || this.shed >= 1 || dt <= 0) {
-      this.shakeEnergy *= Math.exp(-dt * 1.8);
+    const decay = Math.exp(-dt * 1.8);
+    if (this.shedding <= 0 || dt <= 0 || this.leafCount === 0) {
+      this.shakeEnergy *= decay;
       return;
     }
     const u = this.uniforms;
@@ -386,26 +523,34 @@ export class Tree {
     const t = now * u.windSpeed.value;
     const gust = 0.5 * Math.sin(t) + 0.3 * Math.sin(1.63 * t + 1.3) + 0.2 * Math.sin(0.37 * t);
     const breeze = Math.max(0, 0.38 + 0.62 * gust) * u.wind.value;
+    const visible = this.leafCount * u.leafCull.value;
+    const at = () => now - dt * this.rng();
 
-    // About two leaves a second on a full crown in a light breeze; a vigorous
-    // rustle adds forty or so — a shower, not an avalanche.
-    const rate = this.shedding * (AMBIENT_SHED * (0.35 + breeze * 2.2) + SHAKE_SHED * this.shakeEnergy);
-    this.shakeEnergy *= Math.exp(-dt * 1.8);
-
-    const before = this.shed;
-    const after = Math.min(1, before + rate * dt);
-    if (after <= before) return;
-
-    // Bucket k lets go when the running total passes the top of it, (k+1)/N.
-    const N = LEAF_RELEASE_BUCKETS;
-    const last = Math.min(N, Math.floor(after * N));
-    for (let m = Math.floor(before * N) + 1; m <= last; m++) {
-      const within = (m / N - before) / (after - before);
-      const k = m - 1;
-      this.releaseTimes[k >> 2].setComponent(k & 3, now - dt + within * dt);
-      this.releaseDirty = true;
+    // Capped, so a long frame — a tab coming back — does not dump a pile.
+    this.ambientDebt = Math.min(8, this.ambientDebt + this.shedding * AMBIENT_SHED * visible * (0.35 + breeze * 2.2) * dt);
+    while (this.ambientDebt >= 1) {
+      this.ambientDebt -= 1;
+      if (!this.releaseAnywhere(at())) break;
     }
-    this.shed = after;
+
+    const e = this.shakeEnergy * this.shedding;
+    if (e > 0.01) {
+      this.spillDebt = Math.min(8, this.spillDebt + SHAKE_SPILL * e * dt);
+      while (this.spillDebt >= 1) {
+        this.spillDebt -= 1;
+        if (!this.releaseAnywhere(at())) break;
+      }
+
+      this.localDebt = Math.min(12, this.localDebt + SHAKE_LOCAL * e * dt);
+      if (this.localDebt >= 1) {
+        const near = this.gatherNear();
+        while (this.localDebt >= 1) {
+          this.localDebt -= 1;
+          if (!this.releaseNear(near, at())) break;
+        }
+      }
+    }
+    this.shakeEnergy *= decay;
   }
 
   /**

@@ -39,34 +39,27 @@ import type Node from 'three/src/nodes/core/Node.js';
 export type TreeUniforms = ReturnType<typeof createTreeUniforms>;
 
 /**
- * The leaf release queue.
+ * When each leaf lets go — one time per leaf, -1 while it holds on.
  *
- * Every leaf has its own place in a queue — a hash of its seed, so the queue
- * runs in no spatial order at all — and the tree sheds at a *rate*: a trickle
- * in still air, more in each gust, more again while something is rustling the
- * crown. The host accumulates that rate into the fraction of the canopy that
- * has let go, and records the moment the running total passed each bucket of
- * the queue. A leaf looks its bucket up and falls from that moment.
+ * Per leaf because the host has to choose *which* leaves fall, and by place:
+ * the trickle of an autumn afternoon comes from anywhere in the crown, but a
+ * hand rustling one side of it should bring that side down. The first version
+ * dropped every leaf in a touched region at once; the second released leaves in
+ * a fixed random order, which fixed the clumping but meant a touch could only
+ * make the whole tree shed faster. Choosing leaf by leaf on the CPU, where the
+ * leaves' positions are known, does both.
  *
- * So leaves come away from all over the crown, a few at a time, and how many
- * depends on how hard the tree is being moved rather than on where the pointer
- * happened to be. The first version did the opposite — it stamped a region of
- * the canopy and dropped every leaf in it — and a touch punched a hole in the
- * crown and emptied it in one clump.
- *
- * 8,192 buckets is about two leaves each at full density. They are stored four
- * to a vec4 because a uniform buffer pads every element to sixteen bytes: as
- * plain floats the same table is 128KB, twice what a uniform buffer is
- * guaranteed to hold, while packed it is 32KB.
+ * 26,000 floats is 104KB even packed four to a vec4, and a uniform buffer is
+ * only guaranteed to hold 64KB, so the table is split across two arrays.
  */
-export const LEAF_RELEASE_SLOTS = 2048;
+export const LEAF_SLOTS = 3250;
+export const MAX_LEAF_IDS = LEAF_SLOTS * 4 * 2;
 
 /**
  * Things sitting in the crown that the foliage makes room for — a perched
  * bird, a lantern. Each is a point and a radius; see `Tree.setGuests`.
  */
 export const MAX_GUESTS = 16;
-export const LEAF_RELEASE_BUCKETS = LEAF_RELEASE_SLOTS * 4;
 
 // `attribute()` infers its node type from the argument, which widens to
 // `string` and loses every operator. Pinning the type parameter keeps the

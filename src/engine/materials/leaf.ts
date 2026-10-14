@@ -8,6 +8,7 @@
  */
 import { DoubleSide, MeshStandardNodeMaterial } from 'three/webgpu';
 import {
+  attribute,
   cameraPosition,
   float,
   mix,
@@ -26,7 +27,7 @@ import type Node from 'three/src/nodes/core/Node.js';
 import {
   growthPosition,
   hoverAt,
-  LEAF_RELEASE_BUCKETS,
+  LEAF_SLOTS,
   MAX_GUESTS,
   rotateAboutAxis,
   treeParams,
@@ -56,20 +57,18 @@ const DESCENT = 1.0;
 const LITTER_Y = 0.035;
 /** How far one unit of wind carries a leaf, in metres per second. */
 const WIND_CARRY = 2.4;
-/** Seconds over which the leaves sharing a bucket of the release queue come away. */
-const RELEASE_SPREAD = 0.45;
 
 type FloatNode = Node<'float'>;
 type Vec4Node = Node<'vec4'>;
 
 /**
- * @param releaseTimes The release queue: when the tree's running shed passed
- *   each bucket, or -1 for buckets it has not reached. `LEAF_RELEASE_SLOTS`
- *   long, four buckets to a slot. See `LEAF_RELEASE_SLOTS`.
+ * @param releaseTimes When each leaf lets go, or -1: two arrays of
+ *   `LEAF_SLOTS` vec4s, four leaves to a slot, indexed by `aLeafId`. See
+ *   `MAX_LEAF_IDS`.
  */
 export function createLeafMaterial(
   u: TreeUniforms,
-  releaseTimes: Vector4[],
+  releaseTimes: readonly [Vector4[], Vector4[]],
   guests: Vector4[],
 ): LeafMaterial {
   const material = new MeshStandardNodeMaterial();
@@ -127,28 +126,29 @@ export function createLeafMaterial(
 
   // ---------------------------------------------------------- letting go
   //
-  // The leaf's place in the queue is a hash of its seed, so neighbours are
-  // nowhere near each other in line and the crown thins evenly all over. The
-  // bucket's release time comes out of a packed vec4 by a one-hot dot product,
-  // which is how a dynamic lane index is taken without a branch.
+  // The host decides which leaves go and when, and writes the moment into the
+  // leaf's own slot. Four leaves share a vec4, picked out by a one-hot dot
+  // product, which is how a dynamic lane index is taken without a branch; the
+  // table is two arrays, picked between the same way. A leaf with no id —
+  // past the table's capacity — never falls.
   const center = vec3Attribute('aCenter');
-  const order = seed.mul(431.71).fract();
-  const queued = order.mul(LEAF_RELEASE_BUCKETS);
-  const bucket = queued.floor();
-  const slot = bucket.div(4).floor();
-  const lane = bucket.sub(slot.mul(4));
-  const releaseArray = uniformArray(releaseTimes, 'vec4');
+  const leafId = attribute<'float'>('aLeafId', 'float');
+  const slot = leafId.max(0).div(4).floor();
+  const lane = leafId.max(0).sub(slot.mul(4));
+  const second = step(LEAF_SLOTS, slot);
+  const arrays = [uniformArray(releaseTimes[0], 'vec4'), uniformArray(releaseTimes[1], 'vec4')] as const;
   // `element()` loses the element type on the way out; assert it back.
-  const four = releaseArray.element(slot.toInt()) as unknown as Vec4Node;
+  const fromFirst = arrays[0].element(slot.min(LEAF_SLOTS - 1).toInt()) as unknown as Vec4Node;
+  const fromSecond = arrays[1].element(slot.sub(LEAF_SLOTS).clamp(0, LEAF_SLOTS - 1).toInt()) as unknown as Vec4Node;
+  const four = mix(fromFirst, fromSecond, second);
   const pick = vec4(
     float(1).sub(step(0.5, lane)),
     step(0.5, lane).sub(step(1.5, lane)),
     step(1.5, lane).sub(step(2.5, lane)),
     step(2.5, lane),
   );
-  const released = four.dot(pick);
-  const letGo = released.add(queued.fract().mul(RELEASE_SPREAD));
-  const loose = step(0, released).mul(step(letGo, u.fallClock));
+  const letGo = four.dot(pick);
+  const loose = step(0, letGo).mul(step(letGo, u.fallClock)).mul(step(0, leafId));
 
   // Three more decorrelated draws, for the leaf's own way of falling.
   const r1 = seed.mul(53.17).fract();
@@ -325,10 +325,11 @@ export function createLeafMaterial(
     material,
     syncGuests: () => syncArray(guestArray),
     syncFall: () => {
-      const node = releaseArray as unknown as { value: Float32Array | null; update(): void };
-      if (node.value === null) return false;
-      node.update();
-      return true;
+      // Both, every time: `&&` would skip the second whenever the first is not
+      // built yet, and the caller retries until this returns true.
+      const a = syncArray(arrays[0]);
+      const b = syncArray(arrays[1]);
+      return a && b;
     },
   };
 }

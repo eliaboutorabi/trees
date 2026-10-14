@@ -26,6 +26,11 @@ export interface TreeGeometryOptions {
   seed?: number;
   /** 0 berry · 1 apple · 2 pine cone. */
   fruitShape?: 0 | 1 | 2;
+  /**
+   * How many leaves the host can track individually. Leaves past this get an
+   * id of -1 and simply never fall.
+   */
+  leafIdCapacity?: number;
 }
 
 /**
@@ -59,6 +64,12 @@ export interface TreeGeometryResult {
    * attachment point does, or it buries itself.
    */
   fruitHang: number;
+  /**
+   * Every leaf in the foliage mesh, in the order of its `aLeafId`: where it is
+   * attached, and the hash the density slider culls it on. Lets the host pick
+   * leaves by place — the ones near a hand — without reading the mesh back.
+   */
+  leaves: { anchors: Float32Array; cullKeys: Float32Array };
   stats: {
     branchVertices: number;
     branchTriangles: number;
@@ -218,9 +229,30 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
     }
   }
 
+  // Which leaf each foliage vertex belongs to, and the leaves' own table.
+  const capacity = opts.leafIdCapacity ?? Infinity;
+  let foliageGeo: BufferGeometry | null = null;
+  const anchors = new Float32Array(kept.length * 3);
+  const cullKeys = new Float32Array(kept.length);
+  kept.forEach((leaf, i) => {
+    anchors[i * 3] = leaf.pos.x;
+    anchors[i * 3 + 1] = leaf.pos.y;
+    anchors[i * 3 + 2] = leaf.pos.z;
+    // The same hash the leaf shader culls on: fract(rawSeed · 97.31), where a
+    // blossom's raw seed is offset by 2.
+    const raw = leaf.kind === 1 ? leaf.seed + 2 : leaf.seed;
+    cullKeys[i] = (raw * 97.31) % 1;
+  });
+  if (foliage) {
+    foliageGeo = toGeometry(foliage.buf);
+    const ids = Float32Array.from(foliage.ids, (id) => (id < capacity ? id : -1));
+    foliageGeo.setAttribute('aLeafId', new BufferAttribute(ids, 1));
+  }
+
   return {
     branches: toGeometry(branches.buf),
-    foliage: foliage ? toGeometry(foliage.buf) : null,
+    foliage: foliageGeo,
+    leaves: { anchors, cullKeys },
     flowers: flowers ? toGeometry(flowers) : null,
     fruit: fruitGeo,
     fruitSites,
@@ -1019,18 +1051,20 @@ function buildFoliage(
   blade: LeafTemplate,
   blossom: LeafTemplate,
   field: CanopyOcclusion,
-): { buf: Buffers; count: number } | null {
+): { buf: Buffers; count: number; ids: number[] } | null {
   if (kept.length === 0) return null;
 
   const buf = newBuffers();
+  const ids: number[] = [];
   const maxArc = Math.max(1e-5, skel.maxArc);
   const heightRef = Math.max(0.5, skel.height);
   const v = new Vector3();
   const nrm = new Vector3();
 
-  for (const leaf of kept) {
+  kept.forEach((leaf, id) => {
     const tpl = leaf.kind === 1 ? blossom : blade;
     const base = buf.position.length / 3;
+    for (let i = 0; i < tpl.position.length; i += 3) ids.push(id);
     const scale = leaf.scale;
     // Leaves appear just after the twig that carries them.
     const birth = Math.min(1, leaf.arc / maxArc + 0.015);
@@ -1062,7 +1096,7 @@ function buildFoliage(
     }
     for (let i = 0; i < tpl.uv.length; i++) buf.uv.push(tpl.uv[i]);
     for (let i = 0; i < tpl.index.length; i++) buf.index.push(base + tpl.index[i]);
-  }
+  });
 
-  return { buf, count: kept.length };
+  return { buf, count: kept.length, ids };
 }

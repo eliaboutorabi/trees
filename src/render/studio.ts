@@ -582,7 +582,9 @@ export class TreeStudio {
     const motion = this.pointer.distanceTo(this.lastPointer) / Math.max(dt, 1e-3);
     this.lastPointer.copy(this.pointer);
     const rustle = this.dragging ? 0 : MathUtils.clamp(motion / 1.6, 0, 1);
-    this.tree.shakeLeaves(this.hoverStrength * (0.12 + 0.88 * rustle));
+    // Wider than the parting: a hand in the crown shakes the branch it is on,
+    // and the branch is longer than the hand.
+    this.tree.shakeLeaves(this.hoverPoint, Math.max(1.3, radius * 0.5), this.hoverStrength * (0.12 + 0.88 * rustle));
     // Birds put up with the canopy: a hand resting on the tree is tolerated,
     // a hand moving through it is not.
     if (this.hoverStrength > 0.6 && rustle > 0.35) this.flock.startle(this.hoverPoint);
