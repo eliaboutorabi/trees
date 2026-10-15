@@ -24,8 +24,8 @@
   } from '@hugeicons/core-free-icons';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
-  import { applyPreset, applySeason, params, presets } from './params.svelte';
-  import { getSeason, SEASONS, type Season } from '../render/season';
+  import { applyPreset, applySeason, applyWeather, params, presets } from './params.svelte';
+  import { getSeason, getWeather, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
   import Section from './components/Section.svelte';
@@ -129,6 +129,10 @@
   }
 
   /** A season is a dressing of the same tree, so nothing is re-derived. */
+  function chooseWeather(id: Weather) {
+    applyWeather(id);
+  }
+
   function chooseSeason(id: Season) {
     applySeason(id);
     if (!studio) return;
@@ -221,6 +225,7 @@
           sunIntensity: params.sunIntensity,
           skyLight: params.skyLight,
           haze: params.haze,
+          overcast: params.overcast,
         });
         ready = true;
         doRebuild(true);
@@ -258,6 +263,8 @@
   $effect(() => {
     const look = {
       season: params.season,
+      weather: params.weather,
+      precipitation: params.precipitation,
       wind: params.wind,
       windSpeed: params.windSpeed,
       windDirection: params.windDirection,
@@ -305,6 +312,7 @@
       sunIntensity: params.sunIntensity,
       skyLight: params.skyLight,
       haze: params.haze,
+      overcast: params.overcast,
     };
     if (!ready) return;
     studio?.applySky(sky);
@@ -456,6 +464,28 @@
       </div>
       <p class="blurb">{getSeason(params.season).blurb}</p>
 
+      <div class="seasons">
+        {#each WEATHERS as w (w.id)}
+          <button
+            class="chip season"
+            class:active={w.id === params.weather}
+            onclick={() => chooseWeather(w.id)}
+            title={w.blurb || w.name}
+          >
+            {w.name}
+          </button>
+        {/each}
+      </div>
+      {#if params.weather !== 'clear'}
+        <Slider
+          label={params.weather === 'rain' ? 'Rain' : 'Snowfall'}
+          bind:value={params.precipitation}
+          min={0}
+          max={1}
+          hint={getWeather(params.weather).blurb}
+        />
+      {/if}
+
       <Section title="Form" icon={Tree01Icon} open>
         <p class="help">Controls marked ↻ re-derive the grammar — press Redraw (or <kbd>R</kbd>) to apply. Everything else is live.</p>
         <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
@@ -539,6 +569,7 @@
         <h4 class="sub"><Icon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
         <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
         <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
+        <Slider label="Cloud cover" bind:value={params.overcast} min={0} max={1} hint="Closes the sky over, and takes the sun's strength and colour with it" />
         <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
 
         <h4 class="sub"><Icon icon={SnowIcon} size={13} strokeWidth={1.6} /> Snow</h4>

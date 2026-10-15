@@ -276,7 +276,10 @@ export function createLeafMaterial(
 
   // Snow lies on the leaves still up there, not on the litter under them.
   const settled = smoothstep(0.25, 0.85, normalWorld.y.abs()).mul(u.snow).mul(loose.oneMinus()).mul(0.8);
-  material.colorNode = mix(litter.mul(shade.mul(0.78).oneMinus()), u.snowColor, settled);
+  // Wet: a touch darker, and much glossier — a rained-on canopy is full of
+  // small bright reflections of the sky.
+  const wet = litter.mul(u.wetness.mul(0.14).oneMinus());
+  material.colorNode = mix(wet.mul(shade.mul(0.78).oneMinus()), u.snowColor, settled);
   // Leaves are waxy, but not uniformly so — a cuticle varies leaf to leaf and
   // dulls in shade. One roughness for the whole canopy is most of what makes
   // foliage read as moulded plastic.
@@ -286,6 +289,7 @@ export function createLeafMaterial(
     .add(shade.mul(0.34))
     .add(margin.mul(0.12))
     .add(settled.mul(0.3))
+    .sub(u.wetness.mul(0.32))
     .clamp(0.1, 1);
   material.metalnessNode = float(0);
 

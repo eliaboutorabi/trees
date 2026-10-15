@@ -107,6 +107,14 @@ export function createTreeUniforms() {
     snowfall: uniform(0),
     /** Fraction of the meadow still in flower, and carrying butterflies. */
     meadowBloom: uniform(1),
+    /** Rain in the air, 0–1. Separate from wetness, which lags it. */
+    rainfall: uniform(0),
+    rainColor: uniform(new Color(0xc9d0d8)),
+    /**
+     * How wet every surface is, 0–1. Eased by the host: it rises over a few
+     * seconds once rain starts and takes much longer to dry off after.
+     */
+    wetness: uniform(0),
     /** What a leaf dries to: on the ground, or still clinging on in December. */
     litterColor: uniform(new Color(0x6b4a24)),
     /** How far past turning the leaves still on the tree have gone, 0–1. */

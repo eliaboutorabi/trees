@@ -91,7 +91,15 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   // snowy branch read as a branch rather than as a white tube.
   const upward = smoothstep(0.1, 0.72, normalWorld.y);
   const settled = upward.mul(u.snow).mul(height.oneMinus().mul(0.35).add(0.65)).clamp(0, 1);
-  material.colorNode = mix(weathered, u.snowColor, settled.mul(0.92));
+  /*
+   * Wet bark darkens hard — water fills the pores and the surface stops
+   * scattering — and the ridges, which drain, darken less than the furrows,
+   * which hold it. That difference is what keeps a soaked trunk from reading
+   * as a uniformly darker trunk.
+   */
+  const soaked = u.wetness.mul(height.oneMinus().mul(0.35).add(0.65));
+  const wetBark = weathered.mul(soaked.mul(0.5).oneMinus());
+  material.colorNode = mix(wetBark, u.snowColor, settled.mul(0.92));
 
   // Ridges are worn smooth by weather and handling; the crevices they shelter
   // stay rough. A single roughness over the whole surface is a large part of
@@ -101,7 +109,8 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
     .sub(twigness.mul(0.2))
     .sub(mossMask.mul(0.05))
     .add(settled.mul(0.25))
-    .clamp(0.35, 1);
+    .sub(soaked.mul(0.55))
+    .clamp(0.2, 1);
   material.metalnessNode = float(0);
   // The slider is 0–1; a screen-space height gradient is a small number, so it
   // takes a large multiplier before furrows read as depth rather than as a

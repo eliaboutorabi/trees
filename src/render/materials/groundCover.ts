@@ -105,7 +105,12 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
   // Root-to-tip occlusion. `instanceColor` is multiplied in automatically by
   // the node material, so per-clump tint still comes through.
   // What is left above the snow is capped with it.
-  material.colorNode = mix(vec3(1).mul(mix(rootShade, 1, t.pow(0.75))), u.snowColor, u.snow.mul(t.mul(0.4).add(0.6)).mul(0.9));
+  material.colorNode = mix(
+    vec3(1).mul(mix(rootShade, 1, t.pow(0.75))).mul(u.wetness.mul(0.22).oneMinus()),
+    u.snowColor,
+    u.snow.mul(t.mul(0.4).add(0.6)).mul(0.9),
+  );
+  material.roughnessNode = float(roughness).sub(u.wetness.mul(0.4));
 
   return material;
 }

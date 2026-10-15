@@ -22,8 +22,8 @@ import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
 import { createMeadow } from './meadow';
 import { createPostPipeline } from './post';
 import { ProceduralSky, sunDirection, type SkySettings } from './sky';
-import { getSeason, snowTintFor, type Season } from './season';
-import { createSnowfall } from './weather';
+import { getSeason, snowTintFor, type Season, type Weather } from './season';
+import { createRainfall, createSnowfall } from './weather';
 import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
 
@@ -33,6 +33,9 @@ export type StructureParams = TreeStructure;
 /** Uniform-only changes — applied instantly, no rebuild. */
 export interface LookParams {
   season: Season;
+  weather: Weather;
+  /** How hard it is raining or snowing, 0–1. */
+  precipitation: number;
   wind: number;
   windSpeed: number;
   windDirection: number;
@@ -91,6 +94,8 @@ export interface SkyParams {
   sunIntensity: number;
   /** Brightness of the sky itself, which is what fills the shadows. */
   skyLight: number;
+  /** Cloud cover, 0–1. Dims and greys the sun along with the sky. */
+  overcast: number;
 }
 
 export type StudioParams = StructureParams & LookParams & SkyParams & { presetId: string };
@@ -111,6 +116,9 @@ export interface StudioStats {
 }
 
 const MAX_LEAVES = 26_000;
+/** The grey the near and far distance go to under a closed sky. */
+const OVERCAST_NEAR = new Color(0xa6acb2);
+const OVERCAST_FAR = new Color(0x8f979f);
 const MAX_ORNAMENTS = 1_800;
 
 // Scratch objects for the shadow fit, which runs whenever the sun moves.
@@ -139,6 +147,10 @@ export class TreeStudio {
   // Wildflowers, and butterflies that perch on the ones actually placed.
   private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
   private readonly snowfall = createSnowfall(this.tree.uniforms);
+  private readonly rainfall = createRainfall(this.tree.uniforms);
+  /** How wet everything should be heading for; `wetness` eases toward it. */
+  private wetTarget = 0;
+  private wetness = 0;
   private readonly flock = new Flock(this.tree);
 
   private readonly sunDir = new Vector3();
@@ -218,6 +230,7 @@ export class TreeStudio {
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
     this.scene.add(this.snowfall);
+    this.scene.add(this.rainfall);
     this.scene.add(this.flock.mesh);
     this.scene.add(this.tree.group);
 
@@ -334,6 +347,11 @@ export class TreeStudio {
   applyLook(params: LookParams): void {
     this.tree.applyLook(params);
     this.applySeason(params.season);
+
+    const u = this.tree.uniforms;
+    u.snowfall.value = params.weather === 'snow' ? params.precipitation : 0;
+    u.rainfall.value = params.weather === 'rain' ? params.precipitation : 0;
+    this.wetTarget = params.weather === 'rain' ? 0.45 + 0.55 * params.precipitation : 0;
     // One slider for every surface that holds snow, so the tree, the sward and
     // the ground under them are never dressed for different weather.
     this.groundUniforms.snowCover.value = params.snow;
@@ -373,7 +391,6 @@ export class TreeStudio {
       this.tree.regrowLeaves();
     }
 
-    u.snowfall.value = season.snowfall;
     u.leafDry.value = season.leafDry;
     u.meadowBloom.value = season.meadowBloom;
     u.snowColor.value.copy(snowTintFor(id));
@@ -392,6 +409,7 @@ export class TreeStudio {
       elevation: params.sunElevation,
       azimuth: params.sunAzimuth,
       haze: params.haze,
+      overcast: params.overcast,
     };
 
     // One call, and every consumer of the sun reads the same answer: the disc
@@ -435,6 +453,13 @@ export class TreeStudio {
       .multiplyScalar(0.92 + params.haze * 0.22);
     // Snow takes the sun's colour: at golden hour a snowfield is pink, not white.
     this.groundUniforms.snow.value.copy(this.sunTint).lerp(new Color(0xffffff), 0.35);
+
+    // Under cloud the distance closes in and loses its colour: the warm band
+    // and the blue far planes both go to the grey of the cloud base.
+    const o = params.overcast;
+    this.groundUniforms.fadeDistance.value *= 1 - 0.55 * o;
+    this.groundUniforms.horizon.value.lerp(OVERCAST_NEAR, 0.75 * o);
+    this.groundUniforms.aerialFar.value.lerp(OVERCAST_FAR, 0.8 * o);
   }
 
   // --------------------------------------------------------------- growth
@@ -611,6 +636,12 @@ export class TreeStudio {
     this.tree.tick(dt);
     this.updateHover(dt);
     this.flock.update(dt);
+
+    // Things get wet in seconds and take a good while to dry.
+    const rate = this.wetTarget > this.wetness ? 1 / 6 : 1 / 45;
+    this.wetness += (this.wetTarget - this.wetness) * (1 - Math.exp(-dt * rate * 3));
+    this.tree.uniforms.wetness.value = this.wetness;
+    this.groundUniforms.wetness.value = this.wetness;
 
     // Keep the focal plane on whatever the camera is orbiting.
     const focus = this.camera.position.distanceTo(this.controls.target);
@@ -853,6 +884,10 @@ export class TreeStudio {
     this.landscape.dispose();
     this.meadow.dispose();
     this.flock.dispose();
+    for (const m of [this.snowfall, this.rainfall]) {
+      m.geometry.dispose();
+      (m.material as { dispose(): void }).dispose();
+    }
     this.sky.dispose();
     this.post?.dispose();
     this.controls?.dispose();

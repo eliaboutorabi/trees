@@ -16,6 +16,7 @@
 import { Color } from 'three';
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+export type Weather = 'clear' | 'rain' | 'snow';
 
 export interface SeasonLook {
   id: Season;
@@ -47,8 +48,8 @@ export interface SeasonLook {
   // -------------------------------------------------------------- weather
   /** Settled snow on branches, grass and ground. */
   snow: number;
-  /** Flakes in the air. */
-  snowfall: number;
+  /** What it is doing when you arrive in this season. You can change it. */
+  weather: Weather;
   /** Fraction of the meadow still in flower, and carrying butterflies. */
   meadowBloom: number;
   /** Multiplies the species' own windiness. */
@@ -84,7 +85,7 @@ export const SEASONS: readonly SeasonLook[] = [
     translucency: 1.25,
     leafDry: 0,
     snow: 0,
-    snowfall: 0,
+    weather: 'clear',
     meadowBloom: 1,
     wind: 1,
     sunElevation: 26,
@@ -111,7 +112,7 @@ export const SEASONS: readonly SeasonLook[] = [
     translucency: 1,
     leafDry: 0,
     snow: 0,
-    snowfall: 0,
+    weather: 'clear',
     meadowBloom: 1,
     wind: 1,
     sunElevation: 17,
@@ -138,7 +139,7 @@ export const SEASONS: readonly SeasonLook[] = [
     translucency: 1.35,
     leafDry: 0.12,
     snow: 0,
-    snowfall: 0,
+    weather: 'clear',
     meadowBloom: 0.3,
     wind: 1.25,
     sunElevation: 11,
@@ -165,7 +166,7 @@ export const SEASONS: readonly SeasonLook[] = [
     translucency: 0.55,
     leafDry: 0.8,
     snow: 1,
-    snowfall: 1,
+    weather: 'snow',
     meadowBloom: 0,
     wind: 1.15,
     /*
@@ -200,4 +201,54 @@ export function getSeason(id: Season): SeasonLook {
 /** Snow and winter light are faintly blue; autumn's is not. */
 export function snowTintFor(id: Season): Color {
   return new Color(id === 'winter' ? 0xe9eef7 : 0xeef1f6);
+}
+
+/**
+ * Weather, on top of a season.
+ *
+ * Rain is mostly not the rain. It is the sky closing over, the light losing its
+ * direction and its colour, the distance pulling in, and every surface going
+ * dark and glossy — the streaks are the least of it, and rain drawn into a
+ * golden-hour scene reads as a broken sprinkler. So a weather is mostly a
+ * change to the sky, and `overcast` is a real control of its own: a cloudy day
+ * without rain is just as good a choice.
+ */
+export interface WeatherLook {
+  id: Weather;
+  name: string;
+  blurb: string;
+  /** Cloud cover, 0–1. Dims and greys the sun as well as the sky. */
+  overcast: number;
+  /** Added to the season's haze: falling water is aerosol too. */
+  haze: number;
+  /** Multiplies the season's sky light. */
+  skyLight: number;
+  /** Multiplies the species' windiness. */
+  wind: number;
+}
+
+export const WEATHERS: readonly WeatherLook[] = [
+  { id: 'clear', name: 'Clear', blurb: '', overcast: 0, haze: 0, skyLight: 1, wind: 1 },
+  {
+    id: 'rain',
+    name: 'Rain',
+    blurb: 'A closed grey sky, soaked bark and splashes in the grass',
+    overcast: 0.92,
+    haze: 0.22,
+    skyLight: 0.9,
+    wind: 1.25,
+  },
+  {
+    id: 'snow',
+    name: 'Snow',
+    blurb: 'Flakes in the air; the cover itself is the Snow slider',
+    overcast: 0.45,
+    haze: 0.08,
+    skyLight: 1,
+    wind: 1,
+  },
+];
+
+export function getWeather(id: Weather): WeatherLook {
+  return WEATHERS.find((w) => w.id === id) ?? WEATHERS[0];
 }

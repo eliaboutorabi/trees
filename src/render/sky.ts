@@ -38,7 +38,17 @@ import {
   type CubeTexture,
 } from 'three';
 import { CubeRenderTarget, NodeMaterial, type WebGPURenderer } from 'three/webgpu';
-import { float, mix, normalWorldGeometry, positionWorldDirection, smoothstep, uniform } from 'three/tsl';
+import {
+  float,
+  mix,
+  mx_fractal_noise_float,
+  normalWorldGeometry,
+  positionWorldDirection,
+  smoothstep,
+  time,
+  uniform,
+  vec3,
+} from 'three/tsl';
 import type Node from 'three/src/nodes/core/Node.js';
 
 export interface SkySettings {
@@ -48,6 +58,8 @@ export interface SkySettings {
   azimuth: number;
   /** 0 clear, 1 thick haze. */
   haze: number;
+  /** 0 a clear sky, 1 a closed grey ceiling. Dims and greys the sun with it. */
+  overcast?: number;
 }
 
 /**
@@ -81,6 +93,11 @@ const HORIZON_COOL = new Color(0xa8bcd8);
 const GROUND_HAZE = new Color(0x5a4a38);
 /** What thick haze drains every sky colour toward. */
 const HAZE_GREY = new Color(0xb9bec4);
+/** The underside of rain cloud: a little blue, and darker overhead than at the horizon. */
+const CLOUD_LOW = new Color(0x9aa1a8);
+const CLOUD_HIGH = new Color(0x6f777f);
+/** What light that has come through cloud looks like — no colour of its own. */
+const DIFFUSE_WHITE = new Color(0xdfe3e8);
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
@@ -159,6 +176,10 @@ export function createSkyUniforms() {
     disc: uniform(30),
     /** Overall sky brightness, so ambient light has a control of its own. */
     intensity: uniform(1),
+    /** Cloud cover, 0–1. */
+    overcast: uniform(0),
+    cloudLow: uniform(new Color(0x9aa1a8)),
+    cloudHigh: uniform(new Color(0x6f777f)),
   };
 }
 
@@ -203,6 +224,26 @@ export function skyNode(u: SkyUniforms, direction: Vec3Node): Vec3Node {
   // A brighter line right along the horizon, which is where the most air is.
   const hug = y.abs().mul(26).negate().exp().mul(float(0.05).add(haze.mul(0.3)));
   sky = sky.add(u.horizon.mul(hug));
+
+  /*
+   * Cloud. A layer projected onto a plane overhead — dividing by the height of
+   * the ray is what makes it recede into the horizon with the right
+   * perspective, cells large overhead and crowding into a band low down — and
+   * shaded by a few octaves of noise, drifting, so a closed sky is a ceiling
+   * with weight and texture rather than a flat grey card. It also swallows the
+   * sun's halo and disc, which were added above; that is the point.
+   */
+  const plane = vec3(dir.x, 0, dir.z).div(y.max(0.045)).mul(0.42);
+  const drift = time.mul(0.012);
+  const billow = mx_fractal_noise_float(vec3(plane.x.add(drift), plane.z, drift.mul(0.4)), 4, 2.0, 0.5, 1.0);
+  const ceiling = mix(u.cloudLow, u.cloudHigh, t).mul(billow.mul(0.32).add(0.92));
+  // Patchy as it thickens: at half cover there are gaps, at full there are none.
+  const coverage = smoothstep(
+    float(0.62).sub(u.overcast.mul(0.95)),
+    float(0.9).sub(u.overcast.mul(0.55)),
+    billow.mul(0.5).add(0.5),
+  ).max(u.overcast.sub(0.75).mul(4).clamp(0, 1));
+  sky = mix(sky, ceiling, coverage.mul(smoothstep(-0.02, 0.06, y)).mul(u.overcast.mul(4).clamp(0, 1)));
 
   // Below the horizon, fade to the dusty bounce coming off the ground.
   const below = smoothstep(0, 0.35, y.negate());
@@ -265,7 +306,14 @@ export class ProceduralSky {
    */
   update(settings: SkySettings): SunLight {
     const haze = clamp01(settings.haze);
+    const overcast = clamp01(settings.overcast ?? 0);
     sunLight(settings, this.light);
+    // Cloud dims the beam, and takes the colour out of what gets through: under
+    // a closed sky the light is a soft neutral from everywhere, not a warm beam
+    // from one place. Dimming without the greying leaves a golden-hour scene
+    // that has merely been turned down.
+    this.light.strength *= 1 - 0.78 * overcast;
+    this.light.color.lerp(DIFFUSE_WHITE, 0.65 * overcast);
     sunDirection(settings, this.uniforms.sunDir.value);
 
     // The lower the sun, the warmer and deeper the band along the horizon —
@@ -286,6 +334,11 @@ export class ProceduralSky {
     u.zenith.value.copy(zenith);
     u.ground.value.copy(GROUND_HAZE).lerp(horizon, haze * 0.4);
     u.disc.value = 26;
+    u.overcast.value = overcast;
+    // Cloud lit from above by whatever sun is left, so a sunset over broken
+    // cloud still warms its edges.
+    u.cloudLow.value.copy(CLOUD_LOW).lerp(this.light.color, 0.25 * (1 - overcast));
+    u.cloudHigh.value.copy(CLOUD_HIGH);
 
     // Mirror everything except the disc onto the environment sky.
     const e = this.envUniforms;
@@ -296,6 +349,9 @@ export class ProceduralSky {
     e.zenith.value.copy(u.zenith.value);
     e.ground.value.copy(u.ground.value);
     e.intensity.value = u.intensity.value;
+    e.overcast.value = u.overcast.value;
+    e.cloudLow.value.copy(u.cloudLow.value);
+    e.cloudHigh.value.copy(u.cloudHigh.value);
 
     this.envDirty = true;
     return this.light;

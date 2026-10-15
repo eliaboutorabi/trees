@@ -1,5 +1,5 @@
 import { DEFAULT_PRESET_ID, getPreset, PRESETS } from '../engine';
-import { getSeason, type Season } from '../render/season';
+import { getSeason, getWeather, type Season, type Weather } from '../render/season';
 import type { Quality, StudioParams } from '../render/studio';
 
 export interface AppParams extends StudioParams {
@@ -13,7 +13,7 @@ export const presets = PRESETS;
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
-export function paramsFromPreset(id: string, season: Season = 'summer'): AppParams {
+export function paramsFromPreset(id: string, season: Season = 'summer', weather?: Weather): AppParams {
   const preset = getPreset(id);
   const p = preset.params;
   const s = getSeason(season);
@@ -22,6 +22,8 @@ export function paramsFromPreset(id: string, season: Season = 'summer'): AppPara
   const blossom = p.flowerDensity ?? 0;
   return {
     season,
+    ...weatherFields(id, season, weather ?? s.weather),
+    precipitation: 0.7,
     presetId: preset.id,
 
     axiom: preset.axiom,
@@ -61,14 +63,11 @@ export function paramsFromPreset(id: string, season: Season = 'summer'): AppPara
     snow: s.snow,
     leafFall: s.leafFall,
 
-    wind: 0.35 * p.windiness * s.wind,
     windSpeed: 1,
     windDirection: 35,
     sunElevation: s.sunElevation,
     sunAzimuth: 140,
     sunIntensity: s.sunIntensity,
-    skyLight: s.skyLight,
-    haze: s.haze,
     exposure: 1,
 
     bloom: 0.5,
@@ -106,6 +105,29 @@ export const STRUCTURAL_KEYS = [
 
 export function applyPreset(id: string, season: Season = params.season): void {
   Object.assign(params, paramsFromPreset(id, season));
+}
+
+/**
+ * The fields a weather owns, worked out from the species and the season
+ * underneath it, so that turning rain off lands back exactly on the season's
+ * own sky rather than wherever the rain left it.
+ */
+function weatherFields(id: string, season: Season, weather: Weather) {
+  const p = getPreset(id).params;
+  const s = getSeason(season);
+  const w = getWeather(weather);
+  return {
+    weather,
+    overcast: w.overcast,
+    haze: Math.min(1, s.haze + w.haze),
+    skyLight: s.skyLight * w.skyLight,
+    wind: 0.35 * p.windiness * s.wind * w.wind,
+  };
+}
+
+/** Change the weather, and only what the weather owns. */
+export function applyWeather(weather: Weather): void {
+  Object.assign(params, weatherFields(params.presetId, params.season, weather));
 }
 
 /**
