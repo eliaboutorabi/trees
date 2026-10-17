@@ -133,6 +133,8 @@ const SHAKE_LOCAL = 52;
 const SHAKE_SPILL = 4;
 /** Size of the cells leaves are hashed into for picking by place. */
 const LEAF_CELL = 0.5;
+/** How long a regrowth takes to play out: the shrink, then the grow. */
+const REGROW_SECONDS = 2.7;
 
 /** Cells are packed into one number: 1024 per axis, offset to be positive. */
 function packCell(x: number, y: number, z: number): number {
@@ -203,6 +205,8 @@ export class Tree {
   private shakeEnergy = 0;
   private readonly shakePoint = new Vector3();
   private shakeRadius = 1;
+  /** When the regrowth in progress has played out, or -1 if there is none. */
+  private regrowUntil = -1;
   /** Set by the season. Leaves only come off a tree that is ready to drop them. */
   private shedding = 0;
   /** Things sitting in the crown, as xyz + radius. See `setGuests`. */
@@ -286,7 +290,7 @@ export class Tree {
     this.radius = Math.max(0.5, build.skeleton.radiusXZ);
 
     // A new tree starts with its leaves on.
-    this.regrowLeaves();
+    this.regrowLeaves(true);
     this.perches = findPerches(build.skeleton);
 
     return {
@@ -311,6 +315,7 @@ export class Tree {
     this.uniforms.fallClock.value += dt;
     // Once a frame at most, and only when something actually came loose.
     if (this.fallDirty && this.syncFall()) this.fallDirty = false;
+    if (this.regrowUntil >= 0 && this.uniforms.fallClock.value >= this.regrowUntil) this.finishRegrowth();
     this.advanceShed(dt);
     if (this.releaseDirty && this.syncLeafFall()) this.releaseDirty = false;
     if (this.guestsDirty && this.syncGuests()) this.guestsDirty = false;
@@ -388,13 +393,85 @@ export class Tree {
     this.guestsDirty = true;
   }
 
-  /** Put every leaf back on the tree. */
-  regrowLeaves(): void {
-    for (const half of this.releaseTimes) for (const v of half) v.set(-1, -1, -1, -1);
-    this.fallen.fill(0);
+  /**
+   * Put every leaf back on the tree.
+   *
+   * Smoothly by default: everything on the ground shrinks away over a second
+   * and grows back on its twig over the next one and a half — so a spring
+   * after a bare winter comes in rather than switching on. `instant` is for a
+   * rebuilt tree, where there is nothing to animate from.
+   */
+  regrowLeaves(instant = false): void {
+    this.finishRegrowth();
+    if (instant) {
+      for (const half of this.releaseTimes) for (const v of half) v.set(-1, -1, -1, -1);
+      this.fallen.fill(0);
+      this.uniforms.regrowAt.value = -1e6;
+    } else {
+      const now = this.uniforms.fallClock.value;
+      // Leaves still waiting to drop are simply kept: they have not gone yet.
+      for (let id = 0; id < this.leafCount; id++) {
+        if (this.fallen[id] && this.releaseTime(id) > now) this.setRelease(id, -1);
+      }
+      this.uniforms.regrowAt.value = now;
+      this.regrowUntil = now + REGROW_SECONDS;
+    }
     this.anywhereNext = 0;
     this.ambientDebt = this.localDebt = this.spillDebt = 0;
     this.shakeEnergy = 0;
+    this.releaseDirty = true;
+  }
+
+  /**
+   * Drop the leaves that a sparser canopy no longer has — the ones whose hash
+   * sits between `toDensity` and `fromDensity` — staggered over `seconds`, so
+   * a tree going into winter sheds instead of thinning out. The default is
+   * deliberately long: a whole canopy released over three seconds is a single
+   * dense cloud of leaves, which reads as an explosion rather than a season. Call it with the
+   * density the canopy is leaving; the density itself can then move at once,
+   * since a leaf on its way down is drawn whatever the density says.
+   */
+  dropLeaves(fromDensity: number, toDensity: number, seconds = 9): number {
+    if (toDensity >= fromDensity) return 0;
+    const now = this.uniforms.fallClock.value;
+    let n = 0;
+    for (let id = 0; id < this.leafCount; id++) {
+      const k = this.leafKeys[id];
+      if (this.fallen[id] || k < toDensity || k >= fromDensity) continue;
+      // Spread well past the glide, so a whole canopy comes down as a cascade
+      // that carries on while the snow settles, not as one cloud — and loaded
+      // a little toward the start, so it begins the moment the season changes.
+      this.release(id, now + Math.pow(this.rng(), 1.25) * seconds);
+      n++;
+    }
+    return n;
+  }
+
+  /** Once a regrowth has played out, put its leaves back to plain "attached". */
+  private finishRegrowth(): void {
+    if (this.regrowUntil < 0) return;
+    const at = this.uniforms.regrowAt.value;
+    for (let id = 0; id < this.leafCount; id++) {
+      if (this.fallen[id] && this.releaseTime(id) <= at) {
+        this.setRelease(id, -1);
+        this.fallen[id] = 0;
+      }
+    }
+    this.regrowUntil = -1;
+    this.releaseDirty = true;
+  }
+
+  private releaseTime(id: number): number {
+    const slot = id >> 2;
+    const half = slot < LEAF_SLOTS ? 0 : 1;
+    return this.releaseTimes[half][slot - half * LEAF_SLOTS].getComponent(id & 3);
+  }
+
+  private setRelease(id: number, at: number): void {
+    const slot = id >> 2;
+    const half = slot < LEAF_SLOTS ? 0 : 1;
+    this.releaseTimes[half][slot - half * LEAF_SLOTS].setComponent(id & 3, at);
+    if (at < 0) this.fallen[id] = 0;
     this.releaseDirty = true;
   }
 
@@ -430,11 +507,8 @@ export class Tree {
   }
 
   private release(id: number, at: number): void {
+    this.setRelease(id, at);
     this.fallen[id] = 1;
-    const slot = id >> 2;
-    const half = slot < LEAF_SLOTS ? 0 : 1;
-    this.releaseTimes[half][slot - half * LEAF_SLOTS].setComponent(id & 3, at);
-    this.releaseDirty = true;
   }
 
   /** The next leaf in the shuffled order that is still up there. */

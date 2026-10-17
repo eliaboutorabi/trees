@@ -24,7 +24,7 @@
   } from '@hugeicons/core-free-icons';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
-  import { applyPreset, applySeason, applyWeather, params, presets } from './params.svelte';
+  import { applyPreset, params, paramsFromPreset, presets, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, getWeather, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
@@ -129,15 +129,65 @@
   }
 
   /** A season is a dressing of the same tree, so nothing is re-derived. */
-  function chooseWeather(id: Weather) {
-    applyWeather(id);
+  /*
+   * Gliding from one set of parameters to another.
+   *
+   * Every number that differs is eased from where it is to where it is going
+   * over a few seconds, through the same parameters the sliders are bound to —
+   * so the sliders move with the scene, and nothing in the renderer has to know
+   * a transition is happening. Each step is uniform writes and one small cube
+   * render, which is what dragging a slider already costs. Anything that is not
+   * a number switches at the start. A new glide starts from wherever the last
+   * one had got to.
+   */
+  const GLIDE_SECONDS = 2.8;
+  let glide: number | null = null;
+
+  function glideTo(target: Partial<AppParams>) {
+    if (glide !== null) cancelAnimationFrame(glide);
+    const from: Record<string, unknown> = { ...params };
+    const moving: string[] = [];
+    for (const [k, v] of Object.entries(target)) {
+      if (typeof v === 'number' && typeof from[k] === 'number') {
+        if (v !== from[k]) moving.push(k);
+      } else (params as unknown as Record<string, unknown>)[k] = v;
+    }
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / 1000 / GLIDE_SECONDS);
+      const e = t * t * (3 - 2 * t);
+      const next: Record<string, number> = {};
+      for (const k of moving) {
+        const a = from[k] as number;
+        const b = (target as Record<string, number>)[k];
+        next[k] = a + (b - a) * e;
+      }
+      Object.assign(params, next);
+      glide = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    glide = requestAnimationFrame(step);
   }
 
+  function chooseWeather(id: Weather) {
+    glideTo(weatherFields(params.presetId, params.season, id));
+  }
+
+  /**
+   * A season is a dressing of the same tree, so nothing is re-derived — and it
+   * arrives as a change of season rather than a cut. A season that thins the
+   * canopy drops the leaves it no longer has, and they turn as they fall; one
+   * that fills it back in brings the leaves back, the litter shrinking away and
+   * the twigs leafing out. Everything else glides.
+   */
   function chooseSeason(id: Season) {
-    applySeason(id);
-    if (!studio) return;
-    // The canopy and the sky both moved; reframe nothing, rebuild nothing.
-    studio.applyPalette(getPreset(params.presetId).palette);
+    const from = params.season;
+    const target = paramsFromPreset(params.presetId, id);
+    if (studio) {
+      const thinning = id === 'winter' || (id === 'autumn' && from !== 'winter');
+      if (thinning) studio.dropLeaves(params.leafDensity, target.leafDensity);
+      else studio.regrowLeaves();
+    }
+    glideTo(target);
   }
 
   function choosePreset(id: string) {

@@ -112,7 +112,7 @@ export function applyPreset(id: string, season: Season = params.season): void {
  * underneath it, so that turning rain off lands back exactly on the season's
  * own sky rather than wherever the rain left it.
  */
-function weatherFields(id: string, season: Season, weather: Weather) {
+export function weatherFields(id: string, season: Season, weather: Weather) {
   const p = getPreset(id).params;
   const s = getSeason(season);
   const w = getWeather(weather);

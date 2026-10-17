@@ -115,6 +115,11 @@ export function createTreeUniforms() {
      * seconds once rain starts and takes much longer to dry off after.
      */
     wetness: uniform(0),
+    /**
+     * When the leaves last started growing back, on `fallClock`. Every leaf let
+     * go before this shrinks away on the ground and returns to its twig.
+     */
+    regrowAt: uniform(-1e6),
     /** What a leaf dries to: on the ground, or still clinging on in December. */
     litterColor: uniform(new Color(0x6b4a24)),
     /** How far past turning the leaves still on the tree have gone, 0–1. */

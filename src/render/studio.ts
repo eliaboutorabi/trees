@@ -156,7 +156,19 @@ export class TreeStudio {
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
 
-  private season: Season = 'summer';
+  /** Where the season's scene dressing is heading; see `easeSeason`. */
+  private readonly seasonTarget = {
+    leafDry: 0,
+    meadowBloom: 1,
+    snowfall: 0,
+    rainfall: 0,
+    snowColor: new Color(),
+    grassDeep: new Color(),
+    grassMid: new Color(),
+    grassDry: new Color(),
+    dirt: new Color(),
+  };
+  private seasonShown = false;
   private treeHeight = 8;
   private treeRadius = 3;
   private growth = 0;
@@ -346,11 +358,9 @@ export class TreeStudio {
 
   applyLook(params: LookParams): void {
     this.tree.applyLook(params);
+    this.seasonTarget.snowfall = params.weather === 'snow' ? params.precipitation : 0;
+    this.seasonTarget.rainfall = params.weather === 'rain' ? params.precipitation : 0;
     this.applySeason(params.season);
-
-    const u = this.tree.uniforms;
-    u.snowfall.value = params.weather === 'snow' ? params.precipitation : 0;
-    u.rainfall.value = params.weather === 'rain' ? params.precipitation : 0;
     this.wetTarget = params.weather === 'rain' ? 0.45 + 0.55 * params.precipitation : 0;
     // One slider for every surface that holds snow, so the tree, the sward and
     // the ground under them are never dressed for different weather.
@@ -381,28 +391,56 @@ export class TreeStudio {
    */
   private applySeason(id: Season): void {
     const season = getSeason(id);
-    const u = this.tree.uniforms;
-
-    // A canopy you stripped last autumn is back next spring. Without this the
-    // gaps you shook into it persist through every later season, which is both
-    // wrong and impossible to undo without a redraw.
-    if (id !== this.season) {
-      this.season = id;
-      this.tree.regrowLeaves();
+    const t = this.seasonTarget;
+    t.leafDry = season.leafDry;
+    t.meadowBloom = season.meadowBloom;
+    t.snowColor.copy(snowTintFor(id));
+    t.grassDeep.setHex(season.grassDeep);
+    t.grassMid.setHex(season.grassMid);
+    t.grassDry.setHex(season.grassDry);
+    t.dirt.setHex(season.dirt);
+    // The first look lands as it is; only changes after that are eased.
+    if (!this.seasonShown) {
+      this.seasonShown = true;
+      this.easeSeason(Infinity);
     }
-
-    u.leafDry.value = season.leafDry;
-    u.meadowBloom.value = season.meadowBloom;
-    u.snowColor.value.copy(snowTintFor(id));
-
-    const g = this.groundUniforms;
-    g.grassDeep.value.setHex(season.grassDeep);
-    g.grassMid.value.setHex(season.grassMid);
-    g.grassDry.value.setHex(season.grassDry);
-    g.dirt.value.setHex(season.dirt);
-    g.horizon.value.setHex(season.horizon);
-    g.aerialFar.value.setHex(season.aerialFar);
   }
+
+  /**
+   * Carry the scene dressing a season owns toward where it is heading.
+   *
+   * The values a season shares with the sliders glide in the app, which moves
+   * the sliders with them; these have no slider, so they glide here, on the
+   * same sort of timescale. Rain and snow in the air ease too: they thin by
+   * per-drop threshold, so easing their intensity is a fade in or out rather
+   * than every drop appearing at once.
+   */
+  private easeSeason(dt: number): void {
+    const k = 1 - Math.exp(-dt / 0.85);
+    const t = this.seasonTarget;
+    const u = this.tree.uniforms;
+    const g = this.groundUniforms;
+    u.leafDry.value += (t.leafDry - u.leafDry.value) * k;
+    u.meadowBloom.value += (t.meadowBloom - u.meadowBloom.value) * k;
+    u.snowfall.value += (t.snowfall - u.snowfall.value) * k;
+    u.rainfall.value += (t.rainfall - u.rainfall.value) * k;
+    u.snowColor.value.lerp(t.snowColor, k);
+    g.grassDeep.value.lerp(t.grassDeep, k);
+    g.grassMid.value.lerp(t.grassMid, k);
+    g.grassDry.value.lerp(t.grassDry, k);
+    g.dirt.value.lerp(t.dirt, k);
+  }
+
+  /** A sparser season's leaves come down rather than disappearing. See `Tree.dropLeaves`. */
+  dropLeaves(fromDensity: number, toDensity: number): void {
+    this.tree.dropLeaves(fromDensity, toDensity);
+  }
+
+  /** Bring the canopy back, smoothly. See `Tree.regrowLeaves`. */
+  regrowLeaves(): void {
+    this.tree.regrowLeaves();
+  }
+
 
   applySky(params: SkyParams): void {
     const settings: SkySettings = {
@@ -636,6 +674,8 @@ export class TreeStudio {
     this.tree.tick(dt);
     this.updateHover(dt);
     this.flock.update(dt);
+
+    this.easeSeason(dt);
 
     // Things get wet in seconds and take a good while to dry.
     const rate = this.wetTarget > this.wetness ? 1 / 6 : 1 / 45;

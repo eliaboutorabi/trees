@@ -66,9 +66,6 @@ export interface SeasonLook {
   grassMid: number;
   grassDry: number;
   dirt: number;
-  /** The warm band the distance fades through, and where it ends up. */
-  horizon: number;
-  aerialFar: number;
 }
 
 export const SEASONS: readonly SeasonLook[] = [
@@ -96,8 +93,6 @@ export const SEASONS: readonly SeasonLook[] = [
     grassMid: 0x5f7d22,
     grassDry: 0x9db052,
     dirt: 0x6d5539,
-    horizon: 0xd3bc94,
-    aerialFar: 0x93a4c4,
   },
   {
     id: 'summer',
@@ -123,8 +118,6 @@ export const SEASONS: readonly SeasonLook[] = [
     grassMid: 0x5d7128,
     grassDry: 0x9a9a4a,
     dirt: 0x6d5539,
-    horizon: 0xd8b183,
-    aerialFar: 0x93a4c4,
   },
   {
     id: 'autumn',
@@ -150,8 +143,6 @@ export const SEASONS: readonly SeasonLook[] = [
     grassMid: 0x7a6a28,
     grassDry: 0xb09243,
     dirt: 0x6a4f31,
-    horizon: 0xd3a071,
-    aerialFar: 0x9aa6bd,
   },
   {
     id: 'winter',
@@ -189,8 +180,6 @@ export const SEASONS: readonly SeasonLook[] = [
     grassMid: 0x6e7265,
     grassDry: 0x939586,
     dirt: 0x5a5047,
-    horizon: 0xc2cad6,
-    aerialFar: 0xb3c0d6,
   },
 ];
 

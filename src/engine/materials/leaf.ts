@@ -53,6 +53,11 @@ export interface LeafMaterial {
  * that all falls at one speed descends as a sheet.
  */
 const DESCENT = 1.0;
+/** Width of the density band leaves grow and shrink across, in hash units. */
+const THIN_BAND = 0.05;
+/** Seconds for litter to shrink away, then for the leaf to grow back, on regrowth. */
+const SHRINK = 1.0;
+const GROW = 1.6;
 /** Where a leaf comes to rest — clear of the ground by more than its flattened thickness. */
 const LITTER_Y = 0.035;
 /** How far one unit of wind carries a leaf, in metres per second. */
@@ -78,10 +83,51 @@ export function createLeafMaterial(
   const isBlossom = step(1.5, rawSeed);
   const seed = rawSeed.fract();
 
-  // Thinning happens on the GPU: a leaf whose hash falls above the density
-  // threshold collapses to a point. The hash is decorrelated from `seed` so
-  // thinning does not also bias the colour and flutter variation.
-  const keep = step(rawSeed.mul(97.31).fract(), u.leafCull);
+  // ---------------------------------------------------------- letting go
+  //
+  // The host decides which leaves go and when, and writes the moment into the
+  // leaf's own slot. Four leaves share a vec4, picked out by a one-hot dot
+  // product, which is how a dynamic lane index is taken without a branch; the
+  // table is two arrays, picked between the same way. A leaf with no id —
+  // past the table's capacity — never falls.
+  const center = vec3Attribute('aCenter');
+  const leafId = attribute<'float'>('aLeafId', 'float');
+  const slot = leafId.max(0).div(4).floor();
+  const lane = leafId.max(0).sub(slot.mul(4));
+  const second = step(LEAF_SLOTS, slot);
+  const arrays = [uniformArray(releaseTimes[0], 'vec4'), uniformArray(releaseTimes[1], 'vec4')] as const;
+  // `element()` loses the element type on the way out; assert it back.
+  const fromFirst = arrays[0].element(slot.min(LEAF_SLOTS - 1).toInt()) as unknown as Vec4Node;
+  const fromSecond = arrays[1].element(slot.sub(LEAF_SLOTS).clamp(0, LEAF_SLOTS - 1).toInt()) as unknown as Vec4Node;
+  const four = mix(fromFirst, fromSecond, second);
+  const pick = vec4(
+    float(1).sub(step(0.5, lane)),
+    step(0.5, lane).sub(step(1.5, lane)),
+    step(1.5, lane).sub(step(2.5, lane)),
+    step(2.5, lane),
+  );
+  const letGo = four.dot(pick);
+
+  /*
+   * Which leaves are drawn, and at what size.
+   *
+   * Thinning happens on the GPU: a leaf whose hash falls above the density
+   * threshold collapses toward its stem. Over a narrow band rather than at a
+   * step, so as the density moves — a season changing, the slider dragged —
+   * leaves grow in and shrink away instead of blinking on and off. The hash is
+   * decorrelated from `seed` so thinning does not also bias colour and flutter.
+   *
+   * A leaf that has been let go is drawn whatever the density says: it is on
+   * its way down or lying in the grass, and a season that thins the canopy does
+   * it by *dropping* the leaves, which then have to stay visible to be seen
+   * falling. Until a regrowth reaches it, when it shrinks away on the ground and
+   * comes back on the branch only if the density wants it there.
+   */
+  const scheduled = step(0, letGo).mul(step(0, leafId));
+  const sinceRegrow = u.fallClock.sub(u.regrowAt);
+  const regrowing = scheduled.mul(step(letGo, u.regrowAt)).mul(step(0, sinceRegrow));
+  const thinned = u.leafCull.sub(rawSeed.mul(97.31).fract()).div(THIN_BAND).add(1).clamp(0, 1);
+  const keep = mix(thinned.max(scheduled), thinned, regrowing);
   const radial = u.leafSize.mul(keep);
   const { position: swaying, pivot } = growthPosition(u, {
     thickenBase: 0.5,
@@ -124,31 +170,13 @@ export function createLeafMaterial(
   }
   const hanging = pivot.add(swaying.sub(pivot).mul(clear.mul(0.75).oneMinus())).add(shove.mul(0.22));
 
-  // ---------------------------------------------------------- letting go
-  //
-  // The host decides which leaves go and when, and writes the moment into the
-  // leaf's own slot. Four leaves share a vec4, picked out by a one-hot dot
-  // product, which is how a dynamic lane index is taken without a branch; the
-  // table is two arrays, picked between the same way. A leaf with no id —
-  // past the table's capacity — never falls.
-  const center = vec3Attribute('aCenter');
-  const leafId = attribute<'float'>('aLeafId', 'float');
-  const slot = leafId.max(0).div(4).floor();
-  const lane = leafId.max(0).sub(slot.mul(4));
-  const second = step(LEAF_SLOTS, slot);
-  const arrays = [uniformArray(releaseTimes[0], 'vec4'), uniformArray(releaseTimes[1], 'vec4')] as const;
-  // `element()` loses the element type on the way out; assert it back.
-  const fromFirst = arrays[0].element(slot.min(LEAF_SLOTS - 1).toInt()) as unknown as Vec4Node;
-  const fromSecond = arrays[1].element(slot.sub(LEAF_SLOTS).clamp(0, LEAF_SLOTS - 1).toInt()) as unknown as Vec4Node;
-  const four = mix(fromFirst, fromSecond, second);
-  const pick = vec4(
-    float(1).sub(step(0.5, lane)),
-    step(0.5, lane).sub(step(1.5, lane)),
-    step(1.5, lane).sub(step(2.5, lane)),
-    step(2.5, lane),
-  );
-  const letGo = four.dot(pick);
-  const loose = step(0, letGo).mul(step(letGo, u.fallClock)).mul(step(0, leafId));
+
+
+  // Regrowth: litter shrinks into the ground over `SHRINK` seconds, then the
+  // leaf grows back on its twig over `GROW`.
+  const onGround = regrowing.mul(step(sinceRegrow, SHRINK));
+  const backUp = regrowing.mul(onGround.oneMinus());
+  const loose = scheduled.mul(step(letGo, u.fallClock)).mul(regrowing.oneMinus()).max(onGround);
 
   // Three more decorrelated draws, for the leaf's own way of falling.
   const r1 = seed.mul(53.17).fract();
@@ -234,11 +262,14 @@ export function createLeafMaterial(
   // Laid down over the last moments of the fall. Squashing the blade's own
   // vertical extent lays it flat whatever angle it was tumbling through, which
   // a rotation to horizontal could not do without knowing that angle.
-  const lying = vec3(rocked.x, rocked.y.mul(mix(float(1), float(0.08), landed)), rocked.z);
+  const shrink = mix(float(1), smoothstep(0, SHRINK, sinceRegrow).oneMinus(), onGround);
+  const lying = vec3(rocked.x, rocked.y.mul(mix(float(1), float(0.08), landed)), rocked.z).mul(shrink);
 
   const descent = vec3(0, age.mul(speed).sub(rise), 0);
   const fallen = anchor.sub(descent).add(glide).add(wander).add(carried).add(lying);
-  material.positionNode = mix(hanging, fallen, loose);
+  const growIn = mix(float(1), smoothstep(SHRINK, SHRINK + GROW, sinceRegrow), backUp);
+  const regrown = pivot.add(hanging.sub(pivot).mul(growIn));
+  material.positionNode = mix(regrown, fallen, loose);
 
   // Veins: a bright midrib plus a fan of laterals.
   const offCentre = st.x.sub(0.5).abs();
@@ -274,8 +305,11 @@ export function createLeafMaterial(
   const canopy = occlusion.mul(u.occlusionStrength).mul(u.leafCull.mul(0.7).add(0.3));
   const shade = mix(canopy, canopy.mul(0.25), loose);
 
-  // Snow lies on the leaves still up there, not on the litter under them.
-  const settled = smoothstep(0.25, 0.85, normalWorld.y.abs()).mul(u.snow).mul(loose.oneMinus()).mul(0.8);
+  // Snow lies on the leaves still up there, and buries the litter under them
+  // as it settles — a carpet of red leaves on a snowfield reads as a mistake.
+  const onBranch = smoothstep(0.25, 0.85, normalWorld.y.abs()).mul(loose.oneMinus()).mul(0.8);
+  const buried = loose.mul(landed).mul(0.88);
+  const settled = onBranch.max(buried).mul(u.snow);
   // Wet: a touch darker, and much glossier — a rained-on canopy is full of
   // small bright reflections of the sky.
   const wet = litter.mul(u.wetness.mul(0.14).oneMinus());
