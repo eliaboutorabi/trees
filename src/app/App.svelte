@@ -145,7 +145,8 @@
    * Anything that changes the tree's structure used to wait for the Redraw
    * button, which meant dragging a slider, seeing nothing, and clicking —
    * every time. Now the tree is rebuilt once the structure stops changing,
-   * without replaying the growth, so it simply becomes the new tree.
+   * without replaying the growth, so it simply becomes the new tree — built on
+   * a worker, so a drag never stalls the scene while it waits.
    *
    * Trailing by a moment, so a drag is not rebuilt on every pixel of it; but
    * never more than half a second behind, so a long slow drag still shows the
@@ -170,7 +171,7 @@
     const wait = t - changingSince > MAX_LAG_MS ? 0 : SETTLE_MS;
     settleTimer = setTimeout(() => {
       changingSince = 0;
-      doRebuild(false);
+      rebuildQuietly();
     }, wait);
   });
 
@@ -241,13 +242,32 @@
     glideTo(target);
   }
 
+  /**
+   * A new species arrives as a change of tree, not a cut: the one standing
+   * grows back into the ground while the new one is built off the main
+   * thread, and then the new one grows out. See `TreeStudio.transitionTo`.
+   */
   function choosePreset(id: string) {
     applyPreset(id);
     axiomDraft = params.axiom;
     rulesDraft = params.rules;
     if (!studio) return;
-    studio.applyPalette(getPreset(id).palette);
-    doRebuild(true);
+    const snapshot = structureSnapshot();
+    // Claimed now, so the auto-rebuild does not see a change and race it.
+    built = snapshot;
+    studio.transitionTo(snapshot, getPreset(id).palette, params.growthSpeed).then((info) => {
+      if (info) issues = info.issues;
+    });
+  }
+
+  /** Rebuild off the main thread, no animation — for structure sliders. */
+  function rebuildQuietly() {
+    if (!studio) return;
+    const snapshot = structureSnapshot();
+    built = snapshot;
+    studio.rebuildQuietly(snapshot).then((info) => {
+      if (info) issues = info.issues;
+    });
   }
 
   function applyGrammar() {

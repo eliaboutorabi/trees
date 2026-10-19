@@ -19,7 +19,8 @@
  */
 import { Color, Group, Mesh, Vector2, Vector3, Vector4, type BufferGeometry } from 'three';
 import type { MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { buildTree, type TreeBuild } from './lsystem';
+import type { TreeBuild } from './lsystem';
+import { computeTree, unpackTreeData, type BuildLimits, type PackedTreeData, type TreeData, type TreeStructure } from './build';
 import type { Palette, Preset } from './lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
 import { createLeafMaterial } from './materials/leaf';
@@ -31,35 +32,11 @@ import {
   MAX_GUESTS,
   type TreeUniforms,
 } from './materials/shared';
-import { findPerches, type Perch } from './perches';
+import type { Perch } from './perches';
 import { mulberry32 } from '../lib/rng';
-import { buildTreeGeometry, type FruitSite } from './treeGeometry';
+import type { FruitSite } from './treeGeometry';
 
-/** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
-export interface TreeStructure {
-  axiom: string;
-  rules: string;
-  iterations: number;
-  /** `ANG` — base branching angle, in degrees. */
-  angle: number;
-  /** `LEN` — base internode length. */
-  step: number;
-  /** `SHRINK` — per-generation contraction. */
-  shrink: number;
-  /** Positive grows skyward, negative droops. */
-  tropism: number;
-  /** da Vinci pipe-model exponent for branch radii. */
-  pipeExponent: number;
-  seed: number;
-  /** Baked as a baseline; `LiveParams.trunkRadius` rescales it without a rebuild. */
-  trunkRadius: number;
-  /** Likewise baked, then rescaled by `LiveParams.leafScale`. */
-  leafScale: number;
-  /** 0 broad · 1 needle · 2 blossom · 3 lance. */
-  leafShape: 0 | 1 | 2 | 3;
-  /** 0 berry · 1 apple · 2 pine cone. Changes the baked mesh, so it needs a rebuild. */
-  fruitShape: 0 | 1 | 2;
-}
+export type { TreeStructure } from './build';
 
 /** Changes that are uniform-only — applied instantly, no rebuild. */
 export interface LiveParams {
@@ -110,7 +87,11 @@ export interface TreeOptions {
   maxModules?: number;
 }
 
-export interface TreeInfo extends TreeBuild {
+export interface TreeInfo {
+  /** False if the grammar produced nothing drawable. */
+  ok: boolean;
+  issues: TreeBuild['issues'];
+  stats: TreeBuild['stats'];
   height: number;
   radius: number;
   branchTriangles: number;
@@ -214,6 +195,10 @@ export class Tree {
   private readonly syncGuests: () => boolean;
   private guestsDirty = false;
 
+  private worker: Worker | null | undefined;
+  private requestId = 0;
+  private readonly requests = new Map<number, { resolve: (d: TreeData) => void; reject: (e: Error) => void }>();
+
   /** What the current mesh was baked at, so live sliders can express a ratio. */
   private bakedTrunkRadius = 1;
   private bakedLeafScale = 1;
@@ -247,21 +232,48 @@ export class Tree {
    * editor wants to show the diagnostics beside it.
    */
   rebuild(params: TreeStructure): TreeInfo {
-    const build = buildTree({ ...params, maxModules: this.options.maxModules });
+    return this.apply(computeTree(params, this.limits()), params);
+  }
 
-    if (!build.skeleton) {
-      return { ...build, height: 0, radius: 0, branchTriangles: 0, leafCount: 0, vertices: 0, ornamentSites: 0 };
-    }
-
-    const geo = buildTreeGeometry(build.skeleton, {
-      leafShape: params.leafShape,
-      maxLeaves: this.options.maxLeaves,
-      maxOrnaments: this.options.maxOrnaments,
-      seed: params.seed,
-      fruitShape: params.fruitShape,
-      leafIdCapacity: MAX_LEAF_IDS,
+  /**
+   * Build a tree without showing it — on a worker, so the main thread and
+   * everything animating on it carry on untouched. Resolves with data for
+   * `apply`. Falls back to building in place where workers are unavailable.
+   *
+   * Each call is independent; if you start several and only want the last,
+   * keep your own count and drop the stale ones — the caller knows which
+   * request it cares about, this does not.
+   */
+  prepare(params: TreeStructure): Promise<TreeData> {
+    const worker = this.builder();
+    if (!worker) return Promise.resolve(computeTree(params, this.limits()));
+    const id = ++this.requestId;
+    const built = new Promise<TreeData>((resolve, reject) => {
+      this.requests.set(id, { resolve, reject });
+      // Plain data only: the params may be a reactive proxy, which does not clone.
+      worker.postMessage({ id, params: { ...params }, limits: this.limits() });
     });
-    this.indexLeaves(geo.leaves.anchors, geo.leaves.cullKeys);
+    return built.catch(() => computeTree(params, this.limits()));
+  }
+
+  /**
+   * Show a built tree: wrap its buffers in meshes, and reset everything that
+   * belonged to the old one — fruit back on the branch, leaves on the twig,
+   * new perches. The only part of a rebuild that has to run on the main thread,
+   * and it is cheap.
+   */
+  apply(data: TreeData, params: TreeStructure): TreeInfo {
+    const info: TreeInfo = {
+      ok: data.ok,
+      issues: data.issues,
+      stats: data.stats,
+      height: data.height,
+      radius: data.radius,
+      ...data.counts,
+    };
+    if (!data.ok) return info;
+
+    this.indexLeaves(data.leaves.anchors, data.leaves.cullKeys);
 
     // Skin markings belong to the shape, not to a slider: a berry with apple
     // striping on it would look like neither.
@@ -273,36 +285,62 @@ export class Tree {
     this.bakedLeafScale = Math.max(1e-4, params.leafScale);
 
     this.clearMeshes();
-    this.addMesh(geo.branches, this.bark);
-    this.addMesh(geo.foliage, this.foliage);
+    this.addMesh(data.branches, this.bark);
+    this.addMesh(data.foliage, this.foliage);
     // Ornaments are baked whatever the density, and hidden while it is zero: a
     // collapsed vertex costs nothing to rasterise but still costs a vertex
     // shader invocation, and most trees carry neither flowers nor fruit.
-    this.flowerMesh = this.addMesh(geo.flowers, this.flower, this.uniforms.flowerDensity.value > 0.001);
-    this.fruitMesh = this.addMesh(geo.fruit, this.fruit, this.uniforms.fruitDensity.value > 0.001);
-    this.hangingFruit = geo.fruitSites.slice();
+    this.flowerMesh = this.addMesh(data.flowers, this.flower, this.uniforms.flowerDensity.value > 0.001);
+    this.fruitMesh = this.addMesh(data.fruit, this.fruit, this.uniforms.fruitDensity.value > 0.001);
+    this.hangingFruit = data.fruitSites.slice();
     // A new crop starts on the branch, wherever the last one ended up.
     this.fallTimes.fill(-1);
     this.fallDirty = true;
-    this.uniforms.fruitHang.value = geo.fruitHang;
+    this.uniforms.fruitHang.value = data.fruitHang;
 
-    this.height = Math.max(1, build.skeleton.height);
-    this.radius = Math.max(0.5, build.skeleton.radiusXZ);
+    this.height = data.height;
+    this.radius = data.radius;
 
     // A new tree starts with its leaves on.
     this.regrowLeaves(true);
-    this.perches = findPerches(build.skeleton);
+    this.perches = data.perches;
+    return info;
+  }
 
+  private limits(): BuildLimits {
     return {
-      ...build,
-      height: this.height,
-      radius: this.radius,
-      branchTriangles: geo.stats.branchTriangles,
-      leafCount: geo.stats.leafCount,
-      vertices: geo.stats.branchVertices + geo.stats.leafVertices,
-      ornamentSites: geo.stats.ornamentSites,
+      maxModules: this.options.maxModules,
+      maxLeaves: this.options.maxLeaves,
+      maxOrnaments: this.options.maxOrnaments,
     };
   }
+
+  /** The build worker, started on first use; null if this environment has none. */
+  private builder(): Worker | null {
+    if (this.worker !== undefined) return this.worker;
+    try {
+      this.worker = new Worker(new URL('./build.worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (e: MessageEvent<{ id: number; payload?: PackedTreeData; error?: string }>) => {
+        const request = this.requests.get(e.data.id);
+        if (!request) return;
+        this.requests.delete(e.data.id);
+        if (e.data.payload) request.resolve(unpackTreeData(e.data.payload));
+        else request.reject(new Error(e.data.error ?? 'build failed'));
+      };
+      this.worker.onerror = () => {
+        // A worker that cannot start — a strict CSP, an old bundler — is not an
+        // error worth surfacing: build in place instead, as before.
+        for (const r of this.requests.values()) r.reject(new Error('build worker failed'));
+        this.requests.clear();
+        this.worker?.terminate();
+        this.worker = null;
+      };
+    } catch {
+      this.worker = null;
+    }
+    return this.worker;
+  }
+
 
   /**
    * Advance the clock that falling fruit is timed against.
@@ -778,6 +816,8 @@ export class Tree {
   dispose(): void {
     this.clearMeshes();
     for (const material of this.materials) material.dispose();
+    this.worker?.terminate();
+    this.worker = null;
   }
 
   private addMesh(geometry: BufferGeometry | null, material: MeshStandardNodeMaterial, visible = true): Mesh | null {

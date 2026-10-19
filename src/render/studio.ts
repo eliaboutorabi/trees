@@ -116,6 +116,10 @@ export interface StudioStats {
 }
 
 const MAX_LEAVES = 26_000;
+/** How fast the old tree grows back into the ground on a species change: about a second. */
+const UNGROW_SPEED = 1.15;
+/** Seconds for the camera to glide to a new tree's framing. */
+const GLIDE_SECONDS = 2.2;
 /** The grey the near and far distance go to under a closed sky. */
 const OVERCAST_NEAR = new Color(0xa6acb2);
 const OVERCAST_FAR = new Color(0x8f979f);
@@ -173,6 +177,17 @@ export class TreeStudio {
   private treeRadius = 3;
   private growth = 0;
   private growthTarget = 1;
+  /** Bumped by every rebuild request, so a slow one cannot land on top of a newer one. */
+  private buildToken = 0;
+  /** Waiting for the growth to reach zero; see `ungrow`. */
+  private ungrown: (() => void)[] = [];
+  private cameraGlide: {
+    fromTarget: Vector3;
+    fromPosition: Vector3;
+    target: Vector3;
+    position: Vector3;
+    t: number;
+  } | null = null;
   private growthSpeed = 0.32;
   private lastTime = 0;
   private frameTimes: number[] = [];
@@ -268,6 +283,8 @@ export class TreeStudio {
     await this.renderer.init();
 
     this.controls = new OrbitControls(this.camera, this.canvas);
+    // Your hand on the camera wins over any glide in progress.
+    this.controls.addEventListener('start', () => (this.cameraGlide = null));
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
     this.controls.minDistance = 1.5;
@@ -299,10 +316,55 @@ export class TreeStudio {
 
   // ------------------------------------------------------------ structure
 
-  /** Re-derives the L-system and rebuilds the tree. */
+  /** Re-derives the L-system and rebuilds the tree, here and now. */
   rebuild(params: StructureParams): TreeInfo {
-    const build = this.tree.rebuild(params);
-    if (!build.skeleton) return build;
+    return this.adopt(this.tree.rebuild(params));
+  }
+
+  /**
+   * Rebuild off the main thread and swap the result in when it is ready, with
+   * no animation — for a slider being dragged, where the tree should simply
+   * become the new one. Only the newest request lands; anything it overtook is
+   * dropped.
+   */
+  async rebuildQuietly(params: StructureParams): Promise<TreeInfo | null> {
+    const token = ++this.buildToken;
+    const data = await this.tree.prepare(params);
+    if (token !== this.buildToken) return null;
+    return this.adopt(this.tree.apply(data, params));
+  }
+
+  /**
+   * Change to a different tree, as a little piece of theatre rather than a cut.
+   *
+   * The tree standing grows back into the ground — tips first, the trunk last,
+   * the growth animation run backwards — while the new one is built on a
+   * worker, so nothing on screen stalls. Once both are done the new tree is
+   * put in, still at nothing, the camera glides to frame it, and it grows out
+   * of the same patch of ground. Switching again mid-way is fine: the newest
+   * request wins and the rest are dropped.
+   */
+  async transitionTo(params: StructureParams, palette: Palette, growthSpeed: number): Promise<TreeInfo | null> {
+    const token = ++this.buildToken;
+    const [data] = await Promise.all([this.tree.prepare(params), this.ungrow()]);
+    if (token !== this.buildToken) return null;
+    const info = this.adopt(this.tree.apply(data, params));
+    this.applyPalette(palette);
+    this.frameTree(true);
+    this.playGrowth(0, growthSpeed);
+    return info;
+  }
+
+  /** Run the growth back to nothing; resolves when it gets there. */
+  private ungrow(): Promise<void> {
+    this.growthTarget = 0;
+    this.growthSpeed = UNGROW_SPEED;
+    if (this.growth <= 0) return Promise.resolve();
+    return new Promise((resolve) => this.ungrown.push(resolve));
+  }
+
+  private adopt(build: TreeInfo): TreeInfo {
+    if (!build.ok) return build;
 
     this.treeHeight = build.height;
     this.treeRadius = build.radius;
@@ -325,8 +387,13 @@ export class TreeStudio {
     return build;
   }
 
-  /** Points the camera at a freshly grown tree. */
-  frameTree(): void {
+  /**
+   * Points the camera at the tree. `smooth` glides there over a couple of
+   * seconds instead of cutting — used when the tree changes under the camera,
+   * where a jump would undo the whole point of growing the new one in. Any
+   * drag of your own cancels the glide.
+   */
+  frameTree(smooth = false): void {
     const h = this.treeHeight;
 
     // Fit the subject to whichever axis is tighter. A wide, low canopy in a
@@ -345,8 +412,21 @@ export class TreeStudio {
     // Settle into a slightly low, cinematic angle.
     dir.y = MathUtils.clamp(dir.y, 0.18, 0.42);
     dir.normalize();
-    this.controls.target.set(0, h * 0.44, 0);
-    this.camera.position.copy(this.controls.target).addScaledVector(dir, dist);
+    const target = new Vector3(0, h * 0.44, 0);
+    const position = target.clone().addScaledVector(dir, dist);
+    if (smooth) {
+      this.cameraGlide = {
+        fromTarget: this.controls.target.clone(),
+        fromPosition: this.camera.position.clone(),
+        target,
+        position,
+        t: 0,
+      };
+      return;
+    }
+    this.cameraGlide = null;
+    this.controls.target.copy(target);
+    this.camera.position.copy(position);
     this.controls.update();
   }
 
@@ -663,10 +743,28 @@ export class TreeStudio {
     const dt = this.lastTime ? MathUtils.clamp((timeMs - this.lastTime) / 1000, 0, 0.05) : 0.016;
     this.lastTime = timeMs;
 
-    if (this.growth < this.growthTarget) {
-      this.growth = Math.min(this.growthTarget, this.growth + dt * this.growthSpeed);
+    if (this.growth !== this.growthTarget) {
+      const step = dt * this.growthSpeed;
+      this.growth =
+        this.growth < this.growthTarget
+          ? Math.min(this.growthTarget, this.growth + step)
+          : Math.max(this.growthTarget, this.growth - step);
       this.tree.setGrowth(this.growth);
       this.onGrowth?.(this.growth);
+    }
+    if (this.growth <= 0 && this.ungrown.length) {
+      const waiting = this.ungrown;
+      this.ungrown = [];
+      for (const resolve of waiting) resolve();
+    }
+
+    const glide = this.cameraGlide;
+    if (glide) {
+      glide.t = Math.min(1, glide.t + dt / GLIDE_SECONDS);
+      const e = glide.t * glide.t * (3 - 2 * glide.t);
+      this.controls.target.lerpVectors(glide.fromTarget, glide.target, e);
+      this.camera.position.lerpVectors(glide.fromPosition, glide.position, e);
+      if (glide.t >= 1) this.cameraGlide = null;
     }
 
     this.controls.update();
