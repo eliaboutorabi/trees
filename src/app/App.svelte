@@ -1,9 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    ArrowLeft01Icon,
-    ArrowRight01Icon,
-    Camera01Icon,
+    ApertureIcon,
+    CloudAngledRainIcon,
+    CloudSnowIcon,
+    Leaf03Icon,
+    SunCloud02Icon,
+    Sun03Icon,
+    SunsetIcon,
+    TreesIcon,
     CloudFastWindIcon,
     CloudFogIcon,
     SnowIcon,
@@ -28,7 +33,7 @@
   import { getSeason, getWeather, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
-  import Section from './components/Section.svelte';
+  import Dock from './components/Dock.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
 
@@ -39,7 +44,10 @@
   let ready = $state(false);
   let unsupported = $state(false);
   let fatal = $state<string | null>(null);
-  let panelOpen = $state(true);
+  // The season and weather buttons wear the current choice, so the dock itself
+  // says what the scene is doing.
+  const SEASON_ICONS = { spring: FlowerIcon, summer: Sun03Icon, autumn: Leaf03Icon, winter: SnowIcon } as const;
+  const WEATHER_ICONS = { clear: SunCloud02Icon, rain: CloudAngledRainIcon, snow: CloudSnowIcon } as const;
 
   let growth = $state(0);
   let scrubbing = false;
@@ -440,274 +448,263 @@
     {/if}
 
     {#if ready}
-      <div class="readout">
-        <span><b>{stats.fps}</b> fps</span>
-        <span><b>{stats.modules.toLocaleString()}</b> modules</span>
-        <span><b>{stats.branchTriangles.toLocaleString()}</b> tris</span>
-        <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
-        <span><b>{stats.buildMs.toFixed(0)}</b> ms</span>
-        <span><b>{stats.renderScale.toFixed(2)}</b>× {stats.adaptive ? 'auto' : 'fixed'}</span>
-        {#if stats.truncated}<span class="warn">capped</span>{/if}
+      <div class="brand">
+        <h1>Arbor</h1>
+        <div class="readout">
+          <span><b>{stats.fps}</b> fps</span>
+          <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
+          <span><b>{stats.branchTriangles.toLocaleString()}</b> tris</span>
+          <span><b>{stats.renderScale.toFixed(2)}</b>× {stats.adaptive ? 'auto' : 'fixed'}</span>
+          {#if stats.truncated}<span class="warn">capped</span>{/if}
+        </div>
       </div>
 
-      <div class="rail" class:shifted={panelOpen}>
-      <div class="transport">
-        <button class="redraw" onclick={redraw} title="Grow the tree again from seed (R)">
-          <Icon icon={Rotate01Icon} size={15} strokeWidth={2} />
-          <span>Redraw</span>
+      <div class="actions">
+        <button class="round" onclick={() => studio?.frameTree()} title="Reframe camera" aria-label="Reframe camera">
+          <Icon icon={FocusIcon} size={17} strokeWidth={1.8} />
         </button>
-        <span class="divider"></span>
-        <button class="icon" onclick={replay} title="Replay growth (space)" aria-label="Replay growth">
-          <Icon icon={PlayIcon} size={16} strokeWidth={1.9} />
+        <button class="round" onclick={screenshot} title="Save PNG" aria-label="Save PNG">
+          <Icon icon={Download01Icon} size={17} strokeWidth={1.8} />
         </button>
-        <input
-          class="scrub"
-          type="range"
-          min="0"
-          max="1"
-          step="0.001"
-          value={growth}
-          oninput={scrub}
-          onpointerdown={() => (scrubbing = true)}
-          onpointerup={() => (scrubbing = false)}
-          aria-label="Growth"
-          style="--fill: {growth * 100}%"
-        />
-        <span class="pct">{Math.round(growth * 100)}%</span>
-        <button class="icon" onclick={() => studio?.frameTree()} title="Reframe camera" aria-label="Reframe camera">
-          <Icon icon={FocusIcon} size={16} strokeWidth={1.8} />
+        <button class="round" class:done={linkCopied} onclick={copyLink} title="Copy a link to this tree" aria-label="Copy a link to this tree">
+          <Icon icon={linkCopied ? Tick02Icon : CopyLinkIcon} size={17} strokeWidth={1.8} />
         </button>
-        <button class="icon" onclick={screenshot} title="Save PNG" aria-label="Save PNG">
-          <Icon icon={Download01Icon} size={16} strokeWidth={1.8} />
-        </button>
-        <button
-          class="icon"
-          class:done={linkCopied}
-          onclick={copyLink}
-          title="Copy a link to this tree"
-          aria-label="Copy a link to this tree"
-        >
-          <Icon icon={linkCopied ? Tick02Icon : CopyLinkIcon} size={16} strokeWidth={1.8} />
-        </button>
-        <span class="divider"></span>
-        <button class="icon" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
-          <Icon icon={UndoIcon} size={16} strokeWidth={1.8} />
+        <button class="round" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
+          <Icon icon={UndoIcon} size={17} strokeWidth={1.8} />
         </button>
       </div>
-      </div>
+
+      <Dock
+        tools={[
+          { id: 'species', label: 'Species', icon: TreesIcon, panel: speciesPanel, group: 0 },
+          { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0 },
+          { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0 },
+          { id: 'shape', label: 'Shape', icon: Tree01Icon, panel: shapePanel, group: 1 },
+          { id: 'foliage', label: 'Foliage', icon: Leaf01Icon, panel: foliagePanel, group: 1 },
+          { id: 'bloom', label: 'Bloom & fruit', icon: CherryIcon, panel: bloomPanel, group: 1 },
+          { id: 'light', label: 'Light', icon: SunsetIcon, panel: lightPanel, group: 2 },
+          { id: 'wind', label: 'Wind', icon: CloudFastWindIcon, panel: windPanel, group: 2 },
+          { id: 'look', label: 'Look', icon: ApertureIcon, panel: lookPanel, group: 3 },
+          { id: 'grammar', label: 'Grammar', icon: SourceCodeIcon, panel: grammarPanel, group: 3, wide: true },
+        ]}
+      >
+        <div class="growth">
+          <button class="mini" onclick={redraw} title="Grow the tree again from seed (R)" aria-label="Grow again">
+            <Icon icon={Rotate01Icon} size={15} strokeWidth={2} />
+          </button>
+          <button class="mini" onclick={replay} title="Replay growth (space)" aria-label="Replay growth">
+            <Icon icon={PlayIcon} size={15} strokeWidth={1.9} />
+          </button>
+          <input
+            class="scrub"
+            type="range"
+            min="0"
+            max="1"
+            step="0.001"
+            value={growth}
+            oninput={scrub}
+            onpointerdown={() => (scrubbing = true)}
+            onpointerup={() => (scrubbing = false)}
+            aria-label="Growth"
+            style="--fill: {growth * 100}%"
+          />
+          <span class="pct">{Math.round(growth * 100)}%</span>
+        </div>
+      </Dock>
     {/if}
   </div>
-
-  <aside class="panel" class:closed={!panelOpen}>
-    <!-- The panel lives on the right, so an open panel closes to the right. -->
-    <button class="toggle" onclick={() => (panelOpen = !panelOpen)} aria-label={panelOpen ? 'Hide panel' : 'Show panel'}>
-      <Icon icon={panelOpen ? ArrowRight01Icon : ArrowLeft01Icon} size={16} strokeWidth={2} />
-    </button>
-
-    <div class="panel__inner">
-      <header>
-        <h1>Arbor</h1>
-        <p>L-system tree studio · WebGPU</p>
-      </header>
-
-      <div class="species">
-        {#each presets as preset (preset.id)}
-          <button
-            class="chip"
-            class:active={preset.id === params.presetId}
-            onclick={() => choosePreset(preset.id)}
-            title={preset.blurb}
-          >
-            {preset.name}
-          </button>
-        {/each}
-      </div>
-      <p class="blurb">{activePreset.blurb}</p>
-
-      <div class="seasons">
-        {#each SEASONS as s (s.id)}
-          <button
-            class="chip season"
-            class:active={s.id === params.season}
-            onclick={() => chooseSeason(s.id)}
-            title={s.blurb}
-          >
-            {s.name}
-          </button>
-        {/each}
-      </div>
-      <p class="blurb">{getSeason(params.season).blurb}</p>
-
-      <div class="seasons">
-        {#each WEATHERS as w (w.id)}
-          <button
-            class="chip season"
-            class:active={w.id === params.weather}
-            onclick={() => chooseWeather(w.id)}
-            title={w.blurb || w.name}
-          >
-            {w.name}
-          </button>
-        {/each}
-      </div>
-      {#if params.weather !== 'clear'}
-        <Slider
-          label={params.weather === 'rain' ? 'Rain' : 'Snowfall'}
-          bind:value={params.precipitation}
-          min={0}
-          max={1}
-          hint={getWeather(params.weather).blurb}
-        />
-      {/if}
-
-      <Section title="Form" icon={Tree01Icon} open>
-        <p class="help">Controls marked ↻ rebuild the tree a moment after you stop moving them. Everything else is live.</p>
-        <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
-        <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} needsRedraw />
-        <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} needsRedraw />
-        <Slider label="Contraction" bind:value={params.shrink} min={0.6} max={0.99} hint="SHRINK — how fast each generation shortens" needsRedraw />
-        <Slider label="Tropism" bind:value={params.tropism} min={-0.6} max={0.6} hint="Positive reaches for the sky, negative droops" needsRedraw />
-        <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" needsRedraw />
-        <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
-        <div class="row">
-          <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
-          <button class="ghost" onclick={shuffleSeed} title="New random seed"><Icon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
-        </div>
-
-        <h4 class="sub"><Icon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
-        <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows — a surface gradient, so it reads at any zoom" />
-        <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
-      </Section>
-
-      <Section title="Foliage" icon={Leaf01Icon}>
-        <p class="help">Leaf shape ↻ needs a redraw; size and density are live.</p>
-        <div class="segmented">
-          {#each [{ v: 0, l: 'Broad' }, { v: 3, l: 'Lance' }, { v: 1, l: 'Needle' }, { v: 2, l: 'Blossom' }] as opt (opt.v)}
-            <button
-              class:active={params.leafShape === opt.v}
-              onclick={() => (params.leafShape = opt.v as 0 | 1 | 2 | 3)}
-            >
-              {opt.l}
-            </button>
-          {/each}
-        </div>
-        <Slider label="Density" bind:value={params.leafDensity} min={0} max={1} />
-        <Slider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} />
-        <Slider label="Autumn" bind:value={params.autumn} min={0} max={1} />
-        <Slider label="Translucency" bind:value={params.translucency} min={0} max={2.5} />
-      </Section>
-
-      <Section title="Bloom &amp; fruit" icon={FlowerIcon}>
-        <p class="help">
-          Flowers and fruit hang from the same twigs the leaves do, so any species can carry
-          them. Everything here is live.
-        </p>
-        <h4 class="sub"><Icon icon={FlowerIcon} size={13} strokeWidth={1.6} /> Flowers</h4>
-        <Slider label="Amount" bind:value={params.flowerDensity} min={0} max={1} />
-        <Slider label="Size" bind:value={params.flowerSize} min={0.2} max={2.5} />
-        <Swatch label="Petal" bind:value={params.flowerColor} />
-        <Swatch label="Throat" bind:value={params.flowerCore} />
-
-        <h4 class="sub"><Icon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
-        <div class="segmented">
-          {#each [{ v: 0, l: 'Berry' }, { v: 1, l: 'Apple' }, { v: 2, l: 'Cone' }] as opt (opt.v)}
-            <button
-              class:active={params.fruitShape === opt.v}
-              onclick={() => (params.fruitShape = opt.v as 0 | 1 | 2)}
-              title="Shape ↻ — takes effect on redraw"
-            >
-              {opt.l}
-            </button>
-          {/each}
-        </div>
-        <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
-        <Slider label="Size" bind:value={params.fruitSize} min={0.15} max={2} />
-        <Swatch label="Skin" bind:value={params.fruitColor} />
-        <Slider label="Ripeness" bind:value={params.fruitRipeness} min={0} max={1} hint="1 keeps the skin colour exactly; lower lets green survive on the shaded half" />
-        <Slider label="Sun blush" bind:value={params.fruitBlush} min={0} max={1} hint="How far the sunward cheek turns toward orange" />
-        <Slider label="Wax bloom" bind:value={params.fruitWax} min={0} max={1} hint="The pale dust on a plum, strongest around the rim" />
-        <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} hint="How much sky the skin mirrors. High gloss is shinier but paler — that trade is real, not a bug" />
-      </Section>
-
-      <Section title="Light &amp; air" icon={SunIcon} open>
-        <p class="help">
-          The sun's colour and strength are not picked — they follow from how much
-          atmosphere its light crosses, so it reddens and dims as it sets. Every
-          control here is live.
-        </p>
-        <h4 class="sub"><Icon icon={SunIcon} size={13} strokeWidth={1.6} /> Sun</h4>
-        <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
-        <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
-        <Slider label="Strength" bind:value={params.sunIntensity} min={0} max={12} step={0.1} hint="Brightness of the direct beam, before the atmosphere takes its cut" />
-
-        <h4 class="sub"><Icon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
-        <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
-        <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
-        <Slider label="Cloud cover" bind:value={params.overcast} min={0} max={1} hint="Closes the sky over, and takes the sun's strength and colour with it" />
-        <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
-
-        <h4 class="sub"><Icon icon={SnowIcon} size={13} strokeWidth={1.6} /> Snow</h4>
-        <Slider label="Cover" bind:value={params.snow} min={0} max={1} hint="Settles on the branches, the sward and the ground — all three together" />
-
-        <h4 class="sub"><Icon icon={CloudFastWindIcon} size={13} strokeWidth={1.6} /> Wind</h4>
-        <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
-        <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
-        <Slider label="Bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="The direction the wind pushes the tree toward" />
-      </Section>
-
-      <Section title="Render" icon={Camera01Icon}>
-        <p class="help">
-          This scene is fill-rate bound, so resolution is the dial that matters. <b>Auto</b> holds 60 fps
-          by scaling it — currently {stats.renderScale.toFixed(2)}×.
-        </p>
-        <div class="segmented">
-          {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
-            <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>
-              {opt.l}
-            </button>
-          {/each}
-        </div>
-        <Slider label="Bloom" bind:value={params.bloom} min={0} max={1.5} />
-        <label class="check"><input type="checkbox" bind:checked={params.depthOfField} /> Depth of field</label>
-        <label class="check"><input type="checkbox" bind:checked={params.grain} /> Film grain</label>
-        <label class="check"><input type="checkbox" bind:checked={params.antialias} /> Anti-aliasing</label>
-        <label class="check"><input type="checkbox" bind:checked={params.autoRotate} /> Orbit slowly</label>
-        <label class="check"><input type="checkbox" bind:checked={params.autoGrow} /> Replay growth on redraw</label>
-        <Slider label="Growth rate" bind:value={params.growthSpeed} min={0.05} max={1.5} />
-      </Section>
-
-      <Section title="Grammar" icon={SourceCodeIcon}>
-        <p class="help">
-          Globals: <code>ANG</code> angle · <code>LEN</code> length · <code>SHRINK</code> contraction ·
-          <code>N</code> generations · <code>n</code> current step. Rules are tried top-down;
-          <code>@p</code> pools stochastic variants.
-        </p>
-        <label class="field">
-          <span>Axiom</span>
-          <input class="mono" bind:value={axiomDraft} spellcheck="false" />
-        </label>
-        <label class="field">
-          <span>Productions</span>
-          <textarea class="mono" rows="12" bind:value={rulesDraft} spellcheck="false"></textarea>
-        </label>
-        <button class="apply" class:dirty={grammarDirty} onclick={applyGrammar} disabled={!grammarDirty}>
-          {grammarDirty ? 'Apply grammar' : 'Grammar applied'}
-        </button>
-        {#if issues.length}
-          <ul class="issues">
-            {#each issues as issue (issue.line + issue.text)}
-              <li><b>line {issue.line}</b> {issue.message}</li>
-            {/each}
-          </ul>
-        {/if}
-      </Section>
-
-      <footer>
-        <span>{stats.nodes.toLocaleString()} internodes · {stats.vertices.toLocaleString()} vertices</span>
-      </footer>
-    </div>
-  </aside>
 </div>
+
+{#snippet speciesPanel()}
+  <div class="species">
+    {#each presets as preset (preset.id)}
+      <button
+        class="chip"
+        class:active={preset.id === params.presetId}
+        onclick={() => choosePreset(preset.id)}
+        title={preset.blurb}
+      >
+        {preset.name}
+      </button>
+    {/each}
+  </div>
+  <p class="blurb">{activePreset.blurb}</p>
+{/snippet}
+
+{#snippet seasonPanel()}
+  <div class="seasons">
+    {#each SEASONS as s (s.id)}
+      <button class="chip season" class:active={s.id === params.season} onclick={() => chooseSeason(s.id)} title={s.blurb}>
+        {s.name}
+      </button>
+    {/each}
+  </div>
+  <p class="blurb">{getSeason(params.season).blurb}</p>
+{/snippet}
+
+{#snippet weatherPanel()}
+  <div class="seasons">
+    {#each WEATHERS as w (w.id)}
+      <button class="chip season" class:active={w.id === params.weather} onclick={() => chooseWeather(w.id)} title={w.blurb || w.name}>
+        {w.name}
+      </button>
+    {/each}
+  </div>
+  {#if params.weather !== 'clear'}
+    <Slider
+      label={params.weather === 'rain' ? 'Rain' : 'Snowfall'}
+      bind:value={params.precipitation}
+      min={0}
+      max={1}
+      hint={getWeather(params.weather).blurb}
+    />
+  {/if}
+  <Slider label="Cloud cover" bind:value={params.overcast} min={0} max={1} hint="Closes the sky over, and takes the sun's strength and colour with it" />
+
+  <h4 class="sub"><Icon icon={SnowIcon} size={13} strokeWidth={1.6} /> Snow</h4>
+  <Slider label="Cover" bind:value={params.snow} min={0} max={1} hint="Settles on the branches, the sward and the ground — all three together" />
+
+{/snippet}
+
+{#snippet shapePanel()}
+  <p class="help">Controls marked ↻ rebuild the tree a moment after you stop moving them. Everything else is live.</p>
+  <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
+  <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} needsRedraw />
+  <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} needsRedraw />
+  <Slider label="Contraction" bind:value={params.shrink} min={0.6} max={0.99} hint="SHRINK — how fast each generation shortens" needsRedraw />
+  <Slider label="Tropism" bind:value={params.tropism} min={-0.6} max={0.6} hint="Positive reaches for the sky, negative droops" needsRedraw />
+  <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" needsRedraw />
+  <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
+  <div class="row">
+    <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
+    <button class="ghost" onclick={shuffleSeed} title="New random seed"><Icon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
+  </div>
+
+  <h4 class="sub"><Icon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
+  <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows — a surface gradient, so it reads at any zoom" />
+  <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
+{/snippet}
+
+{#snippet foliagePanel()}
+  <p class="help">Leaf shape ↻ needs a redraw; size and density are live.</p>
+  <div class="segmented">
+    {#each [{ v: 0, l: 'Broad' }, { v: 3, l: 'Lance' }, { v: 1, l: 'Needle' }, { v: 2, l: 'Blossom' }] as opt (opt.v)}
+      <button
+        class:active={params.leafShape === opt.v}
+        onclick={() => (params.leafShape = opt.v as 0 | 1 | 2 | 3)}
+      >
+        {opt.l}
+      </button>
+    {/each}
+  </div>
+  <Slider label="Density" bind:value={params.leafDensity} min={0} max={1} />
+  <Slider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} />
+  <Slider label="Autumn" bind:value={params.autumn} min={0} max={1} />
+  <Slider label="Translucency" bind:value={params.translucency} min={0} max={2.5} />
+{/snippet}
+
+{#snippet bloomPanel()}
+  <p class="help">
+    Flowers and fruit hang from the same twigs the leaves do, so any species can carry
+    them. Everything here is live.
+  </p>
+  <h4 class="sub"><Icon icon={FlowerIcon} size={13} strokeWidth={1.6} /> Flowers</h4>
+  <Slider label="Amount" bind:value={params.flowerDensity} min={0} max={1} />
+  <Slider label="Size" bind:value={params.flowerSize} min={0.2} max={2.5} />
+  <Swatch label="Petal" bind:value={params.flowerColor} />
+  <Swatch label="Throat" bind:value={params.flowerCore} />
+
+  <h4 class="sub"><Icon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
+  <div class="segmented">
+    {#each [{ v: 0, l: 'Berry' }, { v: 1, l: 'Apple' }, { v: 2, l: 'Cone' }] as opt (opt.v)}
+      <button
+        class:active={params.fruitShape === opt.v}
+        onclick={() => (params.fruitShape = opt.v as 0 | 1 | 2)}
+        title="Shape ↻ — takes effect on redraw"
+      >
+        {opt.l}
+      </button>
+    {/each}
+  </div>
+  <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
+  <Slider label="Size" bind:value={params.fruitSize} min={0.15} max={2} />
+  <Swatch label="Skin" bind:value={params.fruitColor} />
+  <Slider label="Ripeness" bind:value={params.fruitRipeness} min={0} max={1} hint="1 keeps the skin colour exactly; lower lets green survive on the shaded half" />
+  <Slider label="Sun blush" bind:value={params.fruitBlush} min={0} max={1} hint="How far the sunward cheek turns toward orange" />
+  <Slider label="Wax bloom" bind:value={params.fruitWax} min={0} max={1} hint="The pale dust on a plum, strongest around the rim" />
+  <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} hint="How much sky the skin mirrors. High gloss is shinier but paler — that trade is real, not a bug" />
+{/snippet}
+
+{#snippet lightPanel()}
+  <p class="help">
+    The sun's colour and strength are not picked — they follow from how much
+    atmosphere its light crosses, so it reddens and dims as it sets. Every
+    control here is live.
+  </p>
+  <h4 class="sub"><Icon icon={SunIcon} size={13} strokeWidth={1.6} /> Sun</h4>
+  <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
+  <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
+  <Slider label="Strength" bind:value={params.sunIntensity} min={0} max={12} step={0.1} hint="Brightness of the direct beam, before the atmosphere takes its cut" />
+
+  <h4 class="sub"><Icon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
+  <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
+  <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
+  <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
+
+{/snippet}
+
+{#snippet windPanel()}
+  <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
+  <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
+  <Slider label="Bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="The direction the wind pushes the tree toward" />
+{/snippet}
+
+{#snippet lookPanel()}
+  <p class="help">
+    This scene is fill-rate bound, so resolution is the dial that matters. <b>Auto</b> holds 60 fps
+    by scaling it — currently {stats.renderScale.toFixed(2)}×.
+  </p>
+  <div class="segmented">
+    {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
+      <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>
+        {opt.l}
+      </button>
+    {/each}
+  </div>
+  <Slider label="Bloom" bind:value={params.bloom} min={0} max={1.5} />
+  <label class="check"><input type="checkbox" bind:checked={params.depthOfField} /> Depth of field</label>
+  <label class="check"><input type="checkbox" bind:checked={params.grain} /> Film grain</label>
+  <label class="check"><input type="checkbox" bind:checked={params.antialias} /> Anti-aliasing</label>
+  <label class="check"><input type="checkbox" bind:checked={params.autoRotate} /> Orbit slowly</label>
+  <label class="check"><input type="checkbox" bind:checked={params.autoGrow} /> Replay growth on redraw</label>
+  <Slider label="Growth rate" bind:value={params.growthSpeed} min={0.05} max={1.5} />
+{/snippet}
+
+{#snippet grammarPanel()}
+  <p class="help">
+    Globals: <code>ANG</code> angle · <code>LEN</code> length · <code>SHRINK</code> contraction ·
+    <code>N</code> generations · <code>n</code> current step. Rules are tried top-down;
+    <code>@p</code> pools stochastic variants.
+  </p>
+  <label class="field">
+    <span>Axiom</span>
+    <input class="mono" bind:value={axiomDraft} spellcheck="false" />
+  </label>
+  <label class="field">
+    <span>Productions</span>
+    <textarea class="mono" rows="12" bind:value={rulesDraft} spellcheck="false"></textarea>
+  </label>
+  <button class="apply" class:dirty={grammarDirty} onclick={applyGrammar} disabled={!grammarDirty}>
+    {grammarDirty ? 'Apply grammar' : 'Grammar applied'}
+  </button>
+  {#if issues.length}
+    <ul class="issues">
+      {#each issues as issue (issue.line + issue.text)}
+        <li><b>line {issue.line}</b> {issue.message}</li>
+      {/each}
+    </ul>
+  {/if}
+{/snippet}
 
 <style>
   .app {
@@ -799,24 +796,41 @@
     50% { opacity: 1; transform: scale(1.25); }
   }
 
-  /* ---------------------------------------------------------- readout */
+  /* ------------------------------------------------------------- HUD */
+
+  /*
+   * Everything floats over the scene: the name and a quiet readout top-left,
+   * the camera and file actions top-right, and the tools in the dock along the
+   * bottom. Nothing reserves space, so the tree has the whole window.
+   */
+  .brand {
+    position: absolute;
+    top: 1.05rem;
+    left: 1.25rem;
+    pointer-events: none;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+  }
+
+  .brand h1 {
+    font-size: 1.05rem;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
 
   .readout {
-    position: absolute;
-    top: 1rem;
-    left: 1.15rem;
+    margin-top: 0.3rem;
     display: flex;
-    gap: 1rem;
+    gap: 0.85rem;
     font-family: var(--mono);
-    font-size: 0.68rem;
-    color: rgba(255, 255, 255, 0.55);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
-    pointer-events: none;
+    font-size: 0.62rem;
+    color: rgba(255, 255, 255, 0.5);
     font-variant-numeric: tabular-nums;
   }
 
   .readout b {
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(255, 255, 255, 0.85);
     font-weight: 500;
   }
 
@@ -824,113 +838,71 @@
     color: #ffb057;
   }
 
-  /* The copy-link button briefly becomes a tick. Confirming in place beats a
-     toast: the feedback appears exactly where the user is already looking. */
-  .transport .icon.done {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
-  }
-
-  /* -------------------------------------------------------- transport */
-
-  /*
-   * The strip the controls centre themselves in. It ends where the panel
-   * begins, so they stay clear of it: the tree is allowed to sit behind the
-   * glass, a button is not, because a click there lands on the panel instead.
-   *
-   * Centring in a shrinking strip rather than shifting by a fixed amount is
-   * what keeps the pill on screen — half the panel's width is a big nudge in a
-   * 900px window, and it used to push the left end of the bar off the edge.
-   * Animating `right` here relaid out one pill; it is the renderer that must
-   * not be resized, and the ResizeObserver watches the stage, not this.
-   */
-  .rail {
+  .actions {
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 1.6rem;
+    top: 1rem;
+    right: 1.1rem;
     display: flex;
-    justify-content: center;
-    pointer-events: none;
-    transition: right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    gap: 0.45rem;
   }
 
-  .rail.shifted {
-    right: 21.5rem;
-  }
-
-  .transport {
-    pointer-events: auto;
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    padding: 0.55rem 0.95rem;
-    border-radius: 999px;
-    background: rgba(20, 15, 11, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    backdrop-filter: blur(18px) saturate(1.3);
-    -webkit-backdrop-filter: blur(18px) saturate(1.3);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-  }
-
-  .redraw {
-    display: flex;
-    align-items: center;
-    gap: 0.42rem;
-    height: 30px;
-    padding: 0 0.75rem;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 0.74rem;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-  }
-
-  .redraw :global(svg) {
-    display: block;
-  }
-
-  .redraw:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: #fff;
-  }
-
-
-
-  .divider {
-    width: 1px;
-    height: 18px;
-    background: rgba(255, 255, 255, 0.14);
-  }
-
-  .icon {
-    width: 30px;
-    height: 30px;
+  .round {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 50%;
     display: grid;
     place-items: center;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--ink-dim);
+    background: linear-gradient(to bottom, rgba(34, 27, 21, 0.62), rgba(18, 14, 11, 0.56));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(18px) saturate(1.35);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition:
+      transform 0.18s cubic-bezier(0.3, 0.7, 0.4, 1.4),
+      color 0.18s;
   }
 
-  .icon:hover {
-    background: rgba(255, 255, 255, 0.1);
+  .round:hover {
     color: #fff;
+    transform: translateY(-2px) scale(1.05);
   }
 
-  .icon :global(svg) {
-    display: block;
+  .round.done {
+    color: var(--accent);
+  }
+
+  /* Growth, at the end of the dock. */
+  .growth {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-right: 0.3rem;
+    flex: none;
+  }
+
+  .mini {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: none;
+    color: var(--ink-dim);
+    cursor: pointer;
+  }
+
+  .mini:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .scrub {
     -webkit-appearance: none;
     appearance: none;
-    width: 15rem;
+    width: 7.5rem;
     height: 3px;
     border-radius: 3px;
     background: linear-gradient(
@@ -962,94 +934,18 @@
 
   /* ------------------------------------------------------------ panel */
 
-  .panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 21.5rem;
-    z-index: 5;
-    /*
-     * Glass, now that there is a scene behind it rather than a reserved strip.
-     *
-     * The tint is doing two jobs at once: it has to stay dark enough to read
-     * 0.65rem labels against a sunlit meadow, and light enough that the tree is
-     * still legibly there. The blur is what buys that — it strips the high
-     * frequencies out of the backdrop, so what is left is a smooth wash that
-     * text sits on cleanly, and a much lighter tint than a sharp backdrop would
-     * need. Hence a wide radius with a fairly low alpha, rather than the
-     * reverse.
-     */
-    background: linear-gradient(
-      to bottom,
-      rgba(26, 20, 15, 0.62),
-      rgba(18, 13, 10, 0.52) 22%,
-      rgba(18, 13, 10, 0.52)
-    );
-    backdrop-filter: blur(34px) saturate(1.5);
-    -webkit-backdrop-filter: blur(34px) saturate(1.5);
-    border-left: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: -24px 0 60px rgba(0, 0, 0, 0.32);
-    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .panel.closed {
-    transform: translateX(100%);
-  }
-
-  .panel__inner {
-    height: 100%;
-    overflow-y: auto;
-    padding: 1.5rem 1.35rem 2.5rem;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-  }
-
-  .toggle {
-    position: absolute;
-    left: -30px;
-    top: 1.5rem;
-    width: 30px;
-    height: 46px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-right: none;
-    border-radius: 8px 0 0 8px;
-    background: rgba(18, 13, 10, 0.52);
-    backdrop-filter: blur(34px) saturate(1.5);
-    -webkit-backdrop-filter: blur(34px) saturate(1.5);
-    box-shadow: -10px 0 26px rgba(0, 0, 0, 0.26);
-    color: var(--ink-dim);
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-  }
-
-  .toggle:hover {
-    color: var(--accent);
-  }
 
 
-  header h1 {
-    font-size: 1.35rem;
-    font-weight: 300;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--ink);
-    margin-bottom: 0.25rem;
-  }
 
-  header p {
-    font-size: 0.64rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-    margin-bottom: 1.15rem;
-  }
+
+
+
+
 
   .seasons {
     display: flex;
     gap: 0.35rem;
-    margin-top: 0.55rem;
+    margin: 0.2rem 0 0.75rem;
   }
 
   .chip.season {
@@ -1278,34 +1174,15 @@
     color: #ff8f6b;
   }
 
-  footer {
-    margin-top: 1.4rem;
-    padding-top: 0.9rem;
-    border-top: 1px solid var(--hairline);
-    font-size: 0.65rem;
-    color: var(--ink-faint);
-    font-variant-numeric: tabular-nums;
-  }
 
   /* The pill has to fit the strip beside the panel, not just the window. */
-  @media (max-width: 1040px) {
-    .transport {
-      gap: 0.6rem;
-      padding: 0.5rem 0.75rem;
-    }
+  @media (max-width: 640px) {
     .scrub {
-      width: 8rem;
+      width: 4.5rem;
     }
-    .redraw span {
+    .readout {
       display: none;
     }
   }
 
-  @media (max-width: 780px) {
-    /* The panel covers most of the width here, so there is no clear strip to
-       centre in. Leave the controls where they are and let it sit over them. */
-    .rail.shifted {
-      right: 0;
-    }
-  }
 </style>
