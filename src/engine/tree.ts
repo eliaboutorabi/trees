@@ -423,25 +423,26 @@ export class Tree {
   }
 
   /**
-   * Drop the leaves that a sparser canopy no longer has — the ones whose hash
-   * sits between `toDensity` and `fromDensity` — staggered over `seconds`, so
-   * a tree going into winter sheds instead of thinning out. The default is
-   * deliberately long: a whole canopy released over three seconds is a single
-   * dense cloud of leaves, which reads as an explosion rather than a season. Call it with the
-   * density the canopy is leaving; the density itself can then move at once,
-   * since a leaf on its way down is drawn whatever the density says.
+   * Thin the canopy toward `toDensity` with a light shower rather than a
+   * collapse: of the leaves whose hash sits between `toDensity` and
+   * `fromDensity`, only `share` of them are let fall, staggered over
+   * `seconds`; the rest are left to the density itself, which shrinks them
+   * away on their twigs as it moves. Call it with the density the canopy is
+   * leaving, before the density changes — a leaf on its way down is drawn
+   * whatever the density says, so it cannot be hidden mid-fall.
+   *
+   * Dropping all of them was the first version, and a whole canopy in the air
+   * at once read as an explosion, not a season.
    */
-  dropLeaves(fromDensity: number, toDensity: number, seconds = 9): number {
+  dropLeaves(fromDensity: number, toDensity: number, share = 0.06, seconds = 10): number {
     if (toDensity >= fromDensity) return 0;
     const now = this.uniforms.fallClock.value;
     let n = 0;
     for (let id = 0; id < this.leafCount; id++) {
       const k = this.leafKeys[id];
       if (this.fallen[id] || k < toDensity || k >= fromDensity) continue;
-      // Spread well past the glide, so a whole canopy comes down as a cascade
-      // that carries on while the snow settles, not as one cloud — and loaded
-      // a little toward the start, so it begins the moment the season changes.
-      this.release(id, now + Math.pow(this.rng(), 1.25) * seconds);
+      if (this.rng() >= share) continue;
+      this.release(id, now + this.rng() * seconds);
       n++;
     }
     return n;
