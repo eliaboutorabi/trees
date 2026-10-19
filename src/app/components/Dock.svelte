@@ -47,6 +47,8 @@
   const buttons: Record<string, HTMLButtonElement> = {};
   let cardLeft = $state(0);
   let cardBottom = $state(0);
+  /** Where along the card's bottom edge its button is, for the notch. */
+  let notch = $state(0);
 
   let enterTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -100,7 +102,8 @@
     const w = card.offsetWidth;
     const margin = 12;
     cardLeft = Math.min(Math.max(b.left + b.width / 2 - w / 2, margin), window.innerWidth - w - margin);
-    cardBottom = window.innerHeight - d.top + 10;
+    cardBottom = window.innerHeight - d.top + 12;
+    notch = Math.min(Math.max(b.left + b.width / 2 - cardLeft, 18), w - 18);
   }
 
   $effect(() => {
@@ -110,13 +113,18 @@
   });
 
   onMount(() => {
+    // A click on the scene closes the card; a drag does not. Dragging is how
+    // the camera is orbited, and the moment you most want a pinned card to
+    // stay is while you swing round to see what its slider just did.
+    let downAt: { x: number; y: number } | null = null;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (card?.contains(t) || dock?.contains(t)) return;
-      close();
+      downAt = card?.contains(t) || dock?.contains(t) ? null : { x: e.clientX, y: e.clientY };
     };
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       holding = false;
+      if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 5) close();
+      downAt = null;
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -141,7 +149,7 @@
       class:wide={open.wide}
       class:pinned={pinned === open.id}
       bind:this={card}
-      style="left: {cardLeft}px; bottom: {cardBottom}px"
+      style="left: {cardLeft}px; bottom: {cardBottom}px; --notch: {notch}px"
       role="dialog"
       aria-label={open.label}
       tabindex="-1"
@@ -273,9 +281,11 @@
       transform 0.15s;
   }
 
-  .tool:hover:not(.active) .tip {
-    opacity: 1;
-    transform: translate(-50%, 0);
+  @media (hover: hover) {
+    .tool:hover:not(.active) .tip {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
   }
 
   .card {
@@ -299,6 +309,26 @@
 
   .card.wide {
     width: 28rem;
+  }
+
+  /* A small notch on the bottom edge, over the button the card belongs to. */
+  .card::after {
+    content: '';
+    position: absolute;
+    left: var(--notch, 50%);
+    bottom: -6px;
+    width: 12px;
+    height: 12px;
+    transform: translateX(-50%) rotate(45deg);
+    background: rgba(18, 14, 11, 0.72);
+    border-right: 1px solid rgba(255, 255, 255, 0.13);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+  }
+
+  .card.pinned::after {
+    border-color: rgba(240, 176, 100, 0.45);
   }
 
   .card.pinned {
@@ -338,6 +368,11 @@
     .tool {
       width: 2.45rem;
       height: 2.45rem;
+    }
+    /* On a phone the dock scrolls sideways; fading its ends is what says so. */
+    .dock {
+      mask-image: linear-gradient(to right, transparent, #000 1.1rem, #000 calc(100% - 1.1rem), transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, #000 1.1rem, #000 calc(100% - 1.1rem), transparent);
     }
   }
 </style>
