@@ -33,7 +33,9 @@ import {
   float,
   fog,
   mix,
-  normalWorld,
+  cameraViewMatrix,
+  normalWorldGeometry,
+  vec4,
   positionWorld,
   smoothstep,
   texture,
@@ -139,7 +141,15 @@ export function createGroundMaterial() {
 
   // 0 on the flat, 1 on a cliff face. Needed before sampling, to pick the
   // projection.
-  const slope = normalWorld.y.clamp(0, 1).oneMinus();
+  //
+  // From the mesh's own normal, not `normalWorld`. Once `normalNode` is set,
+  // `normalWorld` is derived from it — and that, when it was handed a
+  // world-space vector where three expects view space, made the slope depend
+  // on where the camera was. Looking down, "up" in view space is the top of the
+  // screen, so the whole meadow read as cliff: rock everywhere, and no snow,
+  // since snow only settles on the flat. From the side the two spaces roughly
+  // agree, which is why the snow was only ever there from the side.
+  const slope = normalWorldGeometry.y.clamp(0, 1).oneMinus();
   const steepness = smoothstep(0.35, 0.8, slope);
 
   // Two scales per field, at incommensurate ratios, so the tile does not read
@@ -218,7 +228,11 @@ export function createGroundMaterial() {
   // what a rough surface's normal map is.
   const bumpAmount = mix(float(0.13), float(0.2), nearness);
   const bump = vec3(detailTex.g.sub(0.5), 0, detailTex.b.sub(0.5)).mul(bumpAmount).mul(2);
-  material.normalNode = normalWorld.add(bump).normalize();
+  // Built in world space, then handed over in *view* space, which is what
+  // `normalNode` is read as — see the note on `slope` for what the world-space
+  // version did.
+  const bumped = normalWorldGeometry.add(bump).normalize();
+  material.normalNode = cameraViewMatrix.mul(vec4(bumped, 0)).xyz.normalize();
 
   // Aerial perspective. Distance is measured from the tree, not the camera, so
   // the horizon stays put while the camera orbits.
