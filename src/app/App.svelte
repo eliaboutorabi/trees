@@ -34,6 +34,8 @@
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
   import Dock from './components/Dock.svelte';
+  import Tile from './components/Tile.svelte';
+  import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
 
@@ -47,6 +49,18 @@
   // The season and weather buttons wear the current choice, so the dock itself
   // says what the scene is doing.
   const SEASON_ICONS = { spring: FlowerIcon, summer: Sun03Icon, autumn: Leaf03Icon, winter: SnowIcon } as const;
+  // Tile backdrops: the colour of the season, the colour of the sky.
+  const SEASON_BACKDROPS = {
+    spring: 'linear-gradient(to bottom, rgba(170, 214, 160, 0.34), rgba(64, 96, 54, 0.22))',
+    summer: 'linear-gradient(to bottom, rgba(242, 204, 118, 0.32), rgba(84, 104, 44, 0.24))',
+    autumn: 'linear-gradient(to bottom, rgba(234, 140, 66, 0.34), rgba(112, 62, 26, 0.24))',
+    winter: 'linear-gradient(to bottom, rgba(206, 220, 240, 0.4), rgba(122, 138, 164, 0.24))',
+  } as const;
+  const WEATHER_BACKDROPS = {
+    clear: 'linear-gradient(to bottom, rgba(126, 176, 232, 0.36), rgba(240, 190, 112, 0.24))',
+    rain: 'linear-gradient(to bottom, rgba(132, 142, 152, 0.42), rgba(60, 66, 74, 0.3))',
+    snow: 'linear-gradient(to bottom, rgba(226, 233, 243, 0.45), rgba(150, 160, 176, 0.3))',
+  } as const;
   const WEATHER_ICONS = { clear: SunCloud02Icon, rain: CloudAngledRainIcon, snow: CloudSnowIcon } as const;
 
   let growth = $state(0);
@@ -516,38 +530,33 @@
 </div>
 
 {#snippet speciesPanel()}
-  <div class="species">
+  <div class="tiles three">
     {#each presets as preset (preset.id)}
-      <button
-        class="chip"
-        class:active={preset.id === params.presetId}
-        onclick={() => choosePreset(preset.id)}
-        title={preset.blurb}
-      >
-        {preset.name}
-      </button>
+      <Tile label={preset.name} title={preset.blurb} active={preset.id === params.presetId} onclick={() => choosePreset(preset.id)}>
+        <TreeGlyph {preset} season={params.season} />
+      </Tile>
     {/each}
   </div>
   <p class="blurb">{activePreset.blurb}</p>
 {/snippet}
 
 {#snippet seasonPanel()}
-  <div class="seasons">
+  <div class="tiles four">
     {#each SEASONS as s (s.id)}
-      <button class="chip season" class:active={s.id === params.season} onclick={() => chooseSeason(s.id)} title={s.blurb}>
-        {s.name}
-      </button>
+      <Tile label={s.name} title={s.blurb} active={s.id === params.season} backdrop={SEASON_BACKDROPS[s.id]} onclick={() => chooseSeason(s.id)}>
+        <TreeGlyph preset={activePreset} season={s.id} />
+      </Tile>
     {/each}
   </div>
   <p class="blurb">{getSeason(params.season).blurb}</p>
 {/snippet}
 
 {#snippet weatherPanel()}
-  <div class="seasons">
+  <div class="tiles three">
     {#each WEATHERS as w (w.id)}
-      <button class="chip season" class:active={w.id === params.weather} onclick={() => chooseWeather(w.id)} title={w.blurb || w.name}>
-        {w.name}
-      </button>
+      <Tile label={w.name} title={w.blurb || w.name} active={w.id === params.weather} backdrop={WEATHER_BACKDROPS[w.id]} onclick={() => chooseWeather(w.id)}>
+        <span class="weather-art"><Icon icon={WEATHER_ICONS[w.id]} size={28} strokeWidth={1.5} /></span>
+      </Tile>
     {/each}
   </div>
   {#if params.weather !== 'clear'}
@@ -942,46 +951,29 @@
 
 
 
-  .seasons {
-    display: flex;
-    gap: 0.35rem;
-    margin: 0.2rem 0 0.75rem;
+  .tiles {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.2rem 0 0.7rem;
   }
 
-  .chip.season {
-    flex: 1;
-    padding-inline: 0;
-    font-size: 0.68rem;
+  .tiles.three {
+    grid-template-columns: repeat(3, 1fr);
   }
 
-  .species {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+  .tiles.four {
+    grid-template-columns: repeat(4, 1fr);
   }
 
-  .chip {
-    padding: 0.32rem 0.66rem;
-    font-size: 0.72rem;
-    border-radius: 999px;
-    border: 1px solid var(--hairline);
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--ink-dim);
-    cursor: pointer;
-    transition: all 0.15s ease;
+  .weather-art {
+    color: rgba(255, 255, 255, 0.9);
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
   }
 
-  .chip:hover {
-    color: var(--ink);
-    border-color: rgba(255, 255, 255, 0.22);
-  }
 
-  .chip.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #21160c;
-    font-weight: 500;
-  }
+
+
+
 
   .blurb {
     font-size: 0.72rem;
