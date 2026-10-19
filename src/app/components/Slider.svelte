@@ -20,7 +20,7 @@
 <label class="slider" title={hint ?? label}>
   <span class="slider__head">
     <span class="slider__label">
-      {label}{#if needsRedraw}<span class="mark" title="Takes effect on redraw">↻</span>{/if}
+      {label}{#if needsRedraw}<span class="mark" title="Rebuilds the tree a moment after you stop">↻</span>{/if}
     </span>
     <span class="slider__value">{shown}</span>
   </span>

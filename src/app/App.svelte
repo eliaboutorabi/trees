@@ -101,12 +101,6 @@
     'fruitShape',
   ] as const;
 
-  const pending = $derived.by(() => {
-    const now = structureSnapshot();
-    if (!built) return false;
-    return REDRAW_KEYS.some((k) => now[k] !== built![k]);
-  });
-
   function doRebuild(replay: boolean) {
     if (!studio) return;
     const snapshot = structureSnapshot();
@@ -122,6 +116,41 @@
   function redraw() {
     doRebuild(params.autoGrow);
   }
+
+  /*
+   * Rebuilding by itself.
+   *
+   * Anything that changes the tree's structure used to wait for the Redraw
+   * button, which meant dragging a slider, seeing nothing, and clicking —
+   * every time. Now the tree is rebuilt once the structure stops changing,
+   * without replaying the growth, so it simply becomes the new tree.
+   *
+   * Trailing by a moment, so a drag is not rebuilt on every pixel of it; but
+   * never more than half a second behind, so a long slow drag still shows the
+   * tree changing under it rather than nothing until you let go. A build is
+   * tens of milliseconds for most trees, so this is affordable.
+   */
+  const SETTLE_MS = 180;
+  const MAX_LAG_MS = 500;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  let changingSince = 0;
+
+  $effect(() => {
+    const now = structureSnapshot();
+    if (!ready || !built) return;
+    if (!REDRAW_KEYS.some((k) => now[k] !== built![k])) {
+      changingSince = 0;
+      return;
+    }
+    const t = performance.now();
+    if (!changingSince) changingSince = t;
+    clearTimeout(settleTimer);
+    const wait = t - changingSince > MAX_LAG_MS ? 0 : SETTLE_MS;
+    settleTimer = setTimeout(() => {
+      changingSince = 0;
+      doRebuild(false);
+    }, wait);
+  });
 
   /** Put every control on this species back where it started. */
   function resetToDefaults() {
@@ -423,12 +452,7 @@
 
       <div class="rail" class:shifted={panelOpen}>
       <div class="transport">
-        <button
-          class="redraw"
-          class:pending
-          onclick={redraw}
-          title={pending ? 'Apply pending grammar changes (R)' : 'Rebuild the tree (R)'}
-        >
+        <button class="redraw" onclick={redraw} title="Grow the tree again from seed (R)">
           <Icon icon={Rotate01Icon} size={15} strokeWidth={2} />
           <span>Redraw</span>
         </button>
@@ -537,7 +561,7 @@
       {/if}
 
       <Section title="Form" icon={Tree01Icon} open>
-        <p class="help">Controls marked ↻ re-derive the grammar — press Redraw (or <kbd>R</kbd>) to apply. Everything else is live.</p>
+        <p class="help">Controls marked ↻ rebuild the tree a moment after you stop moving them. Everything else is live.</p>
         <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
         <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} needsRedraw />
         <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} needsRedraw />
@@ -873,19 +897,7 @@
     color: #fff;
   }
 
-  /* Something structural changed and is not on screen yet. */
-  .redraw.pending {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #21160c;
-    font-weight: 500;
-    animation: nudge 2.4s ease-in-out infinite;
-  }
 
-  @keyframes nudge {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 176, 100, 0); }
-    50% { box-shadow: 0 0 0 5px rgba(240, 176, 100, 0.16); }
-  }
 
   .divider {
     width: 1px;
@@ -1183,15 +1195,6 @@
     margin-bottom: 0.75rem;
   }
 
-  kbd {
-    font-family: var(--mono);
-    font-size: 0.9em;
-    padding: 0.05em 0.32em;
-    border-radius: 3px;
-    border: 1px solid var(--hairline);
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--ink-dim);
-  }
 
   .help code,
   .card code {
