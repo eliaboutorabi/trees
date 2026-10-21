@@ -2,6 +2,13 @@
   import { onMount } from 'svelte';
   import {
     ApertureIcon,
+    CloudBigRainIcon,
+    CloudLittleRainIcon,
+    CloudLittleSnowIcon,
+    CloudMidSnowIcon,
+    CloudyIcon,
+    Leaf04Icon,
+    LeafyGreenIcon,
     ArrowDown01Icon,
     ArrowExpand01Icon,
     ArrowShrink01Icon,
@@ -20,6 +27,7 @@
     CloudSnowIcon,
     Leaf03Icon,
     SunCloud02Icon,
+    Sun02Icon,
     Sun03Icon,
     SunsetIcon,
     TreesIcon,
@@ -43,7 +51,7 @@
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, paramsFromPreset, presets, weatherFields, type AppParams } from './params.svelte';
-  import { getSeason, getWeather, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
+  import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
   import Dock from './components/Dock.svelte';
@@ -54,6 +62,8 @@
   import SunDial from './components/SunDial.svelte';
   import WindCompass from './components/WindCompass.svelte';
   import ShapePad from './components/ShapePad.svelte';
+  import PartGlyph from './components/PartGlyph.svelte';
+  import ColorDots from './components/ColorDots.svelte';
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -68,6 +78,18 @@
   // The season and weather buttons wear the current choice, so the dock itself
   // says what the scene is doing.
   const SEASON_ICONS = { spring: FlowerIcon, summer: Sun03Icon, autumn: Leaf03Icon, winter: SnowIcon } as const;
+  // Leaf and fruit shapes, as tiles.
+  const LEAF_SHAPES = [
+    { v: 0, l: 'Broad', kind: 'broad' },
+    { v: 3, l: 'Lance', kind: 'lance' },
+    { v: 1, l: 'Needle', kind: 'needle' },
+    { v: 2, l: 'Blossom', kind: 'blossom' },
+  ] as const;
+  const FRUIT_SHAPES = [
+    { v: 0, l: 'Berry', kind: 'berry' },
+    { v: 1, l: 'Apple', kind: 'apple' },
+    { v: 2, l: 'Cone', kind: 'cone' },
+  ] as const;
   // Tile backdrops: the colour of the season, the colour of the sky.
   const SEASON_BACKDROPS = {
     spring: 'linear-gradient(to bottom, rgba(170, 214, 160, 0.34), rgba(64, 96, 54, 0.22))',
@@ -105,6 +127,18 @@
   const grammarDirty = $derived(axiomDraft !== params.axiom || rulesDraft !== params.rules);
 
   const activePreset = $derived(getPreset(params.presetId));
+
+  const hexOf = (n: number | undefined, fallback: number) => `#${(n ?? fallback).toString(16).padStart(6, '0')}`;
+  const leafHex = $derived(hexOf(activePreset.palette.leafTip, 0x86a83c));
+  const blossomHex = $derived(hexOf(activePreset.palette.blossom, 0xffd7e4));
+  // A handful of colours that suit the job, the species' own first.
+  const petalChoices = $derived(
+    [...new Set([hexOf(activePreset.palette.flowerColor, 0xf6d9e8), '#ffffff', '#ffd1e0', '#ff8fa3', '#ffd27a', '#c9a7ff'])],
+  );
+  const skinChoices = $derived(
+    [...new Set([hexOf(activePreset.palette.fruitColor, 0xb8231f), '#a32617', '#8e1f36', '#e1541a', '#e8b62c', '#4a2c5a', '#7a9a2e'])],
+  );
+
 
   /** Only these force the grammar to be re-derived — everything else is live. */
   function structureSnapshot() {
@@ -606,20 +640,13 @@
       </Tile>
     {/each}
   </div>
-  {#if params.weather !== 'clear'}
-    <Slider
-      label={params.weather === 'rain' ? 'Rain' : 'Snowfall'}
-      bind:value={params.precipitation}
-      min={0}
-      max={1}
-      hint={getWeather(params.weather).blurb}
-    />
+  {#if params.weather === 'rain'}
+    <PicSlider label="How hard it rains" bind:value={params.precipitation} min={0} max={1} from={CloudLittleRainIcon} to={CloudBigRainIcon} />
+  {:else if params.weather === 'snow'}
+    <PicSlider label="How hard it snows" bind:value={params.precipitation} min={0} max={1} from={CloudLittleSnowIcon} to={CloudMidSnowIcon} />
   {/if}
-  <Slider label="Cloud cover" bind:value={params.overcast} min={0} max={1} hint="Closes the sky over, and takes the sun's strength and colour with it" />
-
-  <h4 class="sub"><Icon icon={SnowIcon} size={13} strokeWidth={1.6} /> Snow</h4>
-  <Slider label="Cover" bind:value={params.snow} min={0} max={1} hint="Settles on the branches, the sward and the ground — all three together" />
-
+  <PicSlider label="Clouds" bind:value={params.overcast} min={0} max={1} from={Sun02Icon} to={CloudyIcon} hint="A clear sky, or one closed over — which takes the sun's strength and colour with it" />
+  <PicSlider label="Snow on the ground" bind:value={params.snow} min={0} max={1} from={Plant02Icon} to={SnowIcon} hint="Settles on the branches, the grass and the ground together" />
 {/snippet}
 
 {#snippet shapePanel()}
@@ -654,53 +681,50 @@
 {/snippet}
 
 {#snippet foliagePanel()}
-  <p class="help">Leaf shape ↻ needs a redraw; size and density are live.</p>
-  <div class="segmented">
-    {#each [{ v: 0, l: 'Broad' }, { v: 3, l: 'Lance' }, { v: 1, l: 'Needle' }, { v: 2, l: 'Blossom' }] as opt (opt.v)}
-      <button
-        class:active={params.leafShape === opt.v}
-        onclick={() => (params.leafShape = opt.v as 0 | 1 | 2 | 3)}
-      >
-        {opt.l}
-      </button>
+  <div class="tiles four">
+    {#each LEAF_SHAPES as opt (opt.v)}
+      <Tile label={opt.l} active={params.leafShape === opt.v} onclick={() => (params.leafShape = opt.v)}>
+        <PartGlyph kind={opt.kind} color={leafHex} accent={blossomHex} />
+      </Tile>
     {/each}
   </div>
-  <Slider label="Density" bind:value={params.leafDensity} min={0} max={1} />
-  <Slider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} />
-  <Slider label="Autumn" bind:value={params.autumn} min={0} max={1} />
-  <Slider label="Translucency" bind:value={params.translucency} min={0} max={2.5} />
+  <PicSlider label="Leaves" bind:value={params.leafDensity} min={0} max={1} from={Leaf04Icon} to={LeafyGreenIcon} hint="A bare, sparse crown, or a full one" />
+  <PicSlider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} from={Leaf01Icon} to={Leaf01Icon} />
+  <Fold>
+    <Slider label="Density" bind:value={params.leafDensity} min={0} max={1} />
+    <Slider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} />
+    <Slider label="Autumn" bind:value={params.autumn} min={0} max={1} hint="How far the leaves have turned — the season sets this for you" />
+    <Slider label="Translucency" bind:value={params.translucency} min={0} max={2.5} hint="How much sun glows through the leaves" />
+  </Fold>
 {/snippet}
 
 {#snippet bloomPanel()}
-  <p class="help">
-    Flowers and fruit hang from the same twigs the leaves do, so any species can carry
-    them. Everything here is live.
-  </p>
-  <h4 class="sub"><Icon icon={FlowerIcon} size={13} strokeWidth={1.6} /> Flowers</h4>
-  <Slider label="Amount" bind:value={params.flowerDensity} min={0} max={1} />
-  <Slider label="Size" bind:value={params.flowerSize} min={0.2} max={2.5} />
-  <Swatch label="Petal" bind:value={params.flowerColor} />
-  <Swatch label="Throat" bind:value={params.flowerCore} />
+  <PicSlider label="Flowers" bind:value={params.flowerDensity} min={0} max={1} from={FlowerIcon} to={FlowerIcon} hint="Any tree can carry them — they hang from the same twigs as the leaves" />
+  {#if params.flowerDensity > 0.01}
+    <ColorDots label="Petals" bind:value={params.flowerColor} choices={petalChoices} />
+  {/if}
 
-  <h4 class="sub"><Icon icon={CherryIcon} size={13} strokeWidth={1.6} /> Fruit</h4>
-  <div class="segmented">
-    {#each [{ v: 0, l: 'Berry' }, { v: 1, l: 'Apple' }, { v: 2, l: 'Cone' }] as opt (opt.v)}
-      <button
-        class:active={params.fruitShape === opt.v}
-        onclick={() => (params.fruitShape = opt.v as 0 | 1 | 2)}
-        title="Shape ↻ — takes effect on redraw"
-      >
-        {opt.l}
-      </button>
+  <div class="tiles three">
+    {#each FRUIT_SHAPES as opt (opt.v)}
+      <Tile label={opt.l} active={params.fruitShape === opt.v} onclick={() => (params.fruitShape = opt.v)}>
+        <PartGlyph kind={opt.kind} color={opt.v === 2 ? '#7a512b' : params.fruitColor} />
+      </Tile>
     {/each}
   </div>
-  <Slider label="Amount" bind:value={params.fruitDensity} min={0} max={1} />
-  <Slider label="Size" bind:value={params.fruitSize} min={0.15} max={2} />
-  <Swatch label="Skin" bind:value={params.fruitColor} />
-  <Slider label="Ripeness" bind:value={params.fruitRipeness} min={0} max={1} hint="1 keeps the skin colour exactly; lower lets green survive on the shaded half" />
-  <Slider label="Sun blush" bind:value={params.fruitBlush} min={0} max={1} hint="How far the sunward cheek turns toward orange" />
-  <Slider label="Wax bloom" bind:value={params.fruitWax} min={0} max={1} hint="The pale dust on a plum, strongest around the rim" />
-  <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} hint="How much sky the skin mirrors. High gloss is shinier but paler — that trade is real, not a bug" />
+  <PicSlider label="Fruit" bind:value={params.fruitDensity} min={0} max={1} from={CherryIcon} to={CherryIcon} />
+  {#if params.fruitDensity > 0.01 && params.fruitShape !== 2}
+    <ColorDots label="Skin" bind:value={params.fruitColor} choices={skinChoices} />
+  {/if}
+
+  <Fold>
+    <Slider label="Flower size" bind:value={params.flowerSize} min={0.2} max={2.5} />
+    <Swatch label="Throat" bind:value={params.flowerCore} />
+    <Slider label="Fruit size" bind:value={params.fruitSize} min={0.15} max={2} />
+    <Slider label="Ripeness" bind:value={params.fruitRipeness} min={0} max={1} hint="1 keeps the skin colour exactly; lower lets green survive on the shaded half" />
+    <Slider label="Sun blush" bind:value={params.fruitBlush} min={0} max={1} hint="How far the sunward cheek turns toward orange" />
+    <Slider label="Wax bloom" bind:value={params.fruitWax} min={0} max={1} hint="The pale dust on a plum, strongest around the rim" />
+    <Slider label="Gloss" bind:value={params.fruitGloss} min={0} max={1} hint="How much sky the skin mirrors. High gloss is shinier but paler — that trade is real, not a bug" />
+  </Fold>
 {/snippet}
 
 {#snippet lightPanel()}

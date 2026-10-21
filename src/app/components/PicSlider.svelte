@@ -46,6 +46,8 @@
         aria-label={label}
         onpointerdown={() => (active = true)}
         onpointerup={() => (active = false)}
+        onpointercancel={() => (active = false)}
+        onchange={() => (active = false)}
         onblur={() => (active = false)}
       />
       <span class="bubble" class:show={active}>{shown}</span>
