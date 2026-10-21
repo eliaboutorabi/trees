@@ -19,6 +19,7 @@
     SunsetIcon,
     TreesIcon,
     CloudFastWindIcon,
+    CloudSlowWindIcon,
     CloudFogIcon,
     SnowIcon,
     Download01Icon,
@@ -47,6 +48,7 @@
   import Toggle from './components/Toggle.svelte';
   import Fold from './components/Fold.svelte';
   import SunDial from './components/SunDial.svelte';
+  import WindCompass from './components/WindCompass.svelte';
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -692,9 +694,13 @@
 {/snippet}
 
 {#snippet windPanel()}
-  <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
-  <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
-  <Slider label="Bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="The direction the wind pushes the tree toward" />
+  <WindCompass bind:direction={params.windDirection} bind:strength={params.wind} gusts={params.windSpeed} bearing={cameraBearing} />
+  <PicSlider label="Gusts" bind:value={params.windSpeed} min={0.1} max={3} from={CloudSlowWindIcon} to={CloudFastWindIcon} hint="Slow swells, or quick, restless gusts" />
+  <Fold>
+    <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
+    <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
+    <Slider label="Bearing" bind:value={params.windDirection} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="The direction the wind pushes the tree toward" />
+  </Fold>
 {/snippet}
 
 {#snippet lookPanel()}
