@@ -2,6 +2,15 @@
   import { onMount } from 'svelte';
   import {
     ApertureIcon,
+    CameraLensIcon,
+    DashboardSpeed02Icon,
+    FilmRollIcon,
+    Plant01Icon,
+    Plant02Icon,
+    Rotate360Icon,
+    ShrinkDotIcon,
+    SparklesIcon,
+    Sun01Icon,
     CloudAngledRainIcon,
     CloudSnowIcon,
     Leaf03Icon,
@@ -35,6 +44,9 @@
   import Icon from './components/Icon.svelte';
   import Dock from './components/Dock.svelte';
   import Tile from './components/Tile.svelte';
+  import PicSlider from './components/PicSlider.svelte';
+  import Toggle from './components/Toggle.svelte';
+  import Fold from './components/Fold.svelte';
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -689,24 +701,25 @@
 {/snippet}
 
 {#snippet lookPanel()}
-  <p class="help">
-    This scene is fill-rate bound, so resolution is the dial that matters. <b>Auto</b> holds 60 fps
-    by scaling it — currently {stats.renderScale.toFixed(2)}×.
-  </p>
-  <div class="segmented">
-    {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
-      <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>
-        {opt.l}
-      </button>
-    {/each}
+  <div class="toggles">
+    <Toggle label="Focus blur" icon={CameraLensIcon} bind:checked={params.depthOfField} hint="Depth of field: the background softens behind the tree" />
+    <Toggle label="Film grain" icon={FilmRollIcon} bind:checked={params.grain} />
+    <Toggle label="Smooth edges" icon={ShrinkDotIcon} bind:checked={params.antialias} hint="Anti-aliasing" />
+    <Toggle label="Orbit" icon={Rotate360Icon} bind:checked={params.autoRotate} hint="The camera circles the tree slowly" />
+    <Toggle label="Regrow" icon={Plant02Icon} bind:checked={params.autoGrow} hint="Grow the tree from seed again when it is redrawn" />
   </div>
-  <Slider label="Bloom" bind:value={params.bloom} min={0} max={1.5} />
-  <label class="check"><input type="checkbox" bind:checked={params.depthOfField} /> Depth of field</label>
-  <label class="check"><input type="checkbox" bind:checked={params.grain} /> Film grain</label>
-  <label class="check"><input type="checkbox" bind:checked={params.antialias} /> Anti-aliasing</label>
-  <label class="check"><input type="checkbox" bind:checked={params.autoRotate} /> Orbit slowly</label>
-  <label class="check"><input type="checkbox" bind:checked={params.autoGrow} /> Replay growth on redraw</label>
-  <Slider label="Growth rate" bind:value={params.growthSpeed} min={0.05} max={1.5} />
+  <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from={Sun01Icon} to={SparklesIcon} hint="Bloom: bright light spills softly around itself" />
+  <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from={Plant01Icon} to={DashboardSpeed02Icon} />
+  <Fold>
+    <p class="help">Sharpness. <b>Auto</b> holds a smooth frame rate by adjusting it — currently {stats.renderScale.toFixed(2)}×.</p>
+    <div class="segmented">
+      {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
+        <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>
+          {opt.l}
+        </button>
+      {/each}
+    </div>
+  </Fold>
 {/snippet}
 
 {#snippet grammarPanel()}
@@ -971,6 +984,13 @@
 
 
 
+  .toggles {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.3rem;
+    margin: 0.3rem 0 1rem;
+  }
+
   .tiles {
     display: grid;
     gap: 0.45rem;
@@ -1063,22 +1083,7 @@
     color: var(--accent);
   }
 
-  .check {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.74rem;
-    color: var(--ink-dim);
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-  }
 
-  .check input {
-    accent-color: var(--accent);
-    width: 13px;
-    height: 13px;
-    cursor: pointer;
-  }
 
   .sub {
     display: flex;
