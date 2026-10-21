@@ -32,7 +32,6 @@
     Rotate01Icon,
     ShuffleIcon,
     SourceCodeIcon,
-    SunIcon,
     Tree01Icon,
     UndoIcon,
   } from '@hugeicons/core-free-icons';
@@ -47,6 +46,7 @@
   import PicSlider from './components/PicSlider.svelte';
   import Toggle from './components/Toggle.svelte';
   import Fold from './components/Fold.svelte';
+  import SunDial from './components/SunDial.svelte';
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -76,6 +76,8 @@
   const WEATHER_ICONS = { clear: SunCloud02Icon, rain: CloudAngledRainIcon, snow: CloudSnowIcon } as const;
 
   let growth = $state(0);
+  /** Where the camera is looking from, for the camera-relative sun dial. */
+  let cameraBearing = $state(0);
   let scrubbing = false;
   let issues = $state<GrammarIssue[]>([]);
   let stats = $state<StudioStats>({
@@ -345,6 +347,7 @@
     // Handy for poking at the scene from the console while developing.
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).arbor = s;
     s.onStats = (v) => (stats = v);
+    s.onBearing = (b) => (cameraBearing = b);
     s.onGrowth = (v) => {
       if (!scrubbing) growth = v;
     };
@@ -677,21 +680,15 @@
 {/snippet}
 
 {#snippet lightPanel()}
-  <p class="help">
-    The sun's colour and strength are not picked — they follow from how much
-    atmosphere its light crosses, so it reddens and dims as it sets. Every
-    control here is live.
-  </p>
-  <h4 class="sub"><Icon icon={SunIcon} size={13} strokeWidth={1.6} /> Sun</h4>
-  <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
-  <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
-  <Slider label="Strength" bind:value={params.sunIntensity} min={0} max={12} step={0.1} hint="Brightness of the direct beam, before the atmosphere takes its cut" />
-
-  <h4 class="sub"><Icon icon={CloudFogIcon} size={13} strokeWidth={1.6} /> Sky &amp; air</h4>
-  <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
-  <Slider label="Haze" bind:value={params.haze} min={0} max={1} hint="Aerosol: reddens the sun, greys the sky, and stacks the distance into flat planes" />
-  <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
-
+  <SunDial bind:azimuth={params.sunAzimuth} bind:elevation={params.sunElevation} bearing={cameraBearing} />
+  <PicSlider label="Sunlight" bind:value={params.sunIntensity} min={0} max={12} step={0.1} from={Sun01Icon} to={Sun03Icon} hint="How strong the sun's beam is" />
+  <PicSlider label="Haze" bind:value={params.haze} min={0} max={1} from={SunCloud02Icon} to={CloudFogIcon} hint="Clear air, or a hazy sky that softens the sun and the distance" />
+  <Fold>
+    <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
+    <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
+    <Slider label="Sky light" bind:value={params.skyLight} min={0} max={2.5} hint="The ambient half — the sky is what fills the shadows" />
+    <Slider label="Exposure" bind:value={params.exposure} min={0.3} max={2.2} />
+  </Fold>
 {/snippet}
 
 {#snippet windPanel()}

@@ -243,6 +243,13 @@ export class TreeStudio {
   };
 
   onStats: ((stats: StudioStats) => void) | null = null;
+  /**
+   * The camera's compass bearing from the tree, in degrees, in the same
+   * convention as the sun's azimuth — for controls drawn relative to where
+   * you are looking from. Fired when it changes by more than half a degree.
+   */
+  onBearing: ((degrees: number) => void) | null = null;
+  private lastBearing = NaN;
   onGrowth: ((growth: number) => void) | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -285,6 +292,7 @@ export class TreeStudio {
     this.controls = new OrbitControls(this.camera, this.canvas);
     // Your hand on the camera wins over any glide in progress.
     this.controls.addEventListener('start', () => (this.cameraGlide = null));
+    this.controls.addEventListener('change', () => this.emitBearing());
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
     this.controls.minDistance = 1.5;
@@ -353,6 +361,14 @@ export class TreeStudio {
     this.frameTree(true);
     this.playGrowth(0, growthSpeed);
     return info;
+  }
+
+  private emitBearing(): void {
+    const d = this.camera.position.clone().sub(this.controls.target);
+    const bearing = (Math.atan2(d.x, d.z) * 180) / Math.PI;
+    if (Math.abs(bearing - this.lastBearing) < 0.5) return;
+    this.lastBearing = bearing;
+    this.onBearing?.(bearing);
   }
 
   /** Run the growth back to nothing; resolves when it gets there. */
