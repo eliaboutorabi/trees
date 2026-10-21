@@ -2,6 +2,11 @@
   import { onMount } from 'svelte';
   import {
     ApertureIcon,
+    ArrowDown01Icon,
+    ArrowExpand01Icon,
+    ArrowShrink01Icon,
+    ArrowUp01Icon,
+    DiceFaces03Icon,
     CameraLensIcon,
     DashboardSpeed02Icon,
     FilmRollIcon,
@@ -31,7 +36,6 @@
     Leaf01Icon,
     PlayIcon,
     Rotate01Icon,
-    ShuffleIcon,
     SourceCodeIcon,
     Tree01Icon,
     UndoIcon,
@@ -49,6 +53,7 @@
   import Fold from './components/Fold.svelte';
   import SunDial from './components/SunDial.svelte';
   import WindCompass from './components/WindCompass.svelte';
+  import ShapePad from './components/ShapePad.svelte';
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -291,10 +296,15 @@
     params.rules = rulesDraft;
   }
 
+  /** Another tree of the same kind: the old one grows back and the new one grows out. */
   function shuffleSeed() {
     params.seed = Math.floor(Math.random() * 1_000_000);
-    // An explicit action, so it draws straight away rather than going pending.
-    doRebuild(params.autoGrow);
+    if (!studio) return;
+    const snapshot = structureSnapshot();
+    built = snapshot;
+    studio.transitionTo(snapshot, activePreset.palette, params.growthSpeed).then((info) => {
+      if (info) issues = info.issues;
+    });
   }
 
   function replay() {
@@ -613,22 +623,34 @@
 {/snippet}
 
 {#snippet shapePanel()}
-  <p class="help">Controls marked ↻ rebuild the tree a moment after you stop moving them. Everything else is live.</p>
-  <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
-  <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} needsRedraw />
-  <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} needsRedraw />
-  <Slider label="Contraction" bind:value={params.shrink} min={0.6} max={0.99} hint="SHRINK — how fast each generation shortens" needsRedraw />
-  <Slider label="Tropism" bind:value={params.tropism} min={-0.6} max={0.6} hint="Positive reaches for the sky, negative droops" needsRedraw />
-  <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" needsRedraw />
-  <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
-  <div class="row">
+  <ShapePad
+    bind:angle={params.angle}
+    bind:step={params.step}
+    shrink={params.shrink}
+    tropism={params.tropism}
+    leaf={`#${activePreset.palette.leafTip.toString(16).padStart(6, '0')}`}
+  />
+  <PicSlider label="Droop or reach" bind:value={params.tropism} min={-0.6} max={0.6} from={ArrowDown01Icon} to={ArrowUp01Icon} hint="Branches that hang like a willow's, or that reach for the sky" />
+  <PicSlider label="Branchiness" bind:value={params.iterations} min={1} max={30} step={1} from={Plant01Icon} to={TreesIcon} hint="How many times the branches divide" />
+  <PicSlider label="Trunk" bind:value={params.trunkRadius} min={0.05} max={1.4} from={ArrowShrink01Icon} to={ArrowExpand01Icon} hint="Slender or stout" />
+  <button class="another" onclick={shuffleSeed} title="The same kind of tree, grown differently">
+    <Icon icon={DiceFaces03Icon} size={17} strokeWidth={1.7} />
+    Try another
+  </button>
+  <Fold>
+    <p class="help">Controls marked ↻ rebuild the tree a moment after you stop moving them.</p>
+    <Slider label="Generations" bind:value={params.iterations} min={1} max={30} step={1} needsRedraw />
+    <Slider label="Branch angle" bind:value={params.angle} min={5} max={90} step={0.5} format={(v) => `${v.toFixed(1)}°`} needsRedraw />
+    <Slider label="Internode length" bind:value={params.step} min={0.15} max={2} needsRedraw />
+    <Slider label="Contraction" bind:value={params.shrink} min={0.6} max={0.99} hint="SHRINK — how fast each generation shortens" needsRedraw />
+    <Slider label="Tropism" bind:value={params.tropism} min={-0.6} max={0.6} hint="Positive reaches for the sky, negative droops" needsRedraw />
+    <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" needsRedraw />
+    <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
     <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
-    <button class="ghost" onclick={shuffleSeed} title="New random seed"><Icon icon={ShuffleIcon} size={13} strokeWidth={1.9} />Shuffle</button>
-  </div>
-
-  <h4 class="sub"><Icon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
-  <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows — a surface gradient, so it reads at any zoom" />
-  <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
+    <h4 class="sub"><Icon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
+    <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows" />
+    <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
+  </Fold>
 {/snippet}
 
 {#snippet foliagePanel()}
@@ -987,6 +1009,34 @@
 
 
 
+  .another {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0.2rem 0 0.4rem;
+    padding: 0.65rem;
+    border-radius: 12px;
+    border: 1px solid rgba(240, 176, 100, 0.4);
+    background: rgba(240, 176, 100, 0.1);
+    color: var(--ink);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+      background 0.18s,
+      transform 0.18s cubic-bezier(0.3, 0.7, 0.4, 1.5);
+  }
+
+  .another:hover {
+    background: rgba(240, 176, 100, 0.22);
+    transform: translateY(-1px);
+  }
+
+  .another:active :global(svg) {
+    transform: rotate(90deg);
+  }
+
   .toggles {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -1026,35 +1076,9 @@
     font-style: italic;
   }
 
-  .row {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.6rem;
-  }
 
-  .row :global(.slider) {
-    flex: 1;
-  }
 
-  .ghost {
-    display: flex;
-    align-items: center;
-    gap: 0.32rem;
-    padding: 0.3rem 0.6rem;
-    margin-bottom: 0.7rem;
-    font-size: 0.68rem;
-    border-radius: 5px;
-    border: 1px solid var(--hairline);
-    background: transparent;
-    color: var(--ink-dim);
-    cursor: pointer;
-    white-space: nowrap;
-  }
 
-  .ghost:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
 
   .segmented {
     display: flex;

@@ -339,7 +339,13 @@ export class TreeStudio {
     const token = ++this.buildToken;
     const data = await this.tree.prepare(params);
     if (token !== this.buildToken) return null;
-    return this.adopt(this.tree.apply(data, params));
+    const before = { h: this.treeHeight, r: this.treeRadius };
+    const info = this.adopt(this.tree.apply(data, params));
+    // A tree that has grown or shrunk a lot under the camera is reframed —
+    // gently, so a drag reads as the camera keeping up, not as a cut.
+    const scale = Math.max(this.treeHeight / before.h, before.h / this.treeHeight, this.treeRadius / before.r, before.r / this.treeRadius);
+    if (info.ok && scale > 1.25) this.frameTree(true);
+    return info;
   }
 
   /**
