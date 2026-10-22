@@ -61,9 +61,13 @@ export function stableDepthOfField(color: N, viewZ: N, focus: N, range: N, amoun
   const n1 = near1.getTextureNode() as N;
   const n2 = near2.getTextureNode() as N;
 
-  // Behind the focal plane: sharp → a little → a lot, by this pixel's CoC.
-  const farBlur = mix(f1.rgb, f2.rgb, smoothstep(0.3, 1, far));
-  let out = mix(color.rgb, farBlur, smoothstep(0, 0.3, far)) as N;
+  // Behind the focal plane: sharp → softened, by this pixel's CoC — and held
+  // there. The background is scenery you want to read: blurred all the way,
+  // the mountains went to smudges and the place lost its sense of where it
+  // is. So the far field only ever goes a little past the first level, a
+  // softening that separates the tree from what is behind it, not a wash.
+  const farBlur = mix(f1.rgb, f2.rgb, smoothstep(0.4, 1, far).mul(0.35));
+  let out = mix(color.rgb, farBlur, smoothstep(0, 0.45, far).mul(0.9)) as N;
 
   // In front of it: by the *spread* near weight as well, so a blurred stalk
   // in the foreground softens over the edge of what is behind it.
