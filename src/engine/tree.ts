@@ -17,7 +17,7 @@
  * same as a static one. Rebuilding is only needed when the *grammar* changes —
  * see `LiveParams` for everything that does not.
  */
-import { Color, Group, Mesh, Vector2, Vector3, Vector4, type BufferGeometry } from 'three';
+import { BufferAttribute, Color, Group, Mesh, Vector2, Vector3, Vector4, type BufferGeometry } from 'three';
 import type { MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import type { TreeBuild } from './lsystem';
 import { computeTree, unpackTreeData, type BuildLimits, type PackedTreeData, type TreeData, type TreeStructure } from './build';
@@ -130,6 +130,9 @@ function toColor(target: Color, value: Color | string | number): void {
   else target.set(value as string);
 }
 
+/** How long a change of shape takes to travel, in seconds. */
+const MORPH_SECONDS = 0.6;
+
 export class Tree {
   /** Add this to your scene. */
   readonly group = new Group();
@@ -143,6 +146,10 @@ export class Tree {
   private readonly fruit: MeshPhysicalNodeMaterial;
 
   private meshes: Mesh[] = [];
+  /** The four meshes by role, in a fixed order, so a rebuild can be matched to the last. */
+  private slots: (Mesh | null)[] = [null, null, null, null];
+  /** A shape change in progress: the old tree's shape morphing into the new one. */
+  private morph: { t: number; meshes: Mesh[] } | null = null;
   private flowerMesh: Mesh | null = null;
   private fruitMesh: Mesh | null = null;
   /** Fruit that is still on the tree, so a touch only has to test those. */
@@ -262,7 +269,7 @@ export class Tree {
    * new perches. The only part of a rebuild that has to run on the main thread,
    * and it is cheap.
    */
-  apply(data: TreeData, params: TreeStructure): TreeInfo {
+  apply(data: TreeData, params: TreeStructure, blend = false): TreeInfo {
     const info: TreeInfo = {
       ok: data.ok,
       issues: data.issues,
@@ -284,14 +291,20 @@ export class Tree {
     this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
     this.bakedLeafScale = Math.max(1e-4, params.leafScale);
 
+    // What is on screen now, in case the new tree can grow out of it.
+    const before = blend ? this.shapeOnScreen() : null;
+
     this.clearMeshes();
-    this.addMesh(data.branches, this.bark);
-    this.addMesh(data.foliage, this.foliage);
+    const branches = this.addMesh(data.branches, this.bark);
+    const foliage = this.addMesh(data.foliage, this.foliage);
     // Ornaments are baked whatever the density, and hidden while it is zero: a
     // collapsed vertex costs nothing to rasterise but still costs a vertex
     // shader invocation, and most trees carry neither flowers nor fruit.
     this.flowerMesh = this.addMesh(data.flowers, this.flower, this.uniforms.flowerDensity.value > 0.001);
     this.fruitMesh = this.addMesh(data.fruit, this.fruit, this.uniforms.fruitDensity.value > 0.001);
+    this.slots = [branches, foliage, this.flowerMesh, this.fruitMesh];
+    this.morph = null;
+    if (before) this.morphFrom(before);
     this.hangingFruit = data.fruitSites.slice();
     // A new crop starts on the branch, wherever the last one ended up.
     this.fallTimes.fill(-1);
@@ -351,6 +364,7 @@ export class Tree {
    */
   tick(dt: number): void {
     this.uniforms.fallClock.value += dt;
+    this.advanceMorph(dt);
     // Once a frame at most, and only when something actually came loose.
     if (this.fallDirty && this.syncFall()) this.fallDirty = false;
     if (this.regrowUntil >= 0 && this.uniforms.fallClock.value >= this.regrowUntil) this.finishRegrowth();
@@ -818,6 +832,86 @@ export class Tree {
     for (const material of this.materials) material.dispose();
     this.worker?.terminate();
     this.worker = null;
+  }
+
+  /**
+   * The shape on screen, mesh by mesh: positions and normals as they are
+   * drawn this frame, which mid-morph means part way between two trees.
+   */
+  private shapeOnScreen(): ({ position: Float32Array; normal: Float32Array; index: number } | null)[] {
+    const k = this.morph ? this.morphWeight() : 0;
+    return this.slots.map((mesh) => {
+      if (!mesh) return null;
+      const g = mesh.geometry;
+      const pos = g.attributes.position.array as Float32Array;
+      const nrm = g.attributes.normal.array as Float32Array;
+      const from = g.morphAttributes.position?.[0]?.array as Float32Array | undefined;
+      const fromN = g.morphAttributes.normal?.[0]?.array as Float32Array | undefined;
+      if (!from || !fromN || k <= 0) return { position: pos, normal: nrm, index: g.index?.count ?? 0 };
+      const p = new Float32Array(pos.length);
+      const n = new Float32Array(nrm.length);
+      for (let i = 0; i < pos.length; i++) p[i] = pos[i] + (from[i] - pos[i]) * k;
+      for (let i = 0; i < nrm.length; i++) n[i] = nrm[i] + (fromN[i] - nrm[i]) * k;
+      return { position: p, normal: n, index: g.index?.count ?? 0 };
+    });
+  }
+
+  /**
+   * Grow the new tree out of the old one's shape instead of cutting to it.
+   *
+   * Changing the branch angle, the internode length or the droop leaves the
+   * grammar's derivation alone — same branches, same leaves, same order, only
+   * placed differently — so the two trees have identical meshes, vertex for
+   * vertex, and every vertex can simply travel from where it was to where it
+   * now belongs. The old shape is handed to the GPU as a morph target (three
+   * keeps those in a texture, not in vertex buffers, which matters: the leaf
+   * mesh already uses seven of WebGPU's eight) and its weight runs from 1 to 0.
+   * Where the structure did change — more generations, a different leaf — the
+   * meshes do not match and this declines; see the caller.
+   */
+  private morphFrom(before: ReturnType<Tree['shapeOnScreen']>): boolean {
+    const now = this.slots;
+    for (let i = 0; i < now.length; i++) {
+      const a = before[i];
+      const b = now[i];
+      if (!a !== !b) return false;
+      if (!a || !b) continue;
+      if (a.position.length !== b.geometry.attributes.position.array.length || a.index !== (b.geometry.index?.count ?? 0)) return false;
+    }
+    const meshes: Mesh[] = [];
+    for (let i = 0; i < now.length; i++) {
+      const mesh = now[i];
+      const from = before[i];
+      if (!mesh || !from) continue;
+      mesh.geometry.morphAttributes.position = [new BufferAttribute(from.position, 3)];
+      mesh.geometry.morphAttributes.normal = [new BufferAttribute(from.normal, 3)];
+      mesh.geometry.morphTargetsRelative = false;
+      mesh.updateMorphTargets();
+      mesh.morphTargetInfluences![0] = 1;
+      meshes.push(mesh);
+    }
+    this.morph = { t: 0, meshes };
+    return true;
+  }
+
+  /** How much of the old shape is still showing, 1 → 0, eased. */
+  private morphWeight(): number {
+    const t = Math.min(1, this.morph?.t ?? 1);
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    return 1 - e;
+  }
+
+  private advanceMorph(dt: number): void {
+    if (!this.morph) return;
+    this.morph.t += dt / MORPH_SECONDS;
+    const w = this.morphWeight();
+    for (const mesh of this.morph.meshes) mesh.morphTargetInfluences![0] = w;
+    if (this.morph.t >= 1) this.morph = null;
+  }
+
+  /** True while a change of shape is still travelling. */
+  get morphing(): boolean {
+    return this.morph !== null;
   }
 
   private addMesh(geometry: BufferGeometry | null, material: MeshStandardNodeMaterial, visible = true): Mesh | null {

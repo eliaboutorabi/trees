@@ -375,7 +375,9 @@ export class TreeStudio {
     const data = await this.tree.prepare(params);
     if (token !== this.buildToken) return null;
     const before = { h: this.treeHeight, r: this.treeRadius };
-    const info = this.adopt(this.tree.apply(data, params));
+    // Blended: where the structure is unchanged, the old shape morphs into
+    // the new one rather than being swapped for it.
+    const info = this.adopt(this.tree.apply(data, params, true));
     // A tree that has grown or shrunk a lot under the camera is reframed —
     // gently, so a drag reads as the camera keeping up, not as a cut.
     const scale = Math.max(this.treeHeight / before.h, before.h / this.treeHeight, this.treeRadius / before.r, before.r / this.treeRadius);
