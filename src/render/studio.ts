@@ -834,6 +834,10 @@ export class TreeStudio {
     // Keep the focal plane on whatever the camera is orbiting.
     const focus = this.camera.position.distanceTo(this.controls.target);
     this.post.uniforms.focusDistance.value = focus;
+    // And deepen the zone of sharpness with distance, as a lens does. Held at
+    // a fixed 15m, pulling back left only the tree sharp in a field of blur —
+    // the look of a model railway photographed close up, not of a meadow.
+    this.post.uniforms.focalLength.value = 6 + focus * 0.7;
 
     // Re-render the environment cube before the frame that needs it, and only
     // when the sun has actually moved.
