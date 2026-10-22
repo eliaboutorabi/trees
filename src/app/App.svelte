@@ -64,6 +64,7 @@
   import ShapePad from './components/ShapePad.svelte';
   import PartGlyph from './components/PartGlyph.svelte';
   import ColorDots from './components/ColorDots.svelte';
+  import CodeEditor from './components/CodeEditor.svelte';
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
@@ -772,21 +773,23 @@
 {/snippet}
 
 {#snippet grammarPanel()}
-  <p class="help">
-    Globals: <code>ANG</code> angle · <code>LEN</code> length · <code>SHRINK</code> contraction ·
-    <code>N</code> generations · <code>n</code> current step. Rules are tried top-down;
-    <code>@p</code> pools stochastic variants.
-  </p>
   <label class="field">
     <span>Axiom</span>
-    <input class="mono" bind:value={axiomDraft} spellcheck="false" />
+    <CodeEditor bind:value={axiomDraft} rows={1} label="Axiom" onsubmit={applyGrammar} />
   </label>
   <label class="field">
     <span>Productions</span>
-    <textarea class="mono" rows="12" bind:value={rulesDraft} spellcheck="false"></textarea>
+    <CodeEditor bind:value={rulesDraft} rows={14} label="Productions" errorLines={issues.map((i) => i.line)} onsubmit={applyGrammar} />
   </label>
+  <div class="legend">
+    <span><b class="k-draw">F</b> grow</span>
+    <span><b class="k-branch">[ ]</b> branch</span>
+    <span><b class="k-turn">+ − &amp; ^ / \</b> turn</span>
+    <span><b class="k-global">ANG LEN SHRINK</b> sliders</span>
+    <span><b class="k-num">n N</b> step · steps</span>
+  </div>
   <button class="apply" class:dirty={grammarDirty} onclick={applyGrammar} disabled={!grammarDirty}>
-    {grammarDirty ? 'Apply grammar' : 'Grammar applied'}
+    {grammarDirty ? 'Apply grammar  ⌘↵' : 'Grammar applied'}
   </button>
   {#if issues.length}
     <ul class="issues">
@@ -1061,6 +1064,27 @@
     transform: rotate(90deg);
   }
 
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.8rem;
+    margin: 0.1rem 0 0.8rem;
+    font-size: 0.62rem;
+    color: var(--ink-faint);
+  }
+
+  .legend b {
+    font-family: var(--mono);
+    font-weight: 600;
+    margin-right: 0.15rem;
+  }
+
+  .k-draw { color: #9fd36b; }
+  .k-branch { color: #e9a7ff; }
+  .k-turn { color: #79b8ff; }
+  .k-global { color: #7fdbca; }
+  .k-num { color: #7fdbca; }
+
   .toggles {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -1160,7 +1184,6 @@
   }
 
 
-  .help code,
   .card code {
     font-family: var(--mono);
     font-size: 0.92em;
@@ -1180,24 +1203,6 @@
     margin-bottom: 0.3rem;
   }
 
-  .field input,
-  .field textarea {
-    width: 100%;
-    padding: 0.5rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid var(--hairline);
-    background: rgba(0, 0, 0, 0.3);
-    color: var(--ink);
-    font-size: 0.7rem;
-    line-height: 1.55;
-    resize: vertical;
-  }
-
-  .field input:focus,
-  .field textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
 
   .mono {
     font-family: var(--mono);
