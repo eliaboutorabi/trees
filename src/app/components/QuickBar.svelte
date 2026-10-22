@@ -84,7 +84,8 @@
     transition:
       transform 0.35s cubic-bezier(0.25, 0.8, 0.3, 1.3),
       background-color 0.3s,
-      color 0.25s;
+      color 0.25s,
+      --tone 0.6s;
   }
 
   .pebble:hover {
@@ -92,11 +93,32 @@
     color: var(--ink);
   }
 
-  /* On: filled with its colour, the drawing inked deep and coloured in with light. */
-  .pebble.on {
+  /*
+   * On: filled with its colour, the drawing inked deep and coloured in with
+   * light. The fill is a layer that fades in, so switching glides.
+   */
+  .pebble {
+    isolation: isolate;
+  }
+
+  .pebble::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
     background:
       var(--sheen),
       radial-gradient(130% 120% at 30% 20%, color-mix(in srgb, var(--tone) 88%, white 12%), color-mix(in srgb, var(--tone) 70%, transparent));
+    opacity: 0;
+    transition: opacity 0.35s;
+  }
+
+  .pebble.on::before {
+    opacity: 1;
+  }
+
+  .pebble.on {
     color: color-mix(in srgb, var(--tone-ink) 82%, #000 18%);
     --glyph-wash: #fffaf0;
     --glyph-wash-opacity: 0.72;

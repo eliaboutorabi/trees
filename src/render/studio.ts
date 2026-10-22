@@ -129,6 +129,8 @@ const OVERCAST_FAR = new Color(0x8f979f);
 const MAX_ORNAMENTS = 1_800;
 /** Exposure under Neutral tone mapping that matches the old default brightness. */
 const NEUTRAL_LIFT = 1.18;
+/** How fast Orbit circles, in OrbitControls' units. */
+const ORBIT_SPEED = 0.35;
 /** How close to the ground the camera may come. */
 const CAMERA_FLOOR = 0.7;
 
@@ -166,6 +168,7 @@ export class TreeStudio {
   private userExposure = 1;
   private sunPower = 5;
   private fadingWarmed = false;
+  private orbitTarget = 0;
   private lookShown = false;
   /** The rainbow fades in and out rather than switching. */
   private rainbowTarget = 0;
@@ -332,7 +335,7 @@ export class TreeStudio {
     // Low enough to stand under the crown and look up into it, or up at the
     // sky; the ground itself is kept clear in the frame loop (see `frame`).
     this.controls.maxPolarAngle = Math.PI * 0.62;
-    this.controls.autoRotateSpeed = 0.35;
+    this.controls.autoRotateSpeed = 0;
 
     this.post = createPostPipeline(this.renderer, this.scene, this.camera);
     this.post.setPixelRatio(this.renderScale);
@@ -533,7 +536,8 @@ export class TreeStudio {
     // and grain fade in and out on their own (see `setFocusBlur`).
     this.lookToggles = { ...this.lookToggles, antialias: params.antialias };
     this.refreshPost();
-    this.controls.autoRotate = params.autoRotate;
+    // Orbit eases into its circling and out of it (see `frame`).
+    this.orbitTarget = params.autoRotate ? ORBIT_SPEED : 0;
     this.applyQuality(params.quality);
   }
 
@@ -939,6 +943,10 @@ export class TreeStudio {
       if (glide.t >= 1) this.cameraGlide = null;
     }
 
+    // Orbit gathers speed and slows to a stop, rather than lurching.
+    const sp = this.controls.autoRotateSpeed + (this.orbitTarget - this.controls.autoRotateSpeed) * (1 - Math.exp(-dt / 0.6));
+    this.controls.autoRotateSpeed = Math.abs(sp) < 1e-3 && this.orbitTarget === 0 ? 0 : sp;
+    this.controls.autoRotate = this.controls.autoRotateSpeed !== 0;
     this.controls.update();
     // Looking up is allowed; standing in the ground is not. (A little above
     // the grass, too, or the first thing in the picture is a blade of it.)

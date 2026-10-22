@@ -129,3 +129,20 @@ button {
   --glyph-earth: #d8b47a;
   --glyph-mist: #c9d3d6;
 }
+
+/*
+ * Registered, so they can be animated: a button or card whose colour changes
+ * (the Season pebble takes the season's colour) glides to the new one, even
+ * though it is used inside gradients, which cannot themselves be transitioned.
+ */
+@property --tone {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #a4bb8c;
+}
+
+@property --tone-ink {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #3f5a31;
+}

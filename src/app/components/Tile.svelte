@@ -69,11 +69,32 @@
     transform: translateY(-2px) rotate(0.8deg);
   }
 
-  /* Chosen: filled with the card's colour, over its own backdrop if it has one. */
+  /*
+   * Chosen: filled with the card's colour, over its own backdrop if it has
+   * one. The fill is a layer of its own that fades in and out, because a
+   * background made of gradients switches rather than transitions.
+   */
+  .tile {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--tone) 62%, transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .tile.active::before {
+    opacity: 1;
+  }
+
   .tile.active {
-    background:
-      linear-gradient(color-mix(in srgb, var(--tone) 62%, transparent), color-mix(in srgb, var(--tone) 62%, transparent)),
-      var(--backdrop, transparent);
     color: color-mix(in srgb, var(--tone-ink) 88%, #000 12%);
   }
 

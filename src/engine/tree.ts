@@ -385,6 +385,8 @@ export class Tree {
     this.uniforms.fallClock.value += dt;
     this.easeWind(dt);
     this.uniforms.windPhase.value += dt * this.uniforms.windSpeed.value;
+    const k = 1 - Math.exp(-dt / 0.3);
+    for (const [c, goal] of this.colourGoals) c.lerp(goal, k);
     this.advanceMorph(dt);
     this.advanceDissolve(dt);
     // Once a frame at most, and only when something actually came loose.
@@ -778,9 +780,29 @@ export class Tree {
     u.leafTip.value.setHex(palette.leafTip);
     u.leafAutumn.value.setHex(palette.leafAutumn);
     u.blossom.value.setHex(palette.blossom);
-    if (palette.flowerColor !== undefined) u.flowerColor.value.setHex(palette.flowerColor);
-    if (palette.flowerCore !== undefined) u.flowerCore.value.setHex(palette.flowerCore);
-    if (palette.fruitColor !== undefined) u.fruitColor.value.setHex(palette.fruitColor);
+    // A new species arrives while the tree is in the ground, so its colours land at once.
+    if (palette.flowerColor !== undefined) this.snapColour(u.flowerColor.value, palette.flowerColor);
+    if (palette.flowerCore !== undefined) this.snapColour(u.flowerCore.value, palette.flowerCore);
+    if (palette.fruitColor !== undefined) this.snapColour(u.fruitColor.value, palette.fruitColor);
+  }
+
+  /*
+   * Picking a petal or skin colour used to repaint every flower in one frame.
+   * These colours now travel to what was picked over about a third of a
+   * second instead — a blush rather than a switch.
+   */
+  private readonly colourGoals = new Map<Color, Color>();
+  private colourShown = false;
+
+  private easeColour(colour: Color, value: Color | string | number): void {
+    let goal = this.colourGoals.get(colour);
+    if (!goal) this.colourGoals.set(colour, (goal = colour.clone()));
+    toColor(goal, value);
+  }
+
+  private snapColour(colour: Color, hex: number): void {
+    colour.setHex(hex);
+    this.colourGoals.get(colour)?.copy(colour);
   }
 
   /** Everything that does not need a rebuild. Undefined fields are left alone. */
@@ -811,15 +833,19 @@ export class Tree {
       if (this.flowerMesh) this.flowerMesh.visible = p.flowerDensity > 0.001;
     }
     if (p.flowerSize !== undefined) u.flowerSize.value = p.flowerSize;
-    if (p.flowerColor !== undefined) toColor(u.flowerColor.value, p.flowerColor);
-    if (p.flowerCore !== undefined) toColor(u.flowerCore.value, p.flowerCore);
+    if (p.flowerColor !== undefined) this.easeColour(u.flowerColor.value, p.flowerColor);
+    if (p.flowerCore !== undefined) this.easeColour(u.flowerCore.value, p.flowerCore);
 
     if (p.fruitDensity !== undefined) {
       u.fruitDensity.value = p.fruitDensity;
       if (this.fruitMesh) this.fruitMesh.visible = p.fruitDensity > 0.001;
     }
     if (p.fruitSize !== undefined) u.fruitSize.value = p.fruitSize;
-    if (p.fruitColor !== undefined) toColor(u.fruitColor.value, p.fruitColor);
+    if (p.fruitColor !== undefined) this.easeColour(u.fruitColor.value, p.fruitColor);
+    if (!this.colourShown) {
+      this.colourShown = true;
+      for (const [c, goal] of this.colourGoals) c.copy(goal);
+    }
     if (p.fruitRipeness !== undefined) u.fruitRipeness.value = p.fruitRipeness;
     if (p.fruitBlush !== undefined) u.fruitBlush.value = p.fruitBlush;
     if (p.fruitWax !== undefined) u.fruitWax.value = p.fruitWax;

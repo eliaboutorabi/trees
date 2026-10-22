@@ -457,7 +457,8 @@
     transition:
       transform 0.35s cubic-bezier(0.25, 0.8, 0.3, 1.3),
       box-shadow 0.3s,
-      background 0.3s;
+      --tone 0.7s,
+      --tone-ink 0.7s;
   }
 
   .tool:hover,
