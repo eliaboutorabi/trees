@@ -73,8 +73,8 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 5px;
-    border-radius: 5px;
+    height: 4px;
+    border-radius: 4px;
     background: linear-gradient(
       to right,
       var(--tone) 0%,
@@ -90,12 +90,12 @@
   input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 13px;
-    height: 13px;
+    width: 19px;
+    height: 19px;
     border-radius: 50% 46% 54% 48%;
-    background: var(--tone-ink);
-    border: 2px solid rgba(255, 255, 255, 0.7);
-    box-shadow: 0 1px 4px rgba(28, 20, 10, 0.3);
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--tone-ink) 62%, white 38%), var(--tone-ink) 70%);
+    border: 2.5px solid rgba(255, 252, 246, 0.92);
+    box-shadow: 0 2px 6px rgba(20, 14, 6, 0.3), 0 0 0 1px rgba(20, 14, 6, 0.08);
     transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.3, 1.4);
   }
 

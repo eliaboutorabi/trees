@@ -1,11 +1,11 @@
 <script lang="ts">
   /** An on/off switch drawn as a picture: a round icon button with its name under it. */
-  import type { IconSvgElement } from '@hugeicons/svelte';
-  import Icon from './Icon.svelte';
+  import Glyph from './Glyph.svelte';
+  import type { GlyphName } from './glyphs';
 
   interface Props {
     label: string;
-    icon: IconSvgElement;
+    icon: GlyphName;
     checked: boolean;
     hint?: string;
   }
@@ -14,7 +14,7 @@
 </script>
 
 <button class="toggle" class:on={checked} title={hint ?? label} aria-pressed={checked} onclick={() => (checked = !checked)}>
-  <span class="disc"><Icon {icon} size={18} strokeWidth={1.9} /></span>
+  <span class="disc illustrated"><Glyph name={icon} size={26} weight={1.5} /></span>
   <span class="name">{label}</span>
 </button>
 

@@ -8,8 +8,8 @@
    * it, in a little bubble over the thumb while it is being touched, and the
    * exact numeric sliders live under each card's Fine-tune fold.
    */
-  import type { IconSvgElement } from '@hugeicons/svelte';
-  import Icon from './Icon.svelte';
+  import Glyph from './Glyph.svelte';
+  import type { GlyphName } from './glyphs';
 
   interface Props {
     label: string;
@@ -18,8 +18,8 @@
     max: number;
     step?: number;
     /** What the low end and the high end look like. */
-    from: IconSvgElement;
-    to: IconSvgElement;
+    from: GlyphName;
+    to: GlyphName;
     /** Shown in the bubble while dragging. */
     format?: (v: number) => string;
     hint?: string;
@@ -35,7 +35,7 @@
 <div class="pic" title={hint ?? label}>
   <span class="caption">{label}</span>
   <div class="row">
-    <span class="end small"><Icon icon={from} size={14} strokeWidth={2} /></span>
+    <span class="end illustrated"><Glyph name={from} size={34} weight={1.45} /></span>
     <span class="track" style="--fill: {fill}%">
       <input
         type="range"
@@ -52,7 +52,7 @@
       />
       <span class="bubble" class:show={active}>{shown}</span>
     </span>
-    <span class="end"><Icon icon={to} size={18} strokeWidth={2} /></span>
+    <span class="end illustrated"><Glyph name={to} size={34} weight={1.45} /></span>
   </div>
 </div>
 
@@ -74,27 +74,20 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.55rem;
   }
 
-  /* What each end means, on a little pebble of the card's colour. */
+  /* What each end means, as a small coloured picture standing on the glass. */
   .end {
     flex: none;
-    width: 1.75rem;
-    height: 1.65rem;
     display: grid;
     place-items: center;
-    border-radius: 52% 48% 55% 45% / 47% 55% 45% 53%;
-    color: color-mix(in srgb, var(--tone-ink) 85%, #000 15%);
-    background: color-mix(in srgb, var(--tone) 62%, rgba(255, 255, 255, 0.25));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(20, 14, 6, 0.1);
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.6)) drop-shadow(0 2px 4px rgba(20, 14, 6, 0.12));
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.4);
   }
 
-  .end.small {
-    width: 1.5rem;
-    height: 1.42rem;
-    border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%;
-    background: color-mix(in srgb, var(--tone) 38%, rgba(255, 255, 255, 0.25));
+  .pic:hover .end:last-child {
+    transform: rotate(-5deg) scale(1.06);
   }
 
   .track {
@@ -112,8 +105,8 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 7px;
-    border-radius: 7px;
+    height: 5px;
+    border-radius: 5px;
     background: linear-gradient(
       to right,
       color-mix(in srgb, var(--tone) 80%, var(--tone-ink) 20%) 0%,
@@ -131,12 +124,12 @@
   input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 17px;
-    height: 17px;
+    width: 24px;
+    height: 24px;
     border-radius: 50% 46% 54% 48% / 48% 54% 46% 50%;
-    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--tone-ink) 70%, white 30%), var(--tone-ink));
-    border: 2px solid rgba(255, 255, 255, 0.7);
-    box-shadow: 0 2px 6px rgba(28, 20, 10, 0.3);
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--tone-ink) 62%, white 38%), var(--tone-ink) 70%);
+    border: 3px solid rgba(255, 252, 246, 0.92);
+    box-shadow: 0 3px 8px rgba(20, 14, 6, 0.32), 0 0 0 1px rgba(20, 14, 6, 0.08);
     transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.3, 1.4);
   }
 
@@ -147,8 +140,8 @@
   }
 
   input[type='range']::-moz-range-thumb {
-    width: 13px;
-    height: 13px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     background: var(--tone-ink);
     border: 2px solid rgba(255, 255, 255, 0.7);

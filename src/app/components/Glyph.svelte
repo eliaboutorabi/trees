@@ -11,6 +11,12 @@
 
   let { name, size = 22, weight = 1.6 }: Props = $props();
   const parts = $derived(GLYPHS[name] as readonly Part[]);
+
+  function washStyle(p: Part) {
+    let css = p.c ? `fill: var(--glyph-${p.c}, var(--glyph-wash, currentColor));` : '';
+    if (p.o !== undefined) css += `fill-opacity: calc(var(--glyph-wash-opacity, 0.22) * ${p.o});`;
+    return css || undefined;
+  }
 </script>
 
 <svg
@@ -26,10 +32,10 @@
 >
   {#each parts as p, i (i)}
     {#if p.k === 'wash' || p.k === 'both'}
-      <path d={p.d} transform={p.t} class="wash" />
+      <path d={p.d} transform={p.t} class="wash" style={washStyle(p)} />
     {/if}
     {#if p.k === 'ink' || p.k === 'both'}
-      <path d={p.d} transform={p.t} />
+      <path d={p.d} transform={p.t} stroke-width={p.w ? weight * p.w : undefined} stroke-opacity={p.o} />
     {/if}
     {#if p.k === 'dot'}
       <path d={p.d} transform={p.t} class="dot" />

@@ -107,3 +107,25 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/*
+ * Glyphs as small coloured pictures: the line in a dark field-notebook ink,
+ * each part coloured in with what it is made of. Used where an icon has to
+ * stand out on a pale pane of glass by itself, with no button behind it.
+ */
+.illustrated {
+  color: #33291f;
+  --glyph-wash: var(--tone);
+  --glyph-wash-opacity: 0.95;
+  --glyph-leaf: #93b865;
+  --glyph-sun: #f4c34e;
+  --glyph-water: #79b4e0;
+  --glyph-sky: #eef3f7;
+  --glyph-storm: #a3afbd;
+  --glyph-snow: #f7fafc;
+  --glyph-bark: #b98a5c;
+  --glyph-petal: #f4a6ba;
+  --glyph-fruit: #d9473f;
+  --glyph-earth: #d8b47a;
+  --glyph-mist: #c9d3d6;
+}

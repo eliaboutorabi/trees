@@ -1,45 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import {
-    CloudBigRainIcon,
-    CloudLittleRainIcon,
-    CloudLittleSnowIcon,
-    CloudMidSnowIcon,
-    CloudyIcon,
-    Leaf04Icon,
-    LeafyGreenIcon,
-    ArrowDown01Icon,
-    ArrowExpand01Icon,
-    ArrowShrink01Icon,
-    ArrowUp01Icon,
-    CameraLensIcon,
-    DashboardSpeed02Icon,
-    FilmRollIcon,
-    Plant01Icon,
-    Plant02Icon,
-    Rotate360Icon,
-    ShrinkDotIcon,
-    SparklesIcon,
-    Sun01Icon,
-    SunCloud02Icon,
-    Sun02Icon,
-    Sun03Icon,
-    TreesIcon,
-    CloudFastWindIcon,
-    CloudSlowWindIcon,
-    CloudFogIcon,
-    SnowIcon,
-    CherryIcon,
-    FlowerIcon,
-    Leaf01Icon,
-    Tree01Icon,
-  } from '@hugeicons/core-free-icons';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { applyPreset, params, paramsFromPreset, presets, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
-  import Icon from './components/Icon.svelte';
   import Glyph from './components/Glyph.svelte';
   import GrowthStem from './components/GrowthStem.svelte';
   import Dock from './components/Dock.svelte';
@@ -614,17 +579,17 @@
   <div class="tiles three">
     {#each WEATHERS as w (w.id)}
       <Tile label={w.name} title={w.blurb || w.name} active={w.id === params.weather} backdrop={WEATHER_BACKDROPS[w.id]} onclick={() => chooseWeather(w.id)}>
-        <span class="weather-art"><Glyph name={WEATHER_ICONS[w.id]} size={34} weight={1.4} /></span>
+        <span class="weather-art illustrated"><Glyph name={WEATHER_ICONS[w.id]} size={42} weight={1.4} /></span>
       </Tile>
     {/each}
   </div>
   {#if params.weather === 'rain'}
-    <PicSlider label="How hard it rains" bind:value={params.precipitation} min={0} max={1} from={CloudLittleRainIcon} to={CloudBigRainIcon} />
+    <PicSlider label="How hard it rains" bind:value={params.precipitation} min={0} max={1} from="rain-light" to="rain-heavy" />
   {:else if params.weather === 'snow'}
-    <PicSlider label="How hard it snows" bind:value={params.precipitation} min={0} max={1} from={CloudLittleSnowIcon} to={CloudMidSnowIcon} />
+    <PicSlider label="How hard it snows" bind:value={params.precipitation} min={0} max={1} from="snow-light" to="snow-heavy" />
   {/if}
-  <PicSlider label="Clouds" bind:value={params.overcast} min={0} max={1} from={Sun02Icon} to={CloudyIcon} hint="A clear sky, or one closed over — which takes the sun's strength and colour with it" />
-  <PicSlider label="Snow on the ground" bind:value={params.snow} min={0} max={1} from={Plant02Icon} to={SnowIcon} hint="Settles on the branches, the grass and the ground together" />
+  <PicSlider label="Clouds" bind:value={params.overcast} min={0} max={1} from="sky-clear" to="sky-overcast" hint="A clear sky, or one closed over — which takes the sun's strength and colour with it" />
+  <PicSlider label="Snow on the ground" bind:value={params.snow} min={0} max={1} from="ground-grass" to="ground-snow" hint="Settles on the branches, the grass and the ground together" />
 {/snippet}
 
 {#snippet shapePanel()}
@@ -635,9 +600,9 @@
     tropism={params.tropism}
     leaf={`#${activePreset.palette.leafTip.toString(16).padStart(6, '0')}`}
   />
-  <PicSlider label="Droop or reach" bind:value={params.tropism} min={-0.6} max={0.6} from={ArrowDown01Icon} to={ArrowUp01Icon} hint="Branches that hang like a willow's, or that reach for the sky" />
-  <PicSlider label="Branchiness" bind:value={params.iterations} min={1} max={30} step={1} from={Plant01Icon} to={TreesIcon} hint="How many times the branches divide" />
-  <PicSlider label="Trunk" bind:value={params.trunkRadius} min={0.05} max={1.4} from={ArrowShrink01Icon} to={ArrowExpand01Icon} hint="Slender or stout" />
+  <PicSlider label="Droop or reach" bind:value={params.tropism} min={-0.6} max={0.6} from="droop" to="reach" hint="Branches that hang like a willow's, or that reach for the sky" />
+  <PicSlider label="Branchiness" bind:value={params.iterations} min={1} max={30} step={1} from="branch-few" to="branch-many" hint="How many times the branches divide" />
+  <PicSlider label="Trunk" bind:value={params.trunkRadius} min={0.05} max={1.4} from="trunk-thin" to="trunk-stout" hint="Slender or stout" />
   <button class="another" onclick={shuffleSeed} title="The same kind of tree, grown differently">
     <Glyph name="seeds" size={20} />
     Try another
@@ -652,7 +617,7 @@
     <Slider label="Taper" bind:value={params.pipeExponent} min={1.5} max={3.2} hint="Pipe-model exponent — higher is more slender" needsRedraw />
     <Slider label="Trunk radius" bind:value={params.trunkRadius} min={0.05} max={1.4} hint="Live — rescales the existing mesh" />
     <Slider label="Seed" bind:value={params.seed} min={0} max={999999} step={1} format={(v) => String(v)} needsRedraw />
-    <h4 class="sub"><Icon icon={Tree01Icon} size={13} strokeWidth={1.6} /> Bark</h4>
+    <h4 class="sub"><span class="illustrated"><Glyph name="trunk-stout" size={20} weight={1.5} /></span> Bark</h4>
     <Slider label="Relief" bind:value={params.barkDetail} min={0} max={1} hint="Depth of the furrows" />
     <Slider label="Moss" bind:value={params.moss} min={0} max={1} hint="Creeps up from the base and settles into the crevices" />
   </Fold>
@@ -666,8 +631,8 @@
       </Tile>
     {/each}
   </div>
-  <PicSlider label="Leaves" bind:value={params.leafDensity} min={0} max={1} from={Leaf04Icon} to={LeafyGreenIcon} hint="A bare, sparse crown, or a full one" />
-  <PicSlider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} from={Leaf01Icon} to={Leaf01Icon} />
+  <PicSlider label="Leaves" bind:value={params.leafDensity} min={0} max={1} from="twig-bare" to="twig-leafy" hint="A bare, sparse crown, or a full one" />
+  <PicSlider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} from="leaf-small" to="leaf-big" />
   <Fold>
     <Slider label="Density" bind:value={params.leafDensity} min={0} max={1} />
     <Slider label="Leaf size" bind:value={params.leafScale} min={0.05} max={1} />
@@ -677,7 +642,7 @@
 {/snippet}
 
 {#snippet bloomPanel()}
-  <PicSlider label="Flowers" bind:value={params.flowerDensity} min={0} max={1} from={FlowerIcon} to={FlowerIcon} hint="Any tree can carry them — they hang from the same twigs as the leaves" />
+  <PicSlider label="Flowers" bind:value={params.flowerDensity} min={0} max={1} from="flower-one" to="flower-many" hint="Any tree can carry them — they hang from the same twigs as the leaves" />
   {#if params.flowerDensity > 0.01}
     <ColorDots label="Petals" bind:value={params.flowerColor} choices={petalChoices} />
   {/if}
@@ -689,7 +654,7 @@
       </Tile>
     {/each}
   </div>
-  <PicSlider label="Fruit" bind:value={params.fruitDensity} min={0} max={1} from={CherryIcon} to={CherryIcon} />
+  <PicSlider label="Fruit" bind:value={params.fruitDensity} min={0} max={1} from="fruit-one" to="fruit-many" />
   {#if params.fruitDensity > 0.01 && params.fruitShape !== 2}
     <ColorDots label="Skin" bind:value={params.fruitColor} choices={skinChoices} />
   {/if}
@@ -707,8 +672,8 @@
 
 {#snippet lightPanel()}
   <SunDial bind:azimuth={params.sunAzimuth} bind:elevation={params.sunElevation} bearing={cameraBearing} />
-  <PicSlider label="Sunlight" bind:value={params.sunIntensity} min={0} max={12} step={0.1} from={Sun01Icon} to={Sun03Icon} hint="How strong the sun's beam is" />
-  <PicSlider label="Haze" bind:value={params.haze} min={0} max={1} from={SunCloud02Icon} to={CloudFogIcon} hint="Clear air, or a hazy sky that softens the sun and the distance" />
+  <PicSlider label="Sunlight" bind:value={params.sunIntensity} min={0} max={12} step={0.1} from="sun-soft" to="sun-strong" hint="How strong the sun's beam is" />
+  <PicSlider label="Haze" bind:value={params.haze} min={0} max={1} from="hills-clear" to="hills-hazy" hint="Clear air, or a hazy sky that softens the sun and the distance" />
   <Fold>
     <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
     <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />
@@ -719,7 +684,7 @@
 
 {#snippet windPanel()}
   <WindCompass bind:direction={params.windDirection} bind:strength={params.wind} gusts={params.windSpeed} bearing={cameraBearing} />
-  <PicSlider label="Gusts" bind:value={params.windSpeed} min={0.1} max={3} from={CloudSlowWindIcon} to={CloudFastWindIcon} hint="Slow swells, or quick, restless gusts" />
+  <PicSlider label="Gusts" bind:value={params.windSpeed} min={0.1} max={3} from="breeze" to="gale" hint="Slow swells, or quick, restless gusts" />
   <Fold>
     <Slider label="Strength" bind:value={params.wind} min={0} max={1.5} />
     <Slider label="Gust speed" bind:value={params.windSpeed} min={0.1} max={3} />
@@ -729,14 +694,14 @@
 
 {#snippet lookPanel()}
   <div class="toggles">
-    <Toggle label="Focus blur" icon={CameraLensIcon} bind:checked={params.depthOfField} hint="Depth of field: the background softens behind the tree" />
-    <Toggle label="Film grain" icon={FilmRollIcon} bind:checked={params.grain} />
-    <Toggle label="Smooth edges" icon={ShrinkDotIcon} bind:checked={params.antialias} hint="Anti-aliasing" />
-    <Toggle label="Orbit" icon={Rotate360Icon} bind:checked={params.autoRotate} hint="The camera circles the tree slowly" />
-    <Toggle label="Regrow" icon={Plant02Icon} bind:checked={params.autoGrow} hint="Grow the tree from seed again when it is redrawn" />
+    <Toggle label="Focus blur" icon="lens" bind:checked={params.depthOfField} hint="Depth of field: the background softens behind the tree" />
+    <Toggle label="Film grain" icon="grain" bind:checked={params.grain} />
+    <Toggle label="Smooth edges" icon="smooth" bind:checked={params.antialias} hint="Anti-aliasing" />
+    <Toggle label="Orbit" icon="orbit" bind:checked={params.autoRotate} hint="The camera circles the tree slowly" />
+    <Toggle label="Regrow" icon="sprout" bind:checked={params.autoGrow} hint="Grow the tree from seed again when it is redrawn" />
   </div>
-  <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from={Sun01Icon} to={SparklesIcon} hint="Bloom: bright light spills softly around itself" />
-  <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from={Plant01Icon} to={DashboardSpeed02Icon} />
+  <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from="glow-off" to="glow-on" hint="Bloom: bright light spills softly around itself" />
+  <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from="snail" to="swift" />
   <Fold>
     <p class="help">Sharpness. <b>Auto</b> holds a smooth frame rate by adjusting it — currently {stats.renderScale.toFixed(2)}×.</p>
     <div class="segmented">
@@ -1031,7 +996,7 @@
   }
 
   .weather-art {
-    color: rgba(43, 35, 28, 0.78);
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.5));
   }
 
   .blurb {
