@@ -27,6 +27,7 @@ import { getSeason, snowTintFor, type Season, type Weather } from './season';
 import { createRainfall, createSnowfall } from './weather';
 import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
+import { createFireflies } from './fireflies';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
 export type StructureParams = TreeStructure;
@@ -164,6 +165,8 @@ export class TreeStudio {
   private readonly groundUniforms = this.landscape.uniforms;
   // Wildflowers, and butterflies that perch on the ones actually placed.
   private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
+  /** Only out at night. */
+  private readonly fireflies = createFireflies(this.tree.uniforms);
   private readonly snowfall = createSnowfall(this.tree.uniforms);
   private readonly rainfall = createRainfall(this.tree.uniforms);
   /** How wet everything should be heading for; `wetness` eases toward it. */
@@ -297,6 +300,7 @@ export class TreeStudio {
 
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
+    this.scene.add(this.fireflies);
     this.scene.add(this.snowfall);
     this.scene.add(this.rainfall);
     this.scene.add(this.flock.mesh);
@@ -789,6 +793,7 @@ export class TreeStudio {
     if (Math.abs(this.nightTarget - this.nightness) < 2e-3) this.nightness = this.nightTarget;
     this.tree.uniforms.night.value = this.nightness;
     this.post.setNight(this.nightness);
+    this.fireflies.visible = this.nightness > 0.01;
     if (this.skyNow) this.applySkyNow(this.skyNow);
   }
 
