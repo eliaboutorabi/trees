@@ -28,9 +28,16 @@
    * card, pins it open, so a slider can be dragged without the card vanishing
    * the moment the pointer strays off it. Escape, or a click anywhere else,
    * closes it. One card at a time.
+   *
+   * Nothing here ever scrolls or is cut off. A card's exact controls open in
+   * a second panel that slides out beside it (or, where there is no room
+   * beside it, takes its place), laid out in as many columns as it needs to
+   * fit the height there is; and a card or panel that would still not fit is
+   * drawn smaller, the way a game's interface scales with its window.
    */
-  import { onMount } from 'svelte';
+  import { onMount, setContext, tick } from 'svelte';
   import Glyph from './Glyph.svelte';
+  import { MORE, type MoreHost } from './more';
 
   /*
    * Each button is a pebble: its own slightly irregular outline and its own
@@ -63,6 +70,120 @@
   const buttons: Record<string, HTMLButtonElement> = {};
   let cardLeft = $state(0);
   let cardBottom = $state(0);
+
+  // ---------------------------------------------------------- fine-tune
+  let more = $state<{ label: string; panel: Snippet } | null>(null);
+  let moreOpen = $state(false);
+  let morePanel = $state<HTMLElement>();
+  let moreLeft = $state(0);
+  let moreCols = $state(1);
+  let moreScale = $state(1);
+  /** No room beside the card: the panel takes the card's place instead. */
+  let moreOver = $state(false);
+  let moreReady = $state(false);
+  let cardScale = $state(1);
+
+  setContext<MoreHost>(MORE, {
+    offer(label, panel) {
+      more = { label, panel };
+      return () => {
+        if (more?.panel === panel) {
+          more = null;
+          moreOpen = false;
+        }
+      };
+    },
+  });
+
+  // A different card starts with its exact controls put away.
+  $effect(() => {
+    void openId;
+    moreOpen = false;
+  });
+
+  /** Room above the dock, below the name and the buttons along the top. */
+  const TOP = 76;
+  const GAP = 10;
+  const MARGIN = 12;
+  const COLUMN = 300;
+
+  /** Shrink the card, if it must, to fit the height above the dock. */
+  function fitCard() {
+    if (!card) return;
+    const room = window.innerHeight - cardBottom - TOP;
+    cardScale = Math.min(1, room / card.offsetHeight);
+  }
+
+  /**
+   * Lay the fine-tune panel out: as many columns as it takes to fit the height,
+   * then beside the card on whichever side has room, or over it if neither does.
+   */
+  async function layoutMore() {
+    if (!moreOpen || !card) return;
+    moreReady = false;
+    moreCols = 1;
+    moreScale = 1;
+    await tick();
+    if (!morePanel) return;
+    const room = window.innerHeight - cardBottom - TOP;
+    const body = morePanel.querySelector('.more__body') as HTMLElement;
+    const chrome = morePanel.offsetHeight - body.offsetHeight;
+    // Aim to stand no taller than the card it belongs to: the two read as a
+    // pair, and a tall column of numbers beside a short card looks like a list.
+    const goal = Math.min(room, Math.max(card.offsetHeight * cardScale, 360));
+    const cols = Math.min(3, Math.max(1, Math.ceil(body.offsetHeight / Math.max(120, goal - chrome))));
+
+    const c = card.getBoundingClientRect();
+    const width = (n: number) => n * COLUMN + (n - 1) * 20 + 36;
+    // Whatever else is pinned to the edges of the scene — the growth stem —
+    // marks itself to be kept clear, and the panel stops short of it.
+    let rightEdge = window.innerWidth;
+    let leftEdge = 0;
+    for (const el of document.querySelectorAll<HTMLElement>('[data-keep-clear]')) {
+      const r = el.getBoundingClientRect();
+      if (r.left >= c.right) rightEdge = Math.min(rightEdge, r.left);
+      else if (r.right <= c.left) leftEdge = Math.max(leftEdge, r.right);
+    }
+    const right = rightEdge - c.right - GAP - MARGIN;
+    const left = c.left - leftEdge - GAP - MARGIN;
+    // Fewer, taller columns are fine when the side has no room for more.
+    let n = cols;
+    while (n > 1 && Math.max(right, left) < width(n) * cardScale) n--;
+    moreOver = Math.max(right, left) < width(n) * cardScale;
+    moreCols = moreOver ? Math.min(cols, Math.max(1, Math.floor((c.width - 36 + 20) / (COLUMN + 20)))) : n;
+    await tick();
+    if (!morePanel) return;
+    // Drawn at the card's scale, so the pair match — smaller only if it must be.
+    moreScale = Math.min(cardScale, room / morePanel.offsetHeight);
+    // The panel scales about its foot on the side nearest the card (see the
+    // origins in the styles), so its unscaled width places it.
+    const full = morePanel.offsetWidth;
+    const w = full * moreScale;
+    if (moreOver) {
+      const centre = Math.min(Math.max(c.left + c.width / 2, MARGIN + w / 2), window.innerWidth - MARGIN - w / 2);
+      moreLeft = centre - full / 2;
+    } else {
+      moreLeft = right >= w ? c.right + GAP : c.left - GAP - full;
+    }
+    moreReady = true;
+  }
+
+  $effect(() => {
+    void moreOpen;
+    void more;
+    requestAnimationFrame(() => void layoutMore());
+  });
+
+  // Cards change size as they are used (rain brings its own slider): refit.
+  $effect(() => {
+    if (!card) return;
+    const ro = new ResizeObserver(() => {
+      fitCard();
+      if (moreOpen) void layoutMore();
+    });
+    ro.observe(card);
+    return () => ro.disconnect();
+  });
 
   let enterTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -117,6 +238,8 @@
     const margin = 12;
     cardLeft = Math.min(Math.max(b.left + b.width / 2 - w / 2, margin), window.innerWidth - w - margin);
     cardBottom = window.innerHeight - d.top + 6;
+    fitCard();
+    if (moreOpen) void layoutMore();
   }
 
   $effect(() => {
@@ -132,7 +255,7 @@
     let downAt: { x: number; y: number } | null = null;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      downAt = card?.contains(t) || dock?.contains(t) ? null : { x: e.clientX, y: e.clientY };
+      downAt = card?.contains(t) || morePanel?.contains(t) || dock?.contains(t) ? null : { x: e.clientX, y: e.clientY };
     };
     const onUp = (e: PointerEvent) => {
       holding = false;
@@ -140,7 +263,10 @@
       downAt = null;
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key !== 'Escape') return;
+      // Escape steps back one level: the fine-tune panel first, then the card.
+      if (moreOpen) moreOpen = false;
+      else close();
     };
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointerup', onUp);
@@ -161,8 +287,9 @@
       class="card"
       class:wide={open.wide}
       class:pinned={pinned === open.id}
+      class:covered={moreOpen && moreOver && moreReady}
       bind:this={card}
-      style="left: {cardLeft}px; bottom: {cardBottom}px; --tone: {open.tone}; --tone-ink: {open.toneInk}"
+      style="left: {cardLeft}px; bottom: {cardBottom}px; scale: {cardScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}"
       role="dialog"
       aria-label={open.label}
       tabindex="-1"
@@ -178,12 +305,52 @@
             <path d="M2 5.2c14-2.6 27-2.9 40-1.4 14 1.6 27 1.9 41-.4 12-1.9 23-1.6 35 .6" />
           </svg>
         </span>
+        {#if more}
+          <button
+            class="more-toggle"
+            class:on={moreOpen}
+            onclick={() => (moreOpen = !moreOpen)}
+            aria-expanded={moreOpen}
+            title="The exact numbers behind the pictures"
+          >
+            <Glyph name="tune" size={17} weight={1.7} />
+            {more.label}
+          </button>
+        {/if}
       </div>
       <div class="card__body">
         {@render open.panel()}
       </div>
     </div>
   {/key}
+{/if}
+
+{#if open && more && moreOpen}
+  <div
+    class="more"
+    class:over={moreOver}
+    class:ready={moreReady}
+    class:left={!moreOver && moreLeft < cardLeft}
+    bind:this={morePanel}
+    style="left: {moreLeft}px; bottom: {cardBottom}px; scale: {moreScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}"
+    role="dialog"
+    aria-label="{open.label}: {more.label}"
+    tabindex="-1"
+    onpointerenter={stay}
+    onpointerleave={leave}
+    onpointerdown={grab}
+  >
+    <div class="more__head">
+      <span class="more__badge"><Glyph name="tune" size={17} weight={1.7} /></span>
+      <span class="more__title">{more.label}<small>{open.label}</small></span>
+      <button class="more__close" onclick={() => (moreOpen = false)} aria-label="Put the exact controls away" title="Back (Esc)">
+        <Glyph name="close" size={16} weight={1.8} />
+      </button>
+    </div>
+    <div class="more__body" style="column-count: {moreCols}; width: {moreCols * COLUMN + (moreCols - 1) * 20}px">
+      {@render more.panel()}
+    </div>
+  </div>
 {/if}
 
 <nav class="dock" bind:this={dock} aria-label="Tools">
@@ -344,7 +511,6 @@
     position: fixed;
     z-index: 7;
     width: 20.5rem;
-    max-height: min(64vh, 38rem);
     display: flex;
     flex-direction: column;
     border-radius: 30px 22px 28px 24px / 24px 30px 22px 28px;
@@ -423,9 +589,189 @@
 
   .card__body {
     padding: 0.7rem 1.2rem 1.15rem;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(60, 44, 28, 0.2) transparent;
+  }
+
+  .card {
+    transition:
+      opacity 0.25s,
+      filter 0.25s;
+  }
+
+  /* While its exact controls stand in for it, the card steps back. */
+  .card.covered {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The Fine-tune button, at the right of the card's header. */
+  .more-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.32rem 0.7rem 0.32rem 0.5rem;
+    border: none;
+    border-radius: 14px 17px 13px 16px / 16px 13px 17px 14px;
+    background: rgba(255, 255, 255, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(20, 14, 6, 0.08);
+    color: var(--ink-dim);
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    --glyph-wash: var(--tone);
+    --glyph-wash-opacity: 0.9;
+    transition:
+      background 0.2s,
+      color 0.2s,
+      transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.4);
+  }
+
+  .more-toggle:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.42);
+    transform: rotate(-2deg);
+  }
+
+  .more-toggle.on {
+    color: color-mix(in srgb, var(--tone-ink) 85%, #000 15%);
+    background: color-mix(in srgb, var(--tone) 62%, rgba(255, 255, 255, 0.2));
+    --glyph-wash: #fffaf0;
+  }
+
+  /*
+   * The exact controls: a second, narrower pane that slides out from behind the
+   * card, its foot level with the card's. Columns, never a scrollbar.
+   */
+  .more {
+    position: fixed;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    border-radius: 24px 28px 22px 26px / 26px 22px 28px 24px;
+    background:
+      var(--sheen),
+      linear-gradient(175deg, color-mix(in srgb, var(--tone) 30%, transparent), transparent 26%),
+      var(--glass);
+    backdrop-filter: var(--frost);
+    -webkit-backdrop-filter: var(--frost);
+    box-shadow: var(--rim), var(--lift);
+    color: var(--ink);
+    transform-origin: 0 100%;
+    visibility: hidden;
+  }
+
+  .more.left {
+    transform-origin: 100% 100%;
+  }
+
+  .more.over {
+    transform-origin: 50% 100%;
+  }
+
+  .more.ready {
+    visibility: visible;
+    animation: slide-out 0.38s cubic-bezier(0.2, 0.85, 0.3, 1.15);
+  }
+
+  .more.left.ready {
+    animation-name: slide-out-left;
+  }
+
+  .more.over.ready {
+    animation-name: flip-in;
+  }
+
+  @keyframes slide-out {
+    from {
+      opacity: 0;
+      transform: translateX(-28px) rotate(-1deg) scale(0.97);
+    }
+  }
+
+  @keyframes slide-out-left {
+    from {
+      opacity: 0;
+      transform: translateX(28px) rotate(1deg) scale(0.97);
+    }
+  }
+
+  /* Where it takes the card's place, it turns over like the card's back. */
+  @keyframes flip-in {
+    from {
+      opacity: 0;
+      transform: perspective(900px) rotateY(-70deg);
+    }
+  }
+
+  .more__head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 0.8rem 0.3rem 1rem;
+  }
+
+  .more__badge {
+    width: 2rem;
+    height: 1.9rem;
+    display: grid;
+    place-items: center;
+    border-radius: 48% 52% 55% 45% / 52% 46% 54% 48%;
+    color: color-mix(in srgb, var(--tone-ink) 82%, #000 18%);
+    --glyph-wash: #fffaf0;
+    --glyph-wash-opacity: 0.72;
+    background: color-mix(in srgb, var(--tone) 72%, rgba(255, 255, 255, 0.2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+
+  .more__title {
+    display: flex;
+    flex-direction: column;
+    font-family: var(--serif);
+    font-size: 1.02rem;
+    font-weight: 560;
+    font-variation-settings: 'SOFT' 100;
+    line-height: 1.1;
+  }
+
+  .more__title small {
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--ink-faint);
+  }
+
+  .more__close {
+    margin-left: auto;
+    width: 1.9rem;
+    height: 1.85rem;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 50% 46% 54% 48%;
+    background: rgba(255, 255, 255, 0.24);
+    color: var(--ink-dim);
+    cursor: pointer;
+    transition:
+      background 0.2s,
+      transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.4);
+  }
+
+  .more__close:hover {
+    background: rgba(255, 255, 255, 0.45);
+    color: var(--ink);
+    transform: rotate(90deg);
+  }
+
+  .more__body {
+    padding: 0.55rem 1.1rem 0.9rem 1.1rem;
+    column-gap: 20px;
+    column-fill: balance;
+    box-sizing: content-box;
+  }
+
+  .more__body > :global(*) {
+    break-inside: avoid;
   }
 
   @media (hover: hover) {

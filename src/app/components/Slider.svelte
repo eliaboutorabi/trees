@@ -17,12 +17,10 @@
   const fill = $derived(((value - min) / (max - min)) * 100);
 </script>
 
+<!-- One row: name, groove, number — so a panel of them reads like a table. -->
 <label class="slider" title={hint ?? label}>
-  <span class="slider__head">
-    <span class="slider__label">
-      {label}{#if needsRedraw}<span class="mark" title="Rebuilds the tree a moment after you stop">↻</span>{/if}
-    </span>
-    <span class="slider__value">{shown}</span>
+  <span class="slider__label">
+    {label}{#if needsRedraw}<span class="mark" title="Rebuilds the tree a moment after you stop">↻</span>{/if}
   </span>
   <input
     type="range"
@@ -33,26 +31,25 @@
     style="--fill: {fill}%"
     aria-label={label}
   />
+  <span class="slider__value">{shown}</span>
 </label>
 
 <style>
   .slider {
-    display: block;
-    margin-bottom: 0.75rem;
-  }
-
-  .slider__head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.5rem;
-    margin-bottom: 0.3rem;
+    display: grid;
+    grid-template-columns: 6.9rem 1fr 2.9rem;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 1.95rem;
   }
 
   .slider__label {
     font-size: 0.74rem;
     font-weight: 600;
     color: var(--ink-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mark {
@@ -62,6 +59,7 @@
   }
 
   .slider__value {
+    text-align: right;
     font-family: var(--serif);
     font-size: 0.8rem;
     font-weight: 560;

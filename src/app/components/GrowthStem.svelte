@@ -108,7 +108,7 @@
   }
 </script>
 
-<div class="stem">
+<div class="stem" data-keep-clear>
   <span class="label">Grow</span>
   <span class="end illustrated" aria-hidden="true"><Glyph name="trunk-stout" size={30} weight={1.5} /></span>
 
@@ -399,10 +399,22 @@
     transform: rotate(-6deg) scale(1.06);
   }
 
+  .stem {
+    transition:
+      opacity 0.25s,
+      translate 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.2);
+  }
+
   @media (max-width: 640px) {
     .stem {
       right: 0.6rem;
       width: 3.4rem;
+    }
+    /* A phone has no room for both: while a card is open, the stem steps aside. */
+    :global(body:has(.card)) .stem {
+      opacity: 0;
+      translate: 1.5rem 0;
+      pointer-events: none;
     }
     svg {
       height: 9rem;

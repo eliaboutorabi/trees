@@ -19,6 +19,7 @@
     max?: number;
   }
 
+  import Viewpoint from './Viewpoint.svelte';
   import { wobble } from './wobble';
 
   let { direction = $bindable(), strength = $bindable(), gusts, bearing, max = 1.5 }: Props = $props();
@@ -132,12 +133,9 @@
       </g>
     </g>
 
+    <Viewpoint x={C} y={C + R} reach={R - 20} id="wind-dial" />
     <circle cx={C} cy={C} r="9" fill="#5d7a33" stroke="#2f4419" stroke-width="1.5" />
     <circle cx={C - 3} cy={C - 3} r="3.5" fill="#86a83c" />
-    <g transform="translate({C} {C + R + 2})">
-      <circle r="7" fill="rgba(20,16,12,0.9)" stroke="rgba(255,255,255,0.35)" />
-      <path d="M-3.5 -1.5 L3.5 -1.5 L3.5 3 L-3.5 3 Z M-1.2 -1.5 L-0.4 -3.2 L1.6 -3.2 L2.2 -1.5" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1" />
-    </g>
 
     {#if len > 6}
       <g transform="rotate({phi} {tipX} {tipY})">

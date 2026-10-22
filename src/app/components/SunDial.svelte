@@ -21,6 +21,7 @@
     max?: number;
   }
 
+  import Viewpoint from './Viewpoint.svelte';
   import { wobble } from './wobble';
 
   let { azimuth = $bindable(), elevation = $bindable(), bearing, min = -2, max = 70 }: Props = $props();
@@ -130,14 +131,10 @@
     <circle cx={C} cy={C} r={R * (60 / 90)} fill="none" stroke="rgba(255,255,255,0.5)" stroke-dasharray="1.5 4.5" stroke-linecap="round" />
     <circle cx={C} cy={C} r={R * (30 / 90)} fill="none" stroke="rgba(255,255,255,0.5)" stroke-dasharray="1.5 4.5" stroke-linecap="round" />
 
-    <!-- the tree, from above, and you, at the bottom of the rim -->
+    <!-- you, at the bottom of the rim looking in, and the tree from above -->
+    <Viewpoint x={C} y={C + R} reach={R - 20} id="sun-dial" />
     <circle cx={C} cy={C} r="9" fill="#5d7a33" stroke="#2f4419" stroke-width="1.5" />
     <circle cx={C - 3} cy={C - 3} r="3.5" fill="#86a83c" />
-    <g transform="translate({C} {C + R + 2})">
-      <circle r="7" fill="rgba(20,16,12,0.9)" stroke="rgba(255,255,255,0.35)" />
-      <path d="M-3.5 -1.5 L3.5 -1.5 L3.5 3 L-3.5 3 Z M-1.2 -1.5 L-0.4 -3.2 L1.6 -3.2 L2.2 -1.5" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1" />
-    </g>
-    <text x={C} y="15" text-anchor="middle" class="tag">behind the tree</text>
 
     <!-- the light falling across the tree -->
     <line x1={sunX} y1={sunY} x2={C} y2={C} stroke="#b87730" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" />
@@ -186,13 +183,6 @@
     stroke: rgba(255, 255, 255, 0.55);
     stroke-width: 1.5;
     filter: drop-shadow(0 3px 8px rgba(28, 20, 10, 0.12));
-  }
-
-  .tag {
-    font-family: var(--serif);
-    font-style: italic;
-    font-size: 9px;
-    fill: rgba(43, 35, 28, 0.55);
   }
 
   .reading {
