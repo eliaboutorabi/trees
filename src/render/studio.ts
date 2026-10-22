@@ -622,7 +622,23 @@ export class TreeStudio {
   /** Show or hide the rainbow; it fades either way. */
   setRainbow(on: boolean): void {
     this.rainbowTarget = on ? 1 : 0;
+    // Turning it off goes back to the view from before it was shown: the
+    // rainbow view looks up at the sky from the grass, and leaving you there
+    // with nothing to look at was a dead end.
+    if (!on && this.beforeRainbow) {
+      const back = this.beforeRainbow;
+      this.beforeRainbow = null;
+      this.cameraGlide = {
+        fromTarget: this.controls.target.clone(),
+        fromPosition: this.camera.position.clone(),
+        target: back.target,
+        position: back.position,
+        t: 0,
+      };
+    }
   }
+
+  private beforeRainbow: { target: Vector3; position: Vector3 } | null = null;
 
   /**
    * Turn round to see the rainbow: it is always in the sky opposite the sun,
@@ -634,9 +650,13 @@ export class TreeStudio {
     const toSun = new Vector3(this.sunDir.x, 0, this.sunDir.z);
     if (toSun.lengthSq() < 1e-6) return;
     toSun.normalize();
+    // Remember the view it came from, to go back to when the rainbow goes.
+    this.beforeRainbow ??= { target: this.controls.target.clone(), position: this.camera.position.clone() };
     const h = Math.max(2, this.treeHeight);
     const flat = Math.max(9, Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z));
-    const target = new Vector3(0, h * 0.95, 0).addScaledVector(toSun, -h * 0.6);
+    // Up into the crown and a little past it, so the camera still turns about
+    // the tree rather than about a point in the air.
+    const target = new Vector3(0, h * 0.9, 0).addScaledVector(toSun, -h * 0.3);
     const position = new Vector3(toSun.x * flat, CAMERA_FLOOR + 0.9, toSun.z * flat);
     this.cameraGlide = {
       fromTarget: this.controls.target.clone(),
@@ -1025,8 +1045,12 @@ export class TreeStudio {
     this.tree.uniforms.wetness.value = this.wetness;
     this.groundUniforms.wetness.value = this.wetness;
 
-    // Keep the focal plane on whatever the camera is orbiting.
-    const focus = this.camera.position.distanceTo(this.controls.target);
+    // Keep the focal plane on the tree — on the near side of its crown — not
+    // on whatever point the camera happens to be turning about. Focusing on
+    // the orbit point left the tree blurred whenever that point was not on
+    // it: after the rainbow view, or a pan off to one side.
+    const subject = _v1.set(0, this.treeHeight * 0.45, 0);
+    const focus = Math.max(1, this.camera.position.distanceTo(subject) - this.treeRadius * 0.3);
     this.post.uniforms.focusDistance.value = focus;
     // And deepen the zone of sharpness with distance, as a lens does. Held at
     // a fixed 15m, pulling back left only the tree sharp in a field of blur —
