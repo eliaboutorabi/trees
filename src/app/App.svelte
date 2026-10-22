@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    ApertureIcon,
     CloudBigRainIcon,
     CloudLittleRainIcon,
     CloudLittleSnowIcon,
@@ -13,7 +12,6 @@
     ArrowExpand01Icon,
     ArrowShrink01Icon,
     ArrowUp01Icon,
-    DiceFaces03Icon,
     CameraLensIcon,
     DashboardSpeed02Icon,
     FilmRollIcon,
@@ -23,30 +21,18 @@
     ShrinkDotIcon,
     SparklesIcon,
     Sun01Icon,
-    CloudAngledRainIcon,
-    CloudSnowIcon,
-    Leaf03Icon,
     SunCloud02Icon,
     Sun02Icon,
     Sun03Icon,
-    SunsetIcon,
     TreesIcon,
     CloudFastWindIcon,
     CloudSlowWindIcon,
     CloudFogIcon,
     SnowIcon,
-    Download01Icon,
-    FocusIcon,
     CherryIcon,
-    CopyLinkIcon,
-    Tick02Icon,
     FlowerIcon,
     Leaf01Icon,
-    PlayIcon,
-    Rotate01Icon,
-    SourceCodeIcon,
     Tree01Icon,
-    UndoIcon,
   } from '@hugeicons/core-free-icons';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
@@ -54,6 +40,8 @@
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Icon from './components/Icon.svelte';
+  import Glyph from './components/Glyph.svelte';
+  import GrowthStem from './components/GrowthStem.svelte';
   import Dock from './components/Dock.svelte';
   import Tile from './components/Tile.svelte';
   import PicSlider from './components/PicSlider.svelte';
@@ -79,12 +67,17 @@
   // The season and weather buttons wear the current choice, so the dock itself
   // says what the scene is doing — the season's button its colour, too.
   const SEASON_TONES = {
-    spring: ['#ffc7d5', '#9a3d58'],
-    summer: ['#ffe9a3', '#8a6a12'],
-    autumn: ['#ffd2b5', '#9a4f22'],
-    winter: ['#cfe6ff', '#2f5f8f'],
+    spring: ['#dfaab3', '#7d3a46'],
+    summer: ['#d9c47e', '#685518'],
+    autumn: ['#d9a185', '#7a4228'],
+    winter: ['#b4c9db', '#38566f'],
   } as const;
-  const SEASON_ICONS = { spring: FlowerIcon, summer: Sun03Icon, autumn: Leaf03Icon, winter: SnowIcon } as const;
+  const SEASON_ICONS = {
+    spring: 'season-spring',
+    summer: 'season-summer',
+    autumn: 'season-autumn',
+    winter: 'season-winter',
+  } as const;
   // Leaf and fruit shapes, as tiles.
   const LEAF_SHAPES = [
     { v: 0, l: 'Broad', kind: 'broad' },
@@ -109,12 +102,12 @@
     rain: 'linear-gradient(to bottom, rgba(132, 142, 152, 0.42), rgba(60, 66, 74, 0.3))',
     snow: 'linear-gradient(to bottom, rgba(226, 233, 243, 0.45), rgba(150, 160, 176, 0.3))',
   } as const;
-  const WEATHER_ICONS = { clear: SunCloud02Icon, rain: CloudAngledRainIcon, snow: CloudSnowIcon } as const;
+  const WEATHER_ICONS = { clear: 'weather-clear', rain: 'weather-rain', snow: 'weather-snow' } as const;
 
   let growth = $state(0);
   /** Where the camera is looking from, for the camera-relative sun dial. */
   let cameraBearing = $state(0);
-  let scrubbing = false;
+  let scrubbing = $state(false);
   let issues = $state<GrammarIssue[]>([]);
   let stats = $state<StudioStats>({
     modules: 0,
@@ -352,8 +345,7 @@
     studio?.playGrowth(0, params.growthSpeed);
   }
 
-  function scrub(event: Event) {
-    const value = Number((event.currentTarget as HTMLInputElement).value);
+  function scrub(value: number) {
     growth = value;
     studio?.setGrowth(value);
   }
@@ -551,7 +543,7 @@
 
     {#if ready}
       <div class="brand">
-        <h1>Arbor</h1>
+        <h1><Glyph name="grove" size={26} weight={1.5} />Arbor</h1>
         <div class="readout">
           <span><b>{stats.fps}</b> fps</span>
           <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
@@ -562,58 +554,36 @@
       </div>
 
       <div class="actions">
-        <button class="round" onclick={() => studio?.frameTree()} title="Reframe camera" aria-label="Reframe camera">
-          <Icon icon={FocusIcon} size={17} strokeWidth={1.8} />
+        <button class="round" onclick={() => studio?.frameTree(true)} title="Reframe the tree" aria-label="Reframe the tree">
+          <Glyph name="reframe" size={21} />
         </button>
-        <button class="round" onclick={screenshot} title="Save PNG" aria-label="Save PNG">
-          <Icon icon={Download01Icon} size={17} strokeWidth={1.8} />
+        <button class="round" onclick={screenshot} title="Save a picture" aria-label="Save a picture">
+          <Glyph name="save" size={21} />
         </button>
         <button class="round" class:done={linkCopied} onclick={copyLink} title="Copy a link to this tree" aria-label="Copy a link to this tree">
-          <Icon icon={linkCopied ? Tick02Icon : CopyLinkIcon} size={17} strokeWidth={1.8} />
+          <Glyph name={linkCopied ? 'done' : 'link'} size={21} />
         </button>
-        <button class="round" onclick={resetToDefaults} title="Reset this species to its defaults" aria-label="Reset to defaults">
-          <Icon icon={UndoIcon} size={17} strokeWidth={1.8} />
+        <button class="round" onclick={resetToDefaults} title="Start this species over" aria-label="Reset to defaults">
+          <Glyph name="reset" size={21} />
         </button>
       </div>
 
-      <div class="growth">
-          <button class="mini" onclick={redraw} title="Grow the tree again from seed (R)" aria-label="Grow again">
-            <Icon icon={Rotate01Icon} size={15} strokeWidth={2} />
-          </button>
-          <button class="mini" onclick={replay} title="Replay growth (space)" aria-label="Replay growth">
-            <Icon icon={PlayIcon} size={15} strokeWidth={1.9} />
-          </button>
-          <input
-            class="scrub"
-            type="range"
-            min="0"
-            max="1"
-            step="0.001"
-            value={growth}
-            oninput={scrub}
-            onpointerdown={() => (scrubbing = true)}
-            onpointerup={() => (scrubbing = false)}
-            aria-label="Growth"
-            style="--fill: {growth * 100}%"
-          />
-          <span class="pct">{Math.round(growth * 100)}%</span>
-        </div>
+      <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} />
 
       <Dock
         tools={[
-          { id: 'species', label: 'Species', icon: TreesIcon, panel: speciesPanel, group: 0, tone: '#bfe8cf', toneInk: '#2f6b48' },
+          { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
-          { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0, tone: '#b6ebe3', toneInk: '#26716a' },
-          { id: 'shape', label: 'Shape', icon: Tree01Icon, panel: shapePanel, group: 1, tone: '#d5e7b3', toneInk: '#556b22' },
-          { id: 'foliage', label: 'Foliage', icon: Leaf01Icon, panel: foliagePanel, group: 1, tone: '#c6efb6', toneInk: '#3c7a28' },
-          { id: 'bloom', label: 'Bloom & fruit', icon: CherryIcon, panel: bloomPanel, group: 1, tone: '#ffc7d5', toneInk: '#9a3d58' },
-          { id: 'light', label: 'Light', icon: SunsetIcon, panel: lightPanel, group: 2, tone: '#ffe08f', toneInk: '#86601a' },
-          { id: 'wind', label: 'Wind', icon: CloudFastWindIcon, panel: windPanel, group: 2, tone: '#bfe0ff', toneInk: '#2f5f8f' },
-          { id: 'look', label: 'Look', icon: ApertureIcon, panel: lookPanel, group: 3, tone: '#dcccff', toneInk: '#5b47a0' },
-          { id: 'grammar', label: 'Grammar', icon: SourceCodeIcon, panel: grammarPanel, group: 3, tone: '#f2dcb4', toneInk: '#7a5a2a', wide: true },
+          { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0, tone: '#9fcbc3', toneInk: '#2b625b' },
+          { id: 'shape', label: 'Shape', icon: 'twig', panel: shapePanel, group: 1, tone: '#a4bb8c', toneInk: '#44592f' },
+          { id: 'foliage', label: 'Foliage', icon: 'leaf', panel: foliagePanel, group: 1, tone: '#c4cc8f', toneInk: '#555b22' },
+          { id: 'bloom', label: 'Bloom & fruit', icon: 'bloom', panel: bloomPanel, group: 1, tone: '#d99ca6', toneInk: '#7a3a45' },
+          { id: 'light', label: 'Light', icon: 'sunset', panel: lightPanel, group: 2, tone: '#dbb66f', toneInk: '#6e5216' },
+          { id: 'wind', label: 'Wind', icon: 'wind', panel: windPanel, group: 2, tone: '#a9c4d8', toneInk: '#33566e' },
+          { id: 'look', label: 'Look', icon: 'frame', panel: lookPanel, group: 3, tone: '#bba8d0', toneInk: '#544472' },
+          { id: 'grammar', label: 'Grammar', icon: 'quill', panel: grammarPanel, group: 3, tone: '#d6c9b1', toneInk: '#64553b', wide: true },
         ]}
-      >
-      </Dock>
+      />
     {/if}
   </div>
 </div>
@@ -644,7 +614,7 @@
   <div class="tiles three">
     {#each WEATHERS as w (w.id)}
       <Tile label={w.name} title={w.blurb || w.name} active={w.id === params.weather} backdrop={WEATHER_BACKDROPS[w.id]} onclick={() => chooseWeather(w.id)}>
-        <span class="weather-art"><Icon icon={WEATHER_ICONS[w.id]} size={28} strokeWidth={1.5} /></span>
+        <span class="weather-art"><Glyph name={WEATHER_ICONS[w.id]} size={34} weight={1.4} /></span>
       </Tile>
     {/each}
   </div>
@@ -669,7 +639,7 @@
   <PicSlider label="Branchiness" bind:value={params.iterations} min={1} max={30} step={1} from={Plant01Icon} to={TreesIcon} hint="How many times the branches divide" />
   <PicSlider label="Trunk" bind:value={params.trunkRadius} min={0.05} max={1.4} from={ArrowShrink01Icon} to={ArrowExpand01Icon} hint="Slender or stout" />
   <button class="another" onclick={shuffleSeed} title="The same kind of tree, grown differently">
-    <Icon icon={DiceFaces03Icon} size={17} strokeWidth={1.7} />
+    <Glyph name="seeds" size={20} />
     Try another
   </button>
   <Fold>
@@ -846,116 +816,105 @@
 
   /* ---------------------------------------------------------- overlays */
 
-  /* ---------------------------------------------------------- overlays */
-
   .overlay {
     position: absolute;
     inset: 0;
     display: grid;
     place-items: center;
-    background: radial-gradient(ellipse at 50% 60%, #fdf3e3, #efdcc0);
+    background: radial-gradient(ellipse at 50% 62%, #c9cfae, #8e9a77 70%, #6f7b5c);
     padding: 2rem;
   }
 
   .card {
     max-width: 30rem;
     text-align: center;
-    color: var(--ink);
+    color: var(--chalk);
   }
 
   .card h2 {
-    font-size: 1.2rem;
-    font-weight: 800;
+    font-family: var(--serif);
+    font-size: 1.4rem;
+    font-weight: 560;
     margin-bottom: 0.6rem;
   }
 
   .card p {
-    font-size: 0.85rem;
+    font-size: 0.86rem;
     line-height: 1.6;
-    color: var(--ink-dim);
+    opacity: 0.85;
   }
 
   .loading {
     display: flex;
     align-items: center;
     gap: 0.7rem;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--ink-dim);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 1.05rem;
+    color: var(--chalk);
   }
 
   .pulse {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--mint);
-    box-shadow: 0 0 0 3px #fff;
-    animation: pulse 1.2s ease-in-out infinite;
+    width: 10px;
+    height: 10px;
+    border-radius: 50% 50% 45% 55%;
+    background: var(--chalk);
+    animation: pulse 1.4s ease-in-out infinite;
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 0.5; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1.25); }
+    0%, 100% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
   }
 
   /* ------------------------------------------------------------- HUD */
 
   /*
-   * Everything floats over the scene as small pieces of paper: the name in a
-   * cream tag top-left, round buttons top-right, the tools along the bottom.
+   * Nothing white sits on the scene. The name is written straight onto it, the
+   * buttons are pebbles of frost, and every surface lets the scene through.
    */
   .brand {
     position: absolute;
-    top: 1rem;
-    left: 1.1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    padding: 0.4rem 0.9rem 0.4rem 0.5rem;
-    border-radius: 999px;
-    background: var(--paper);
-    border: 3px solid #fffdf8;
-    box-shadow: var(--shadow);
+    top: 1.05rem;
+    left: 1.3rem;
+    color: var(--chalk);
+    text-shadow: 0 1px 14px rgba(20, 14, 6, 0.45), 0 1px 2px rgba(20, 14, 6, 0.3);
     pointer-events: none;
   }
 
   .brand h1 {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    font-size: 1.05rem;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-    color: var(--ink);
+    gap: 0.5rem;
+    font-family: var(--serif);
+    font-size: 1.6rem;
+    font-weight: 540;
+    font-variation-settings: 'SOFT' 100, 'opsz' 48;
+    letter-spacing: -0.01em;
+    line-height: 1;
   }
 
-  .brand h1::before {
-    content: '';
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 50% 38%, #8cc66a 0 42%, transparent 43%),
-      linear-gradient(#a07650, #a07650) 50% 100% / 18% 45% no-repeat,
-      var(--mint);
+  .brand h1 :global(svg) {
+    filter: drop-shadow(0 1px 6px rgba(20, 14, 6, 0.4));
   }
 
   .readout {
     display: flex;
-    gap: 0.6rem;
-    font-size: 0.66rem;
-    font-weight: 600;
-    color: var(--ink-faint);
+    gap: 0.7rem;
+    margin: 0.35rem 0 0 2.1rem;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: rgba(251, 246, 236, 0.72);
     font-variant-numeric: tabular-nums;
   }
 
   .readout b {
-    color: var(--ink-dim);
-    font-weight: 800;
+    color: var(--chalk);
+    font-weight: 700;
   }
 
   .readout .warn {
-    color: #c4572e;
+    color: #ffd2a8;
   }
 
   .actions {
@@ -967,99 +926,35 @@
   }
 
   .round {
-    width: 2.6rem;
-    height: 2.6rem;
-    border-radius: 50%;
+    width: 2.65rem;
+    height: 2.55rem;
     display: grid;
     place-items: center;
-    color: var(--ink-dim);
-    background: var(--paper);
-    border: 3px solid #fffdf8;
-    box-shadow: var(--shadow);
+    color: var(--ink);
+    background: var(--sheen), var(--glass);
+    backdrop-filter: var(--frost);
+    -webkit-backdrop-filter: var(--frost);
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    box-shadow: var(--rim), 0 8px 18px rgba(28, 20, 10, 0.18);
     cursor: pointer;
     transition:
-      transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.6),
-      color 0.18s,
-      background 0.18s;
+      transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.3),
+      background 0.25s;
   }
 
+  .round:nth-child(1) { border-radius: 52% 48% 55% 45% / 47% 55% 45% 53%; }
+  .round:nth-child(2) { border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%; }
+  .round:nth-child(3) { border-radius: 55% 45% 51% 49% / 50% 56% 44% 50%; }
+  .round:nth-child(4) { border-radius: 49% 51% 45% 55% / 45% 50% 50% 55%; }
+
   .round:hover {
-    color: var(--ink);
-    background: var(--butter);
-    transform: translateY(-2px) rotate(-6deg) scale(1.06);
+    transform: translateY(-2px) rotate(-4deg);
+    background: var(--sheen), linear-gradient(165deg, rgba(219, 182, 111, 0.5), rgba(219, 182, 111, 0.3));
   }
 
   .round.done {
-    background: var(--mint);
-    color: #2f6b48;
-  }
-
-  /* Growth, in its own little paper pill at the top, out of the tools' way. */
-  .growth {
-    position: absolute;
-    top: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.8rem 0.3rem 0.35rem;
-    border-radius: 999px;
-    background: var(--paper);
-    border: 3px solid #fffdf8;
-    box-shadow: 0 6px 14px rgba(70, 45, 25, 0.25);
-    flex: none;
-  }
-
-  .mini {
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    background: var(--paper-2);
-    border: none;
-    color: var(--ink-dim);
-    cursor: pointer;
-    transition:
-      background 0.15s,
-      transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.6);
-  }
-
-  .mini:hover {
-    color: var(--ink);
-    background: var(--sage);
-    transform: scale(1.08);
-  }
-
-  .scrub {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 7rem;
-    height: 8px;
-    border-radius: 8px;
-    background: linear-gradient(to right, #9fd07a var(--fill), var(--paper-3) var(--fill));
-    cursor: pointer;
-  }
-
-  .scrub::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #fff;
-    border: 3px solid #6fae4a;
-    box-shadow: 0 2px 5px rgba(70, 45, 25, 0.3);
-  }
-
-  .pct {
-    min-width: 2.4rem;
-    text-align: right;
-    font-size: 0.74rem;
-    font-weight: 800;
-    color: var(--ink-dim);
-    font-variant-numeric: tabular-nums;
+    color: #2f5f43;
+    background: var(--sheen), linear-gradient(165deg, rgba(147, 195, 160, 0.6), rgba(147, 195, 160, 0.38));
   }
 
   /* ----------------------------------------------------------- cards */
@@ -1070,25 +965,27 @@
     justify-content: center;
     gap: 0.5rem;
     width: 100%;
-    margin: 0.3rem 0 0.4rem;
-    padding: 0.7rem;
-    border-radius: 999px;
-    border: 3px solid #fffdf8;
-    background: var(--tone);
+    margin: 0.4rem 0 0.4rem;
+    padding: 0.62rem;
+    border-radius: 20px 26px 22px 24px / 24px 20px 26px 22px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: color-mix(in srgb, var(--tone) 52%, rgba(255, 255, 255, 0.18));
     color: var(--tone-ink);
-    font-size: 0.9rem;
-    font-weight: 800;
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-weight: 560;
+    font-variation-settings: 'SOFT' 100;
     cursor: pointer;
-    box-shadow: 0 4px 10px rgba(70, 45, 25, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.07);
-    transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.6);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 4px 10px rgba(28, 20, 10, 0.12);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.3);
   }
 
   .another:hover {
-    transform: translateY(-2px) scale(1.02);
+    transform: translateY(-1px) rotate(-0.6deg);
   }
 
   .another:active :global(svg) {
-    transform: rotate(90deg);
+    transform: rotate(40deg);
   }
 
   .legend {
@@ -1097,7 +994,6 @@
     gap: 0.35rem 0.8rem;
     margin: 0.1rem 0 0.8rem;
     font-size: 0.7rem;
-    font-weight: 600;
     color: var(--ink-faint);
   }
 
@@ -1107,11 +1003,11 @@
     margin-right: 0.15rem;
   }
 
-  .k-draw { color: #4f9a2c; }
-  .k-branch { color: #a24fc4; }
-  .k-turn { color: #3d7fc4; }
-  .k-global { color: #2b968a; }
-  .k-num { color: #2b968a; }
+  .k-draw { color: #4c7a2c; }
+  .k-branch { color: #8a4aa6; }
+  .k-turn { color: #3a6f9e; }
+  .k-global { color: #2b7a70; }
+  .k-num { color: #2b7a70; }
 
   .toggles {
     display: grid;
@@ -1123,7 +1019,7 @@
   .tiles {
     display: grid;
     gap: 0.5rem;
-    margin: 0.2rem 0 0.75rem;
+    margin: 0.25rem 0 0.75rem;
   }
 
   .tiles.three {
@@ -1135,36 +1031,38 @@
   }
 
   .weather-art {
-    color: #fff;
-    filter: drop-shadow(0 2px 4px rgba(60, 40, 20, 0.35));
+    color: rgba(43, 35, 28, 0.78);
   }
 
   .blurb {
-    margin: 0 0 0.6rem;
-    font-size: 0.8rem;
-    font-weight: 600;
+    margin: 0.1rem 0 0.6rem;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 0.9rem;
+    font-variation-settings: 'SOFT' 100;
     color: var(--ink-dim);
     text-align: center;
   }
 
   .segmented {
     display: flex;
-    gap: 0.3rem;
+    gap: 0.25rem;
     margin-bottom: 0.9rem;
-    padding: 0.25rem;
-    border-radius: 999px;
-    background: var(--paper-2);
+    padding: 0.22rem;
+    border-radius: 16px 20px 18px 14px;
+    background: rgba(60, 44, 28, 0.08);
+    box-shadow: inset 0 1px 2px rgba(28, 20, 10, 0.1);
   }
 
   .segmented button {
     flex: 1;
-    padding: 0.38rem 0;
-    border-radius: 999px;
+    padding: 0.36rem 0;
+    border-radius: 13px 16px 14px 12px;
     border: none;
     background: transparent;
     color: var(--ink-dim);
-    font-size: 0.74rem;
-    font-weight: 700;
+    font-size: 0.76rem;
+    font-weight: 600;
     cursor: pointer;
   }
 
@@ -1173,9 +1071,9 @@
   }
 
   .segmented button.active {
-    background: var(--tone);
+    background: color-mix(in srgb, var(--tone) 60%, rgba(255, 255, 255, 0.2));
     color: var(--tone-ink);
-    box-shadow: 0 2px 6px rgba(70, 45, 25, 0.15);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 5px rgba(28, 20, 10, 0.1);
   }
 
   .sub {
@@ -1183,8 +1081,8 @@
     align-items: center;
     gap: 0.4rem;
     margin: 1rem 0 0.6rem;
-    font-size: 0.72rem;
-    font-weight: 800;
+    font-size: 0.74rem;
+    font-weight: 700;
     color: var(--ink-dim);
   }
 
@@ -1194,7 +1092,7 @@
 
   .help {
     margin-bottom: 0.8rem;
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     line-height: 1.55;
     color: var(--ink-dim);
   }
@@ -1213,8 +1111,9 @@
   .field span {
     display: block;
     margin-bottom: 0.35rem;
-    font-size: 0.74rem;
-    font-weight: 800;
+    font-family: var(--serif);
+    font-size: 0.9rem;
+    font-weight: 500;
     color: var(--ink-dim);
   }
 
@@ -1224,54 +1123,46 @@
 
   .apply {
     width: 100%;
-    padding: 0.65rem;
-    border-radius: 999px;
-    border: 3px solid #fffdf8;
-    background: var(--paper-2);
+    padding: 0.6rem;
+    border-radius: 20px 26px 22px 24px / 24px 20px 26px 22px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(60, 44, 28, 0.07);
     color: var(--ink-faint);
-    font-size: 0.86rem;
-    font-weight: 800;
+    font-family: var(--serif);
+    font-size: 0.98rem;
+    font-weight: 500;
     cursor: default;
   }
 
   .apply.dirty {
-    background: var(--tone);
+    background: color-mix(in srgb, var(--tone) 60%, rgba(255, 255, 255, 0.2));
     color: var(--tone-ink);
     cursor: pointer;
-    box-shadow: 0 4px 10px rgba(70, 45, 25, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.07);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 4px 10px rgba(28, 20, 10, 0.12);
   }
 
   .issues {
     margin-top: 0.7rem;
     padding: 0.6rem 0.8rem;
-    border-radius: 14px;
-    background: #ffe3dc;
+    border-radius: 14px 18px 15px 17px;
+    background: rgba(217, 156, 166, 0.35);
     list-style: none;
   }
 
   .issues li {
-    font-size: 0.74rem;
+    font-size: 0.76rem;
     line-height: 1.5;
-    color: #9a3b26;
+    color: #6e2f3a;
   }
 
   .issues b {
-    font-weight: 800;
+    font-weight: 700;
     margin-right: 0.3rem;
   }
 
   @media (max-width: 640px) {
-    .scrub {
-      width: 4.5rem;
-    }
     .readout {
       display: none;
-    }
-    /* No room between the name and the buttons on a phone: tuck it under. */
-    .growth {
-      top: 4.2rem;
-      left: 1.1rem;
-      transform: none;
     }
   }
 </style>

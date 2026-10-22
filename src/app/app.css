@@ -1,41 +1,58 @@
 :root {
   /*
-   * Paper and ink, with a box of pastels.
+   * Clear glass over a living scene.
    *
-   * The interface sits on the scene as warm cream cards with soft brown ink,
-   * and every tool has a colour of its own — the way a cosy builder game's
-   * toolbar does — instead of one dark glass for everything.
+   * Surfaces are panes of lightly tinted glass: only a touch of blur, so the
+   * tree behind a card stays legible and every change shows through it. What
+   * makes them read as glass rather than plastic is the light on them — a
+   * bright top edge, a sweep of reflection across the upper corner, and a
+   * faint lit rim all round. Colour comes from the garden — moss, lichen, clay,
+   * ochre, heather, mist — and nothing is quite symmetric: corners are
+   * hand-cut, buttons are pebbles.
    */
-  --paper: #fffaf2;
-  --paper-2: #f7eee1;
-  --paper-3: #efe2cf;
-  --ink: #4b3a2f;
-  --ink-dim: #7a6556;
-  --ink-faint: #a8937f;
-  --line: rgba(110, 80, 50, 0.14);
-  --shadow: 0 10px 28px rgba(70, 45, 25, 0.22), 0 2px 6px rgba(70, 45, 25, 0.12);
+  --ink: #241d16;
+  --ink-dim: rgba(36, 29, 22, 0.8);
+  --ink-faint: rgba(36, 29, 22, 0.58);
+  --line: rgba(60, 44, 28, 0.16);
+  /* Light ink, for type set straight onto the scene. */
+  --chalk: #fbf6ec;
 
-  --mint: #bfe8cf;
-  --peach: #ffd2b5;
-  --butter: #ffe9a3;
-  --lilac: #dcccff;
-  --sky: #bfe0ff;
-  --rose: #ffc7d5;
-  --sage: #d5e7b3;
-  --sand: #f2dcb4;
-  --aqua: #b6ebe3;
-  --coral: #ffb8a3;
+  --glass: linear-gradient(160deg, rgba(255, 252, 246, 0.5), rgba(250, 245, 236, 0.34) 55%, rgba(250, 245, 236, 0.4));
+  --glass-thin: linear-gradient(160deg, rgba(255, 252, 246, 0.34), rgba(250, 245, 236, 0.2));
+  --frost: blur(5px) saturate(1.5) brightness(1.04);
+  /* The reflection: a soft sweep of light across the top-left of a pane. */
+  --sheen: linear-gradient(128deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.12) 22%, rgba(255, 255, 255, 0) 38%);
+  --rim:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 1px 0 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 0 18px rgba(255, 255, 255, 0.12);
+  --lift: 0 16px 36px rgba(20, 14, 6, 0.22), 0 2px 6px rgba(20, 14, 6, 0.12);
+
+  /* A garden's colours, each with a deeper ink of itself. */
+  --moss: #a4bb8c;
+  --lichen: #c9cf98;
+  --fern: #93c3a0;
+  --clay: #d8a68c;
+  --ochre: #dbb66f;
+  --heather: #bba8d0;
+  --mist: #a9c4d8;
+  --rosehip: #d99ca6;
+  --birch: #d6c9b1;
+  --tide: #9fcbc3;
 
   /* What a control is coloured with when its card does not say otherwise. */
-  --tone: #ffcf8f;
-  --tone-ink: #8a5a24;
-  --accent: #f0a65a;
+  --tone: var(--moss);
+  --tone-ink: #3f5a31;
+  --accent: #c9893f;
 
-  /* Kept for the few dark surfaces that remain (the code editor). */
-  --panel-solid: #3b3029;
+  --panel-solid: #2f261f;
   --hairline: var(--line);
 
-  --round: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  --serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --sans: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+  --round: var(--sans);
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 
   color-scheme: light;
@@ -55,13 +72,13 @@ body {
 }
 
 body {
-  font-family: var(--round);
+  font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
   color: var(--ink);
 }
 
 ::selection {
-  background: var(--butter);
+  background: rgba(219, 182, 111, 0.55);
   color: var(--ink);
 }
 
@@ -74,12 +91,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(110, 80, 50, 0.18);
+  background: rgba(60, 44, 28, 0.2);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(110, 80, 50, 0.3);
+  background: rgba(60, 44, 28, 0.32);
 }
 
 button {

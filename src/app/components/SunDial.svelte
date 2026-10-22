@@ -21,11 +21,14 @@
     max?: number;
   }
 
+  import { wobble } from './wobble';
+
   let { azimuth = $bindable(), elevation = $bindable(), bearing, min = -2, max = 70 }: Props = $props();
 
   const R = 92;
   const C = 100;
   const rad = Math.PI / 180;
+  const rim = wobble(C, C, R, 0.7);
 
   // Angle on the disc, clockwise from the top, from the sun's azimuth and the
   // camera's bearing: the far side of the tree (bearing + 180°) is at the top.
@@ -112,9 +115,9 @@
   >
     <defs>
       <radialGradient id="dial-sky" cx="50%" cy="50%" r="50%">
-        <stop offset="0" stop-color="#8ec5f5" />
-        <stop offset="0.7" stop-color="#cfe6fb" />
-        <stop offset="1" stop-color="#ffd7a8" />
+        <stop offset="0" stop-color="#9cc3e2" stop-opacity="0.62" />
+        <stop offset="0.7" stop-color="#cfe0ea" stop-opacity="0.5" />
+        <stop offset="1" stop-color="#f0cf9e" stop-opacity="0.62" />
       </radialGradient>
       <radialGradient id="dial-glow">
         <stop offset="0" stop-color={sunColor} stop-opacity="0.9" />
@@ -122,10 +125,10 @@
       </radialGradient>
     </defs>
 
-    <circle cx={C} cy={C} r={R} fill="url(#dial-sky)" stroke="#fff" stroke-width="3" />
+    <path d={rim} fill="url(#dial-sky)" class="rim" />
     <!-- 30° and 60° above the horizon -->
-    <circle cx={C} cy={C} r={R * (60 / 90)} fill="none" stroke="rgba(255,255,255,0.55)" stroke-dasharray="2 4" />
-    <circle cx={C} cy={C} r={R * (30 / 90)} fill="none" stroke="rgba(255,255,255,0.55)" stroke-dasharray="2 4" />
+    <circle cx={C} cy={C} r={R * (60 / 90)} fill="none" stroke="rgba(255,255,255,0.5)" stroke-dasharray="1.5 4.5" stroke-linecap="round" />
+    <circle cx={C} cy={C} r={R * (30 / 90)} fill="none" stroke="rgba(255,255,255,0.5)" stroke-dasharray="1.5 4.5" stroke-linecap="round" />
 
     <!-- the tree, from above, and you, at the bottom of the rim -->
     <circle cx={C} cy={C} r="9" fill="#5d7a33" stroke="#2f4419" stroke-width="1.5" />
@@ -137,10 +140,10 @@
     <text x={C} y="15" text-anchor="middle" class="tag">behind the tree</text>
 
     <!-- the light falling across the tree -->
-    <line x1={sunX} y1={sunY} x2={C} y2={C} stroke="#e48a2e" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" />
+    <line x1={sunX} y1={sunY} x2={C} y2={C} stroke="#b87730" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" />
 
     <circle cx={sunX} cy={sunY} r="22" fill="url(#dial-glow)" />
-    <circle cx={sunX} cy={sunY} r="9" fill={sunColor} stroke="#e48a2e" stroke-width="3" class="sun" />
+    <circle cx={sunX} cy={sunY} r="9" fill={sunColor} stroke="#b87730" stroke-width="2" class="sun" />
   </svg>
   <p class="reading"><b>{when}</b>, {where}</p>
 </div>
@@ -179,21 +182,32 @@
     r: 10.5;
   }
 
+  .rim {
+    stroke: rgba(255, 255, 255, 0.55);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 3px 8px rgba(28, 20, 10, 0.12));
+  }
+
   .tag {
-    font-size: 8.5px;
-    font-weight: 800;
-    fill: rgba(60, 90, 130, 0.55);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 9px;
+    fill: rgba(43, 35, 28, 0.55);
   }
 
   .reading {
     margin-top: 0.7rem;
     text-align: center;
-    font-size: 0.72rem;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 0.88rem;
+    font-variation-settings: 'SOFT' 100;
     color: var(--ink-dim);
   }
 
   .reading b {
+    font-style: normal;
     color: var(--ink);
-    font-weight: 500;
+    font-weight: 560;
   }
 </style>

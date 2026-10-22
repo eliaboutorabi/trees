@@ -158,27 +158,28 @@
   }
 
   .bed {
-    fill: #f1f8e6;
-    stroke: #fff;
-    stroke-width: 3;
+    fill: rgba(164, 187, 140, 0.24);
+    stroke: rgba(255, 255, 255, 0.5);
+    stroke-width: 1.2;
   }
 
   .axis {
-    font-size: 8px;
-    font-weight: 800;
-    fill: rgba(85, 107, 34, 0.55);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 9px;
+    fill: rgba(68, 89, 47, 0.7);
   }
 
   .tree line {
-    stroke: #8a7158;
+    stroke: #6f5a45;
     stroke-linecap: round;
   }
 
   .handle {
-    fill: #fff;
-    stroke: var(--tone-ink);
-    stroke-width: 3;
-    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+    fill: var(--tone-ink);
+    stroke: rgba(255, 255, 255, 0.75);
+    stroke-width: 2;
+    filter: drop-shadow(0 2px 5px rgba(28, 20, 10, 0.35));
     cursor: grab;
     transition: r 0.14s;
   }
@@ -191,12 +192,16 @@
   .reading {
     margin-top: 0.55rem;
     text-align: center;
-    font-size: 0.72rem;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 0.88rem;
+    font-variation-settings: 'SOFT' 100;
     color: var(--ink-dim);
   }
 
   .reading b {
+    font-style: normal;
     color: var(--ink);
-    font-weight: 500;
+    font-weight: 560;
   }
 </style>

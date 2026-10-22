@@ -41,8 +41,10 @@
   .caption {
     display: block;
     margin-bottom: 0.4rem;
-    font-size: 0.76rem;
-    font-weight: 800;
+    font-family: var(--serif);
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-variation-settings: 'SOFT' 100;
     color: var(--ink-dim);
   }
 
@@ -56,11 +58,11 @@
     position: relative;
     width: 1.75rem;
     height: 1.75rem;
-    border-radius: 50%;
-    border: 3px solid #fff;
+    border-radius: 50% 46% 54% 48% / 48% 54% 46% 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
     background: var(--c);
     cursor: pointer;
-    box-shadow: 0 2px 5px rgba(70, 45, 25, 0.2), inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 5px rgba(28, 20, 10, 0.18), inset 0 -3px 4px rgba(0, 0, 0, 0.12), inset 0 2px 3px rgba(255, 255, 255, 0.3);
     transition:
       transform 0.15s cubic-bezier(0.3, 0.7, 0.4, 1.5),
       border-color 0.15s;
@@ -70,11 +72,16 @@
     transform: scale(1.12);
   }
 
+  .dot:nth-child(even) {
+    border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%;
+  }
+
   .dot.on {
     transform: scale(1.12);
     box-shadow:
-      0 0 0 3px var(--tone-ink),
-      inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+      0 0 0 2px rgba(255, 255, 255, 0.5),
+      0 0 0 3.5px var(--tone-ink),
+      inset 0 -3px 4px rgba(0, 0, 0, 0.12);
   }
 
   /* The "anything else" dot: a rainbow until a custom colour is chosen. */

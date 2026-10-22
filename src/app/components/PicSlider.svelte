@@ -35,7 +35,7 @@
 <div class="pic" title={hint ?? label}>
   <span class="caption">{label}</span>
   <div class="row">
-    <span class="end small"><Icon icon={from} size={15} strokeWidth={1.7} /></span>
+    <span class="end small"><Icon icon={from} size={14} strokeWidth={2} /></span>
     <span class="track" style="--fill: {fill}%">
       <input
         type="range"
@@ -52,20 +52,22 @@
       />
       <span class="bubble" class:show={active}>{shown}</span>
     </span>
-    <span class="end"><Icon icon={to} size={19} strokeWidth={1.7} /></span>
+    <span class="end"><Icon icon={to} size={18} strokeWidth={2} /></span>
   </div>
 </div>
 
 <style>
   .pic {
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.9rem;
   }
 
   .caption {
     display: block;
-    margin-bottom: 0.35rem;
-    font-size: 0.76rem;
-    font-weight: 800;
+    margin-bottom: 0.3rem;
+    font-family: var(--serif);
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-variation-settings: 'SOFT' 100;
     color: var(--ink-dim);
   }
 
@@ -75,16 +77,24 @@
     gap: 0.6rem;
   }
 
+  /* What each end means, on a little pebble of the card's colour. */
   .end {
     flex: none;
-    width: 1.3rem;
+    width: 1.75rem;
+    height: 1.65rem;
     display: grid;
     place-items: center;
-    color: var(--tone-ink);
+    border-radius: 52% 48% 55% 45% / 47% 55% 45% 53%;
+    color: color-mix(in srgb, var(--tone-ink) 85%, #000 15%);
+    background: color-mix(in srgb, var(--tone) 62%, rgba(255, 255, 255, 0.25));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(20, 14, 6, 0.1);
   }
 
   .end.small {
-    opacity: 0.7;
+    width: 1.5rem;
+    height: 1.42rem;
+    border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%;
+    background: color-mix(in srgb, var(--tone) 38%, rgba(255, 255, 255, 0.25));
   }
 
   .track {
@@ -94,20 +104,26 @@
     align-items: center;
   }
 
+  /*
+   * A groove pressed into the frost, filled with the card's colour up to a
+   * small seed you push along it.
+   */
   input[type='range'] {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 10px;
-    border-radius: 10px;
+    height: 7px;
+    border-radius: 7px;
     background: linear-gradient(
       to right,
-      var(--tone) 0%,
+      color-mix(in srgb, var(--tone) 80%, var(--tone-ink) 20%) 0%,
       var(--tone) var(--fill),
-      var(--paper-3) var(--fill),
-      var(--paper-3) 100%
+      rgba(60, 44, 28, 0.13) var(--fill),
+      rgba(60, 44, 28, 0.13) 100%
     );
-    box-shadow: inset 0 1px 2px rgba(70, 45, 25, 0.12);
+    box-shadow:
+      inset 0 1px 2px rgba(28, 20, 10, 0.16),
+      0 1px 0 rgba(255, 255, 255, 0.35);
     outline: none;
     cursor: pointer;
   }
@@ -115,27 +131,27 @@
   input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #fff;
-    border: 4px solid var(--tone-ink);
-    box-shadow: 0 2px 6px rgba(70, 45, 25, 0.3);
-    transition: transform 0.14s cubic-bezier(0.3, 0.7, 0.4, 1.5);
+    width: 17px;
+    height: 17px;
+    border-radius: 50% 46% 54% 48% / 48% 54% 46% 50%;
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--tone-ink) 70%, white 30%), var(--tone-ink));
+    border: 2px solid rgba(255, 255, 255, 0.7);
+    box-shadow: 0 2px 6px rgba(28, 20, 10, 0.3);
+    transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.3, 1.4);
   }
 
   input[type='range']:hover::-webkit-slider-thumb,
   input[type='range']:active::-webkit-slider-thumb,
   input[type='range']:focus-visible::-webkit-slider-thumb {
-    transform: scale(1.18);
+    transform: scale(1.18) rotate(-12deg);
   }
 
   input[type='range']::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     border-radius: 50%;
-    background: #fff;
-    border: 4px solid var(--tone-ink);
+    background: var(--tone-ink);
+    border: 2px solid rgba(255, 255, 255, 0.7);
   }
 
   .bubble {
@@ -143,19 +159,21 @@
     left: var(--fill);
     bottom: calc(100% + 0.45rem);
     transform: translate(-50%, 4px);
-    padding: 0.12rem 0.42rem;
-    border-radius: 6px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    color: var(--tone-ink);
-    background: var(--tone);
-    box-shadow: 0 2px 6px rgba(70, 45, 25, 0.2);
+    padding: 0.1rem 0.5rem;
+    border-radius: 9px 11px 8px 10px;
+    font-family: var(--serif);
+    font-size: 0.78rem;
+    font-weight: 560;
+    font-variant-numeric: tabular-nums;
+    color: var(--chalk);
+    background: color-mix(in srgb, var(--tone-ink) 88%, transparent);
+    box-shadow: 0 3px 8px rgba(28, 20, 10, 0.22);
     opacity: 0;
     pointer-events: none;
     white-space: nowrap;
     transition:
-      opacity 0.12s,
-      transform 0.12s;
+      opacity 0.15s,
+      transform 0.2s cubic-bezier(0.25, 0.8, 0.3, 1.3);
   }
 
   .bubble.show {

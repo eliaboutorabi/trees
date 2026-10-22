@@ -19,11 +19,14 @@
     max?: number;
   }
 
+  import { wobble } from './wobble';
+
   let { direction = $bindable(), strength = $bindable(), gusts, bearing, max = 1.5 }: Props = $props();
 
   const R = 88;
   const C = 100;
   const rad = Math.PI / 180;
+  const rim = wobble(C, C, R, 2.1);
 
   const phi = $derived(bearing + 180 - direction);
   // Square-root scale: ordinary breezes sit low in the range, and a linear
@@ -108,10 +111,10 @@
     onkeydown={key}
   >
     <defs>
-      <clipPath id="compass-clip"><circle cx={C} cy={C} r={R} /></clipPath>
+      <clipPath id="compass-clip"><path d={rim} /></clipPath>
     </defs>
-    <circle cx={C} cy={C} r={R} fill="#dcefff" stroke="#fff" stroke-width="3" />
-    <circle cx={C} cy={C} r={R * 0.5} fill="none" stroke="rgba(255,255,255,0.8)" stroke-dasharray="2 4" />
+    <path d={rim} class="rim" />
+    <circle cx={C} cy={C} r={R * 0.5} fill="none" stroke="rgba(255,255,255,0.55)" stroke-dasharray="1.5 4.5" stroke-linecap="round" />
 
     <g clip-path="url(#compass-clip)">
       <g transform="rotate({phi} {C} {C})">
@@ -171,8 +174,15 @@
     filter: drop-shadow(0 0 4px var(--accent));
   }
 
+  .rim {
+    fill: rgba(169, 196, 216, 0.34);
+    stroke: rgba(255, 255, 255, 0.55);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 3px 8px rgba(28, 20, 10, 0.12));
+  }
+
   .streak {
-    stroke: rgba(70, 120, 175, 0.4);
+    stroke: rgba(51, 86, 110, 0.42);
     stroke-width: 1.4;
     stroke-linecap: round;
     animation: blow linear infinite;
@@ -213,25 +223,29 @@
 
   .grip {
     fill: rgba(255, 248, 239, 0.001);
-    stroke: rgba(47, 95, 143, 0);
+    stroke: rgba(51, 86, 110, 0);
     stroke-width: 2;
     transition: stroke 0.15s;
   }
 
   svg:hover .grip,
   svg.dragging .grip {
-    stroke: rgba(47, 95, 143, 0.7);
+    stroke: rgba(51, 86, 110, 0.7);
   }
 
   .reading {
     margin-top: 0.7rem;
     text-align: center;
-    font-size: 0.72rem;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 0.88rem;
+    font-variation-settings: 'SOFT' 100;
     color: var(--ink-dim);
   }
 
   .reading b {
+    font-style: normal;
     color: var(--ink);
-    font-weight: 500;
+    font-weight: 560;
   }
 </style>

@@ -1,11 +1,11 @@
 <script lang="ts" module>
   import type { Snippet } from 'svelte';
-  import type { IconSvgElement } from '@hugeicons/svelte';
+  import type { GlyphName } from './glyphs';
 
   export interface Tool {
     id: string;
     label: string;
-    icon: IconSvgElement;
+    icon: GlyphName;
     /** What opens above the button. */
     panel: Snippet;
     /** A wider card, for the grammar editor. */
@@ -30,7 +30,20 @@
    * closes it. One card at a time.
    */
   import { onMount } from 'svelte';
-  import Icon from './Icon.svelte';
+  import Glyph from './Glyph.svelte';
+
+  /*
+   * Each button is a pebble: its own slightly irregular outline and its own
+   * small tilt, the way stones laid in a row never quite match.
+   */
+  const PEBBLES = [
+    ['52% 48% 55% 45% / 47% 55% 45% 53%', -3],
+    ['46% 54% 49% 51% / 55% 46% 54% 45%', 2],
+    ['55% 45% 51% 49% / 50% 56% 44% 50%', -1.5],
+    ['49% 51% 45% 55% / 45% 50% 50% 55%', 3],
+    ['53% 47% 52% 48% / 52% 44% 56% 48%', -2.5],
+    ['47% 53% 55% 45% / 49% 54% 46% 51%', 1.5],
+  ] as const;
 
   interface Props {
     tools: Tool[];
@@ -50,8 +63,6 @@
   const buttons: Record<string, HTMLButtonElement> = {};
   let cardLeft = $state(0);
   let cardBottom = $state(0);
-  /** Where along the card's bottom edge its button is, for the notch. */
-  let notch = $state(0);
 
   let enterTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -105,8 +116,7 @@
     const w = card.offsetWidth;
     const margin = 12;
     cardLeft = Math.min(Math.max(b.left + b.width / 2 - w / 2, margin), window.innerWidth - w - margin);
-    cardBottom = window.innerHeight - d.top + 12;
-    notch = Math.min(Math.max(b.left + b.width / 2 - cardLeft, 18), w - 18);
+    cardBottom = window.innerHeight - d.top + 6;
   }
 
   $effect(() => {
@@ -152,7 +162,7 @@
       class:wide={open.wide}
       class:pinned={pinned === open.id}
       bind:this={card}
-      style="left: {cardLeft}px; bottom: {cardBottom}px; --notch: {notch}px; --tone: {open.tone}; --tone-ink: {open.toneInk}"
+      style="left: {cardLeft}px; bottom: {cardBottom}px; --tone: {open.tone}; --tone-ink: {open.toneInk}"
       role="dialog"
       aria-label={open.label}
       tabindex="-1"
@@ -161,8 +171,13 @@
       onpointerdown={grab}
     >
       <div class="card__head">
-        <span class="badge"><Icon icon={open.icon} size={16} strokeWidth={2} /></span>
-        <span>{open.label}</span>
+        <span class="badge"><Glyph name={open.icon} size={21} weight={1.85} /></span>
+        <span class="title">
+          {open.label}
+          <svg class="stroke" viewBox="0 0 120 8" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M2 5.2c14-2.6 27-2.9 40-1.4 14 1.6 27 1.9 41-.4 12-1.9 23-1.6 35 .6" />
+          </svg>
+        </span>
       </div>
       <div class="card__body">
         {@render open.panel()}
@@ -176,7 +191,7 @@
     {#if i > 0 && tool.group !== tools[i - 1].group}<span class="gap"></span>{/if}
     <button
       class="tool"
-      style="--tone: {tool.tone}; --tone-ink: {tool.toneInk}"
+      style="--tone: {tool.tone}; --tone-ink: {tool.toneInk}; --shape: {PEBBLES[i % PEBBLES.length][0]}; --tilt: {PEBBLES[i % PEBBLES.length][1]}deg"
       class:active={openId === tool.id}
       class:pinned={pinned === tool.id}
       bind:this={buttons[tool.id]}
@@ -186,7 +201,7 @@
       aria-label={tool.label}
       aria-expanded={openId === tool.id}
     >
-      <Icon icon={tool.icon} size={21} strokeWidth={2} />
+      <Glyph name={tool.icon} size={26} weight={1.85} />
       <span class="tip">{tool.label}</span>
     </button>
   {/each}
@@ -198,107 +213,151 @@
 
 <style>
   /*
-   * No tray: the tools are a row of separate round pastel buttons sitting on
-   * the scene, each in its own colour, that bob up when you reach for them.
+   * No tray: a row of pebbles on the scene. Each is frosted glass tinted with
+   * its tool's garden colour, so the scene glows through it, and each has its
+   * own outline and tilt. The pinned one sits up off the ground with a small
+   * seed of colour under it.
    */
   .dock {
     position: absolute;
     left: 50%;
-    bottom: 1.3rem;
+    bottom: 1.1rem;
     transform: translateX(-50%);
     z-index: 6;
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 0.4rem 0.2rem;
+    align-items: flex-end;
+    gap: 0.55rem;
+    padding: 0.9rem 0.6rem 0.5rem;
     max-width: calc(100vw - 1rem);
     overflow-x: auto;
     scrollbar-width: none;
   }
 
   .gap {
-    width: 0.55rem;
+    width: 0.7rem;
     flex: none;
-  }
-
-  .gap.wide {
-    width: 0.9rem;
   }
 
   .tool {
     position: relative;
     flex: none;
-    width: 3.1rem;
+    width: 3.25rem;
     height: 3.1rem;
-    border-radius: 50%;
+    border-radius: var(--shape);
     display: grid;
     place-items: center;
-    border: 3px solid #fffaf2;
-    background: var(--tone);
-    color: var(--tone-ink);
+    border: none;
+    background:
+      var(--sheen),
+      radial-gradient(130% 120% at 30% 20%, color-mix(in srgb, var(--tone) 82%, white 18%), color-mix(in srgb, var(--tone) 58%, transparent));
+    backdrop-filter: var(--frost);
+    -webkit-backdrop-filter: var(--frost);
+    /* Drawn in a deep ink of the tool's colour and coloured in with light. */
+    color: color-mix(in srgb, var(--tone-ink) 82%, #000 18%);
+    --glyph-wash: #fffaf0;
+    --glyph-wash-opacity: 0.72;
     cursor: pointer;
+    transform: rotate(var(--tilt));
     box-shadow:
-      0 6px 14px rgba(70, 45, 25, 0.25),
-      inset 0 -4px 0 rgba(0, 0, 0, 0.07),
-      inset 0 3px 0 rgba(255, 255, 255, 0.45);
+      var(--rim),
+      inset 0 -7px 12px color-mix(in srgb, var(--tone-ink) 18%, transparent),
+      0 8px 18px rgba(20, 14, 6, 0.24);
     transition:
-      transform 0.22s cubic-bezier(0.3, 0.7, 0.4, 1.6),
-      box-shadow 0.22s;
+      transform 0.35s cubic-bezier(0.25, 0.8, 0.3, 1.3),
+      box-shadow 0.3s,
+      background 0.3s;
   }
 
   .tool:hover,
   .tool.active {
-    transform: translateY(-6px) rotate(-4deg) scale(1.08);
+    transform: translateY(-5px) rotate(calc(var(--tilt) * -0.6)) scale(1.06);
     box-shadow:
-      0 12px 22px rgba(70, 45, 25, 0.28),
-      inset 0 -4px 0 rgba(0, 0, 0, 0.07),
-      inset 0 3px 0 rgba(255, 255, 255, 0.45);
+      var(--rim),
+      inset 0 -7px 12px color-mix(in srgb, var(--tone-ink) 18%, transparent),
+      0 14px 24px rgba(20, 14, 6, 0.28);
   }
 
   .tool.pinned {
-    transform: translateY(-8px) scale(1.1);
-    border-color: var(--tone-ink);
+    transform: translateY(-7px) rotate(0deg) scale(1.08);
+    background:
+      var(--sheen),
+      radial-gradient(130% 120% at 30% 20%, color-mix(in srgb, var(--tone) 94%, white 6%), color-mix(in srgb, var(--tone) 84%, transparent));
+  }
+
+  /* A seed of the tool's colour under the one that is open. */
+  .tool::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -0.7rem;
+    width: 0.38rem;
+    height: 0.3rem;
+    border-radius: 50% 50% 45% 55%;
+    background: var(--tone-ink);
+    opacity: 0;
+    transform: translateX(-50%) scale(0.4);
+    transition:
+      opacity 0.25s,
+      transform 0.3s cubic-bezier(0.3, 0.8, 0.3, 1.6);
+  }
+
+  .tool.pinned::after {
+    opacity: 0.85;
+    transform: translateX(-50%) scale(1);
   }
 
   .tool:focus-visible {
-    outline: 3px solid var(--tone-ink);
-    outline-offset: 2px;
+    outline: 2px solid var(--tone-ink);
+    outline-offset: 3px;
   }
 
-  /* The name, in a little cream bubble above the button. */
   .tip {
     position: absolute;
-    bottom: calc(100% + 0.55rem);
+    bottom: calc(100% + 0.6rem);
     left: 50%;
-    transform: translate(-50%, 4px);
-    padding: 0.22rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 700;
+    transform: translate(-50%, 4px) rotate(calc(var(--tilt) * -1));
+    padding: 0.25rem 0.65rem 0.3rem;
+    border-radius: 12px 10px 13px 9px;
+    font-family: var(--serif);
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-variation-settings: 'SOFT' 100, 'opsz' 14;
     white-space: nowrap;
     color: var(--ink);
-    background: var(--paper);
-    box-shadow: 0 4px 10px rgba(70, 45, 25, 0.2);
+    background: var(--sheen), var(--glass);
+    backdrop-filter: var(--frost);
+    -webkit-backdrop-filter: var(--frost);
+    box-shadow: var(--rim), 0 6px 14px rgba(28, 20, 10, 0.18);
     opacity: 0;
     pointer-events: none;
     transition:
-      opacity 0.15s,
-      transform 0.15s;
+      opacity 0.18s,
+      transform 0.18s;
   }
 
+  /*
+   * The card: a sheet of frosted vellum with hand-cut corners. A wash of the
+   * tool's colour at the top is all the colour it carries; the scene shows
+   * through the rest of it.
+   */
   .card {
     position: fixed;
     z-index: 7;
-    width: 20rem;
+    width: 20.5rem;
     max-height: min(64vh, 38rem);
     display: flex;
     flex-direction: column;
-    border-radius: 26px;
-    background: var(--paper);
-    border: 3px solid #fffdf8;
-    box-shadow: var(--shadow);
+    border-radius: 30px 22px 28px 24px / 24px 30px 22px 28px;
+    background:
+      var(--sheen),
+      linear-gradient(175deg, color-mix(in srgb, var(--tone) 46%, transparent), transparent 30%),
+      var(--glass);
+    backdrop-filter: var(--frost);
+    -webkit-backdrop-filter: var(--frost);
+    border: none;
+    box-shadow: var(--rim), var(--lift);
     color: var(--ink);
-    animation: rise 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.35);
+    animation: rise 0.34s cubic-bezier(0.2, 0.85, 0.3, 1.15);
     transform-origin: 50% 100%;
   }
 
@@ -306,62 +365,73 @@
     width: 28rem;
   }
 
-  /* A small notch on the bottom edge, over the button the card belongs to. */
-  .card::after {
-    content: '';
-    position: absolute;
-    left: var(--notch, 50%);
-    bottom: -9px;
-    width: 14px;
-    height: 14px;
-    transform: translateX(-50%) rotate(45deg);
-    background: var(--paper);
-    border-right: 3px solid #fffdf8;
-    border-bottom: 3px solid #fffdf8;
-    border-bottom-right-radius: 4px;
-  }
-
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(14px) scale(0.92);
+      transform: translateY(12px) scale(0.96) rotate(-0.6deg);
     }
   }
 
   .card__head {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
-    margin: 0.55rem 0.55rem 0.3rem;
-    padding: 0.45rem 0.7rem;
-    border-radius: 18px;
-    background: var(--tone);
+    gap: 0.7rem;
+    padding: 1rem 1.2rem 0.35rem 1.05rem;
     color: var(--tone-ink);
-    font-size: 0.86rem;
-    font-weight: 800;
-    letter-spacing: 0.01em;
   }
 
   .badge {
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 50%;
+    width: 2.3rem;
+    height: 2.2rem;
+    border-radius: 48% 52% 55% 45% / 52% 46% 54% 48%;
     display: grid;
     place-items: center;
-    background: rgba(255, 255, 255, 0.6);
+    color: color-mix(in srgb, var(--tone-ink) 82%, #000 18%);
+    --glyph-wash: #fffaf0;
+    --glyph-wash-opacity: 0.72;
+    background: color-mix(in srgb, var(--tone) 72%, rgba(255, 255, 255, 0.2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 2px 6px rgba(20, 14, 6, 0.12);
+  }
+
+  .title {
+    position: relative;
+    font-family: var(--serif);
+    font-size: 1.22rem;
+    font-weight: 560;
+    font-variation-settings: 'SOFT' 100, 'opsz' 30;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+
+  /* A hand-drawn stroke under the title, in the tool's colour. */
+  .stroke {
+    position: absolute;
+    left: -2%;
+    bottom: -0.38rem;
+    width: 104%;
+    height: 0.5rem;
+    overflow: visible;
+  }
+
+  .stroke path {
+    fill: none;
+    stroke: var(--tone);
+    stroke-width: 3;
+    stroke-linecap: round;
+    opacity: 0.9;
   }
 
   .card__body {
-    padding: 0.5rem 1.1rem 1.1rem;
+    padding: 0.7rem 1.2rem 1.15rem;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(110, 80, 50, 0.2) transparent;
+    scrollbar-color: rgba(60, 44, 28, 0.2) transparent;
   }
 
   @media (hover: hover) {
     .tool:hover:not(.active) .tip {
       opacity: 1;
-      transform: translate(-50%, 0);
+      transform: translate(-50%, 0) rotate(calc(var(--tilt) * -1));
     }
   }
 
@@ -371,8 +441,8 @@
       width: calc(100vw - 1.5rem);
     }
     .tool {
-      width: 2.7rem;
-      height: 2.7rem;
+      width: 2.75rem;
+      height: 2.65rem;
     }
     /* On a phone the dock scrolls sideways; fading its ends is what says so. */
     .dock {
