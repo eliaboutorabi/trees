@@ -36,6 +36,7 @@
    * drawn smaller, the way a game's interface scales with its window.
    */
   import { onMount, setContext, tick } from 'svelte';
+  import { cubicIn } from 'svelte/easing';
   import Glyph from './Glyph.svelte';
   import { MORE, type MoreHost } from './more';
 
@@ -185,6 +186,29 @@
     return () => ro.disconnect();
   });
 
+  /*
+   * Leaving as gently as arriving. A card used to rise in and then simply
+   * vanish — on Escape, on a click elsewhere, or when the pointer moved to
+   * the next button — and the fine-tune pane did the same. Now each settles
+   * back down and fades, quickly enough that moving along the dock still
+   * feels immediate.
+   */
+  function cardOut(_node: Element) {
+    return {
+      duration: 150,
+      easing: cubicIn,
+      css: (t: number) => `opacity: ${t}; transform: translateY(${(1 - t) * 10}px) scale(${0.97 + 0.03 * t})`,
+    };
+  }
+
+  function paneOut(_node: Element, { toLeft }: { toLeft: boolean }) {
+    return {
+      duration: 170,
+      easing: cubicIn,
+      css: (t: number) => `opacity: ${t}; transform: translateX(${(1 - t) * (toLeft ? 18 : -18)}px)`,
+    };
+  }
+
   let enterTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
   /** A pointer is down inside the card — a slider mid-drag. */
@@ -284,6 +308,7 @@
 {#if open}
   {#key open.id}
     <div
+      out:cardOut|global
       class="card"
       class:wide={open.wide}
       class:pinned={pinned === open.id}
@@ -327,6 +352,7 @@
 
 {#if open && more && moreOpen}
   <div
+    out:paneOut|global={{ toLeft: !moreOver && moreLeft < cardLeft }}
     class="more"
     class:over={moreOver}
     class:ready={moreReady}
