@@ -153,6 +153,10 @@ export class Tree {
   private slots: (Mesh | null)[] = [null, null, null, null];
   /** A shape change in progress: the old tree's shape morphing into the new one. */
   private morph: { t: number; meshes: Mesh[] } | null = null;
+  /** Where the wind is heading, and the bearing it has reached. */
+  private readonly windTarget = { strength: 0.5, speed: 1, bearing: 70 };
+  private windBearing = 70;
+  private windShown = false;
   /** A change of structure in progress: the old tree dissolving into the new. */
   private dissolve: { t: number; leaving: Mesh[]; arriving: Mesh[] } | null = null;
   /** The four materials again, discarding by a stipple; made on first use. */
@@ -379,6 +383,8 @@ export class Tree {
    */
   tick(dt: number): void {
     this.uniforms.fallClock.value += dt;
+    this.easeWind(dt);
+    this.uniforms.windPhase.value += dt * this.uniforms.windSpeed.value;
     this.advanceMorph(dt);
     this.advanceDissolve(dt);
     // Once a frame at most, and only when something actually came loose.
@@ -663,7 +669,7 @@ export class Tree {
     }
     const u = this.uniforms;
     const now = u.fallClock.value;
-    const t = now * u.windSpeed.value;
+    const t = u.windPhase.value;
     const gust = 0.5 * Math.sin(t) + 0.3 * Math.sin(1.63 * t + 1.3) + 0.2 * Math.sin(0.37 * t);
     const breeze = Math.max(0, 0.38 + 0.62 * gust) * u.wind.value;
     const visible = this.leafCount * u.leafCull.value;
@@ -713,7 +719,7 @@ export class Tree {
     const wx = dir.x / len;
     const wz = dir.y / len;
 
-    const t = u.fallClock.value * u.windSpeed.value;
+    const t = u.windPhase.value;
     const travel = (x * wx + z * wz) * 0.2;
     const gust =
       0.5 * Math.sin(t - travel) +
@@ -780,11 +786,14 @@ export class Tree {
   /** Everything that does not need a rebuild. Undefined fields are left alone. */
   applyLook(p: LiveParams): void {
     const u = this.uniforms;
-    if (p.wind !== undefined) u.wind.value = p.wind;
-    if (p.windSpeed !== undefined) u.windSpeed.value = p.windSpeed;
-    if (p.windDirection !== undefined) {
-      const rad = (p.windDirection * Math.PI) / 180;
-      (u.windDir.value as Vector2).set(Math.sin(rad), Math.cos(rad));
+    // The wind eases toward what it is asked for (see `easeWind`): a tree
+    // leans over into a new wind, it does not snap to it.
+    if (p.wind !== undefined) this.windTarget.strength = p.wind;
+    if (p.windSpeed !== undefined) this.windTarget.speed = p.windSpeed;
+    if (p.windDirection !== undefined) this.windTarget.bearing = p.windDirection;
+    if (!this.windShown) {
+      this.windShown = true;
+      this.easeWind(Infinity);
     }
     if (p.autumn !== undefined) u.autumn.value = p.autumn;
     if (p.snow !== undefined) u.snow.value = p.snow;
@@ -1006,6 +1015,25 @@ export class Tree {
       warm.push(m);
     });
     return warm;
+  }
+
+  /**
+   * Carry the wind toward its target: strength and gust speed over about half
+   * a second, the bearing the short way round. Dragging the compass still
+   * feels direct; clicking across it swings the crown round instead of
+   * flicking it.
+   */
+  private easeWind(dt: number): void {
+    const u = this.uniforms;
+    const w = this.windTarget;
+    const k = 1 - Math.exp(-dt / 0.45);
+    u.wind.value += (w.strength - u.wind.value) * k;
+    u.windSpeed.value += (w.speed - u.windSpeed.value) * k;
+    let d = w.bearing - this.windBearing;
+    d = ((((d + 180) % 360) + 360) % 360) - 180;
+    this.windBearing += d * k;
+    const rad = (this.windBearing * Math.PI) / 180;
+    (u.windDir.value as Vector2).set(Math.sin(rad), Math.cos(rad));
   }
 
   /** True while a change of shape is still travelling. */

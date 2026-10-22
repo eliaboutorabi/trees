@@ -152,10 +152,11 @@ function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const root = attribute<'vec3'>('root', 'vec3');
   const rel = positionLocal.sub(root);
   const phase = idx.mul(0.6180339887).fract().mul(Math.PI * 2);
-  const speed = u.windSpeed.mul(1.9);
-  const gust = sin(time.mul(speed).add(phase))
+  // The integrated wind phase, so a change of gust speed changes pace, not position.
+  const swing = u.windPhase.mul(1.9);
+  const gust = sin(swing.add(phase))
     .mul(0.62)
-    .add(sin(time.mul(speed.mul(2.3)).add(phase.mul(1.7))).mul(0.38));
+    .add(sin(swing.mul(2.3).add(phase.mul(1.7))).mul(0.38));
   const lean = gust.mul(u.wind).mul(0.5).mul(t.mul(t).mul(0.7).add(t.mul(0.3)));
   const dir = u.windDir.normalize();
   material.positionNode = root.add(

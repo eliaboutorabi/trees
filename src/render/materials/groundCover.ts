@@ -29,7 +29,6 @@ import {
   mix,
   positionLocal,
   sin,
-  time,
   uv,
   vec3,
 } from 'three/tsl';
@@ -79,10 +78,11 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
     // the golden ratio and taking the fraction turns consecutive indices into
     // a well-spread set of phases, so neighbouring tufts never beat in step.
     const phase = instanceIndex.toFloat().mul(0.6180339887).fract().mul(Math.PI * 2);
-    const speed = u.windSpeed.mul(1.7);
-    const gust = sin(time.mul(speed).add(phase))
+    // The integrated wind phase, so a change of gust speed changes pace, not position.
+    const swing = u.windPhase.mul(1.7);
+    const gust = sin(swing.add(phase))
       .mul(0.62)
-      .add(sin(time.mul(speed.mul(2.3)).add(phase.mul(1.7))).mul(0.38));
+      .add(sin(swing.mul(2.3).add(phase.mul(1.7))).mul(0.38));
 
     // Displacement proportional to height above the root gives a straight
     // blade a plausible hinge there; the y term shortens it so the tip traces

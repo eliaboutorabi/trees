@@ -85,6 +85,13 @@ export function createTreeUniforms() {
 
     wind: uniform(0.5),
     windSpeed: uniform(1.0),
+    /**
+     * How far through its gusts the wind has got: the integral of `windSpeed`
+     * over time, advanced by the host each frame. Swaying on `clock × speed`
+     * made every branch and blade jump to another point in its swing the
+     * moment the gust speed changed; an integrated phase only changes pace.
+     */
+    windPhase: uniform(0),
     windDir: uniform(new Vector2(1, 0.35)),
     /** Peak lean of the crown, in radians, at wind = 1. */
     windBend: uniform(0.22),
@@ -329,7 +336,7 @@ export function growthPosition(
   // point on the tree is right now — see `Tree.swayed`. That is what lets a bird
   // sit on a twig and move with it, and it puts falling leaves in exactly the
   // gusts the crown is bending to, since they integrate the same clock.
-  const t = u.fallClock.mul(u.windSpeed);
+  const t = u.windPhase;
   const windDir = vec3(u.windDir.x, 0, u.windDir.y).normalize();
 
   // A gust front travelling downwind, so the whole tree does not pulse at once.

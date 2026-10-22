@@ -636,7 +636,48 @@ export class TreeStudio {
   }
 
 
+  /**
+   * Where the sun and sky are heading. They ease there over a fraction of a
+   * second (see `easeSky`): dragging the sun still feels direct, but clicking
+   * a spot on the dial, or a preset moving the light, glides instead of
+   * jumping the shadows across the lawn in one frame.
+   */
   applySky(params: SkyParams): void {
+    const first = !this.skyTarget;
+    this.skyTarget = { ...params };
+    if (first) {
+      this.skyNow = { ...params };
+      this.applySkyNow(this.skyNow);
+    }
+  }
+
+  private skyTarget: SkyParams | null = null;
+  private skyNow: SkyParams | null = null;
+
+  private easeSky(dt: number): void {
+    const to = this.skyTarget;
+    const now = this.skyNow;
+    if (!to || !now) return;
+    const k = 1 - Math.exp(-dt / 0.16);
+    let moving = false;
+    for (const key of ['sunElevation', 'haze', 'sunIntensity', 'skyLight', 'overcast'] as const) {
+      const d = to[key] - now[key];
+      if (Math.abs(d) > 1e-4) {
+        now[key] += d * k;
+        moving = true;
+      } else now[key] = to[key];
+    }
+    // Azimuth the short way round.
+    let d = to.sunAzimuth - now.sunAzimuth;
+    d = ((((d + 180) % 360) + 360) % 360) - 180;
+    if (Math.abs(d) > 1e-3) {
+      now.sunAzimuth += d * k;
+      moving = true;
+    } else now.sunAzimuth = to.sunAzimuth;
+    if (moving) this.applySkyNow(now);
+  }
+
+  private applySkyNow(params: SkyParams): void {
     const settings: SkySettings = {
       elevation: params.sunElevation,
       azimuth: params.sunAzimuth,
@@ -908,6 +949,7 @@ export class TreeStudio {
 
     this.easeSeason(dt);
 
+    this.easeSky(dt);
     this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
     this.sky.setRainbow(this.rainbow);
 
