@@ -3,6 +3,7 @@
  * between L-system parameters and what ends up on screen.
  */
 import {
+  Group,
   Color,
   DirectionalLight,
   HemisphereLight,
@@ -164,6 +165,7 @@ export class TreeStudio {
   /** The exposure slider, and the sun's strength, which exposure partly follows. */
   private userExposure = 1;
   private sunPower = 5;
+  private fadingWarmed = false;
   /** The rainbow fades in and out rather than switching. */
   private rainbowTarget = 0;
   private rainbow = 0;
@@ -424,6 +426,15 @@ export class TreeStudio {
 
   private adopt(build: TreeInfo): TreeInfo {
     if (!build.ok) return build;
+    if (!this.fadingWarmed) {
+      this.fadingWarmed = true;
+      // Once there is a tree to compile them against, build the stippled
+      // materials a dissolve uses, in the background, so the first one does
+      // not stall on shaders.
+      const warm = new Group();
+      for (const m of this.tree.warmFading()) warm.add(m);
+      this.renderer.compileAsync(warm, this.camera, this.scene).catch(() => {});
+    }
 
     this.treeHeight = build.height;
     this.treeRadius = build.radius;

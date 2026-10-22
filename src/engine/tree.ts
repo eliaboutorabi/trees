@@ -18,7 +18,8 @@
  * see `LiveParams` for everything that does not.
  */
 import { BufferAttribute, Color, Group, Mesh, Vector2, Vector3, Vector4, type BufferGeometry } from 'three';
-import type { MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
+import type { MeshPhysicalNodeMaterial, MeshStandardNodeMaterial, NodeMaterial } from 'three/webgpu';
+import { float, fract, screenCoordinate, select, uniform } from 'three/tsl';
 import type { TreeBuild } from './lsystem';
 import { computeTree, unpackTreeData, type BuildLimits, type PackedTreeData, type TreeData, type TreeStructure } from './build';
 import type { Palette, Preset } from './lsystem/presets';
@@ -132,6 +133,8 @@ function toColor(target: Color, value: Color | string | number): void {
 
 /** How long a change of shape takes to travel, in seconds. */
 const MORPH_SECONDS = 0.6;
+/** How long one tree takes to dissolve into another. */
+const DISSOLVE_SECONDS = 0.7;
 
 export class Tree {
   /** Add this to your scene. */
@@ -150,6 +153,10 @@ export class Tree {
   private slots: (Mesh | null)[] = [null, null, null, null];
   /** A shape change in progress: the old tree's shape morphing into the new one. */
   private morph: { t: number; meshes: Mesh[] } | null = null;
+  /** A change of structure in progress: the old tree dissolving into the new. */
+  private dissolve: { t: number; leaving: Mesh[]; arriving: Mesh[] } | null = null;
+  /** The four materials again, discarding by a stipple; made on first use. */
+  private fading: NodeMaterial[] | null = null;
   private flowerMesh: Mesh | null = null;
   private fruitMesh: Mesh | null = null;
   /** Fruit that is still on the tree, so a touch only has to test those. */
@@ -291,10 +298,15 @@ export class Tree {
     this.bakedTrunkRadius = Math.max(1e-4, params.trunkRadius);
     this.bakedLeafScale = Math.max(1e-4, params.leafScale);
 
+    // A dissolve still running is cut short: what was leaving goes now.
+    if (this.dissolve) {
+      this.disposeMeshes(this.dissolve.leaving);
+      this.dissolve = null;
+    }
     // What is on screen now, in case the new tree can grow out of it.
     const before = blend ? this.shapeOnScreen() : null;
-
-    this.clearMeshes();
+    const leaving = blend ? this.detachMeshes() : null;
+    if (!leaving) this.clearMeshes();
     const branches = this.addMesh(data.branches, this.bark);
     const foliage = this.addMesh(data.foliage, this.foliage);
     // Ornaments are baked whatever the density, and hidden while it is zero: a
@@ -304,7 +316,10 @@ export class Tree {
     this.fruitMesh = this.addMesh(data.fruit, this.fruit, this.uniforms.fruitDensity.value > 0.001);
     this.slots = [branches, foliage, this.flowerMesh, this.fruitMesh];
     this.morph = null;
-    if (before) this.morphFrom(before);
+    if (before && leaving) {
+      if (this.morphFrom(before)) this.disposeMeshes(leaving);
+      else this.dissolveFrom(leaving);
+    }
     this.hangingFruit = data.fruitSites.slice();
     // A new crop starts on the branch, wherever the last one ended up.
     this.fallTimes.fill(-1);
@@ -365,6 +380,7 @@ export class Tree {
   tick(dt: number): void {
     this.uniforms.fallClock.value += dt;
     this.advanceMorph(dt);
+    this.advanceDissolve(dt);
     // Once a frame at most, and only when something actually came loose.
     if (this.fallDirty && this.syncFall()) this.fallDirty = false;
     if (this.regrowUntil >= 0 && this.uniforms.fallClock.value >= this.regrowUntil) this.finishRegrowth();
@@ -828,8 +844,10 @@ export class Tree {
   }
 
   dispose(): void {
+    if (this.dissolve) this.disposeMeshes(this.dissolve.leaving);
     this.clearMeshes();
     for (const material of this.materials) material.dispose();
+    for (const material of this.fading ?? []) material.dispose();
     this.worker?.terminate();
     this.worker = null;
   }
@@ -909,6 +927,87 @@ export class Tree {
     if (this.morph.t >= 1) this.morph = null;
   }
 
+  /**
+   * Fade from the old tree to the new where they cannot morph — more
+   * generations, another leaf or fruit, a new seed: different branches
+   * altogether. Both are drawn for a moment through copies of their
+   * materials that discard pixels by a fixed, fine stipple; the two stipples
+   * are exact complements, so every pixel shows one tree or the other, never
+   * both and never neither, and the balance tips from old to new. Only the
+   * copies discard: the tree at rest keeps its early depth test.
+   */
+  private dissolveFrom(old: (Mesh | null)[]): void {
+    const fading = this.fadingMaterials();
+    const leaving: Mesh[] = [];
+    const arriving: Mesh[] = [];
+    old.forEach((mesh, i) => {
+      if (!mesh) return;
+      mesh.material = fading[i];
+      mesh.userData.fade = 1;
+      mesh.userData.fadeDir = -1;
+      // Its shadow goes at once: a stippled shadow map is noise on the lawn.
+      mesh.castShadow = false;
+      this.group.add(mesh);
+      leaving.push(mesh);
+    });
+    this.slots.forEach((mesh, i) => {
+      if (!mesh) return;
+      mesh.material = fading[i];
+      mesh.userData.fade = 0;
+      mesh.userData.fadeDir = 1;
+      arriving.push(mesh);
+    });
+    this.dissolve = { t: 0, leaving, arriving };
+  }
+
+  private advanceDissolve(dt: number): void {
+    const d = this.dissolve;
+    if (!d) return;
+    d.t = Math.min(1, d.t + dt / DISSOLVE_SECONDS);
+    const e = d.t * d.t * (3 - 2 * d.t);
+    for (const mesh of d.arriving) mesh.userData.fade = e;
+    for (const mesh of d.leaving) mesh.userData.fade = 1 - e;
+    if (d.t < 1) return;
+    this.slots.forEach((mesh, i) => {
+      if (mesh) mesh.material = this.materials[i];
+    });
+    this.disposeMeshes(d.leaving);
+    this.dissolve = null;
+  }
+
+  /** The tree's materials, discarding pixels by a stipple set per mesh (`userData.fade`). */
+  private fadingMaterials(): NodeMaterial[] {
+    if (this.fading) return this.fading;
+    // Read per draw from whichever mesh is being drawn.
+    const fade = uniform(1).onObjectUpdate(({ object }) => (object?.userData.fade as number) ?? 1);
+    const dir = uniform(1).onObjectUpdate(({ object }) => (object?.userData.fadeDir as number) ?? 1);
+    // Interleaved gradient noise: a fixed, fine, even stipple in screen space.
+    const ign = fract(fract(screenCoordinate.x.mul(0.06711056).add(screenCoordinate.y.mul(0.00583715))).mul(52.9829189));
+    const mask = select(dir.greaterThan(0), ign.lessThan(fade), ign.greaterThanEqual(float(1).sub(fade)));
+    this.fading = this.materials.map((m) => {
+      const copy = m.clone() as NodeMaterial;
+      copy.maskNode = mask;
+      return copy;
+    });
+    return this.fading;
+  }
+
+  /**
+   * Compile the stippled materials ahead of time, against the meshes they
+   * will draw, so the first dissolve does not stall on building shaders.
+   */
+  warmFading(): Mesh[] {
+    const fading = this.fadingMaterials();
+    const warm: Mesh[] = [];
+    this.slots.forEach((mesh, i) => {
+      if (!mesh) return;
+      const m = new Mesh(mesh.geometry, fading[i]);
+      m.userData.fade = 0;
+      warm.push(m);
+    });
+    return warm;
+  }
+
   /** True while a change of shape is still travelling. */
   get morphing(): boolean {
     return this.morph !== null;
@@ -923,6 +1022,24 @@ export class Tree {
     this.group.add(mesh);
     this.meshes.push(mesh);
     return mesh;
+  }
+
+  /** Take the meshes out of the tree's bookkeeping without disposing them. */
+  private detachMeshes(): (Mesh | null)[] {
+    const out = this.slots.slice();
+    for (const mesh of this.meshes) this.group.remove(mesh);
+    this.meshes = [];
+    this.flowerMesh = null;
+    this.fruitMesh = null;
+    return out;
+  }
+
+  private disposeMeshes(list: (Mesh | null)[]): void {
+    for (const mesh of list) {
+      if (!mesh) continue;
+      this.group.remove(mesh);
+      mesh.geometry.dispose();
+    }
   }
 
   private clearMeshes(): void {
