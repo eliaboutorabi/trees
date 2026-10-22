@@ -57,6 +57,21 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     bloomPass?.setResolutionScale(0.5 / pixelRatio);
   };
 
+  // The glow, as one number driving several. The scene's mid-tones sit well
+  // under 1, so a threshold near 1 only ever caught the sun's disc; and a hard
+  // threshold makes a lit patch either glow or not, in blotches. So turning it
+  // up lowers the threshold into the mid-tones, over a soft knee, and widens
+  // the spread: at the top end the whole lit side of the scene glows a little,
+  // the way a lens with a breath of haze on it does.
+  let glow = 0.5;
+  const applyGlow = () => {
+    const t = glow / 1.5;
+    uniforms.bloomStrength.value = glow * 0.7;
+    uniforms.bloomThreshold.value = 0.95 - 0.83 * Math.sqrt(t);
+    uniforms.bloomRadius.value = 0.5 + 0.4 * t;
+    if (bloomPass) bloomPass.smoothWidth.value = 0.5;
+  };
+
   // The scene pass, and the bloom fed from it, are made again only when the
   // sample count changes — that is the one setting that needs new targets.
   let samples = -1;
@@ -76,6 +91,7 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     viewZ = scenePass.getViewZNode();
     bloomPass = bloom(sceneColor, uniforms.bloomStrength, uniforms.bloomRadius, uniforms.bloomThreshold);
     applyScale();
+    applyGlow();
   }
 
   function rebuild(): void {
@@ -162,19 +178,10 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
       pixelRatio = ratio;
       applyScale();
     },
-    /**
-     * The Glow slider, 0–1.5. One number drives three: how much spills, how
-     * far, and — the part that makes it visible at all — from how bright. At
-     * the old fixed threshold only the sun's disc and the odd glint bloomed,
-     * so with the sun out of shot the slider did nothing. Turning it up now
-     * lowers the threshold too, until sunlit leaves and the bright sky round
-     * the sun glow softly, the way a lens with a little haze on it does.
-     */
+    /** The Glow slider, 0–1.5 (see `applyGlow`). */
     setGlow(amount: number): void {
-      const t = Math.min(1, Math.max(0, amount / 1.5));
-      uniforms.bloomStrength.value = amount * 0.6;
-      uniforms.bloomThreshold.value = 1.15 - 0.6 * Math.sqrt(t);
-      uniforms.bloomRadius.value = 0.45 + 0.4 * t;
+      glow = Math.min(1.5, Math.max(0, amount));
+      applyGlow();
     },
     /**
      * How much colour, 0 muted → 1 natural → 2 vivid. Vibrance does most of
