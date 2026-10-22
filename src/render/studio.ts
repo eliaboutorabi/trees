@@ -488,7 +488,7 @@ export class TreeStudio {
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = params.exposure;
     this.post.uniforms.bloomStrength.value = params.bloom;
-    this.post.setBokeh(params.depthOfField ? 1.6 : 0);
+    this.post.setFocusBlur(params.depthOfField ? 1 : 0);
     this.lookToggles = {
       bloom: params.bloom > 0.001,
       dof: params.depthOfField,
