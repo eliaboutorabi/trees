@@ -14,6 +14,7 @@
  */
 import {
   BufferAttribute,
+  InstancedBufferAttribute,
   BufferGeometry,
   DoubleSide,
   Group,
@@ -41,7 +42,7 @@ import {
 } from 'three/tsl';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
-import { terrainHeight, type LandscapeOptions } from './landscape';
+import { rimKeep, terrainHeight, type LandscapeOptions } from './landscape';
 import type { TreeUniforms } from '../engine/materials/shared';
 
 export interface MeadowOptions {
@@ -55,10 +56,10 @@ export interface MeadowOptions {
 }
 
 const DEFAULTS: MeadowOptions = {
-  flowerCount: 7000,
+  flowerCount: 9000,
   butterflyCount: 16,
   minRadius: 1.6,
-  maxRadius: 13,
+  maxRadius: 16,
   seed: 20260831,
 };
 
@@ -131,7 +132,7 @@ function flowerGeometry(petals = 5): BufferGeometry {
  * instead, and mixed in only above the throat. Same wind, same distance LOD,
  * green stems.
  */
-function createFlowerMaterial(u: TreeUniforms, fadeStart = 20, fadeEnd = 44): MeshStandardNodeMaterial {
+function createFlowerMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   material.side = DoubleSide;
   material.metalness = 0;
@@ -146,19 +147,24 @@ function createFlowerMaterial(u: TreeUniforms, fadeStart = 20, fadeEnd = 44): Me
   // in late autumn is scattered over the whole field instead of being the first
   // third of it.
   const inSeason = step(idx.mul(0.6180339887).fract(), u.meadowBloom);
-  const lod = smoothstep(fadeEnd, fadeStart, cameraPosition.sub(positionWorld).length()).mul(inSeason);
+  // About the flower's own root: `positionLocal` is already out in the field
+  // here (see the ground cover material for what scaling it did).
+  const root = attribute<'vec3'>('root', 'vec3');
+  const rel = positionLocal.sub(root);
   const phase = idx.mul(0.6180339887).fract().mul(Math.PI * 2);
   const speed = u.windSpeed.mul(1.9);
   const gust = sin(time.mul(speed).add(phase))
     .mul(0.62)
     .add(sin(time.mul(speed.mul(2.3)).add(phase.mul(1.7))).mul(0.38));
-  const lean = gust.mul(u.wind).mul(0.5).mul(t.mul(t).mul(0.7).add(t.mul(0.3))).mul(lod);
+  const lean = gust.mul(u.wind).mul(0.5).mul(t.mul(t).mul(0.7).add(t.mul(0.3)));
   const dir = u.windDir.normalize();
-  material.positionNode = vec3(
-    positionLocal.x.add(dir.x.mul(lean).mul(positionLocal.y)),
-    positionLocal.y.mul(float(1).sub(lean.mul(lean).mul(0.3))),
-    positionLocal.z.add(dir.y.mul(lean).mul(positionLocal.y)),
-  ).mul(lod);
+  material.positionNode = root.add(
+    vec3(
+      rel.x.add(dir.x.mul(lean).mul(rel.y)),
+      rel.y.mul(float(1).sub(lean.mul(lean).mul(0.3))),
+      rel.z.add(dir.y.mul(lean).mul(rel.y)),
+    ).mul(inSeason),
+  );
 
   // Three drifts of colour, picked per flower, so a meadow is never one hue.
   const h = idx.mul(127.1).sin().mul(43758.5453).fract();
@@ -194,6 +200,7 @@ function scatterFlowers(
   const scl = new Vector3();
   const axis = new Vector3(0, 1, 0);
   const positions: Vector3[] = [];
+  const roots = new Float32Array(o.flowerCount * 3);
 
   let placed = 0;
   for (let i = 0; i < o.flowerCount; i++) {
@@ -205,10 +212,15 @@ function scatterFlowers(
     const z = Math.sin(a) * r;
     const drift = Math.sin(x * 0.55 + o.seed * 0.001) * Math.cos(z * 0.47) * 0.5 + 0.5;
     if (rng() > drift * 0.85 + 0.15) continue;
+    // And they give out raggedly at the meadow's edge, not in a circle.
+    if (rng() > rimKeep(x, z, o.maxRadius, 0.55, o.seed)) continue;
 
-    const scale = 0.22 + rng() * 0.2;
+    // Smaller towards the rim, as well as fewer: settled here, once.
+    const k = Math.min(1, Math.max(0, (o.maxRadius - r) / (o.maxRadius * 0.35)));
+    const scale = (0.22 + rng() * 0.2) * (0.35 + 0.65 * k * k * (3 - 2 * k));
     const y = terrainHeight(x, z, land);
     pos.set(x, y, z);
+    roots.set([x, y, z], placed * 3);
     quat.setFromAxisAngle(axis, rng() * Math.PI * 2);
     scl.set(scale, scale * (0.85 + rng() * 0.4), scale);
     mesh.setMatrixAt(placed, m.compose(pos, quat, scl));
@@ -220,6 +232,7 @@ function scatterFlowers(
 
   mesh.count = placed;
   mesh.instanceMatrix.needsUpdate = true;
+  geometry.setAttribute('root', new InstancedBufferAttribute(roots, 3));
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.frustumCulled = false;
@@ -497,7 +510,7 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   // They go with the flowers they live off. Scaled rather than faded would be
   // better still, but at this size a fade over a second reads the same and
   // costs one multiply.
-  material.opacityNode = smoothstep(42, 24, dist).mul(smoothstep(0, 0.35, u.meadowBloom));
+  material.opacityNode = smoothstep(90, 60, dist).mul(smoothstep(0, 0.35, u.meadowBloom));
 
   return material;
 }

@@ -72,7 +72,9 @@ export function paramsFromPreset(id: string, season: Season = 'summer', weather?
 
     bloom: 0.5,
     depthOfField: true,
-    grain: true,
+    // Off to begin with: animated grain is, by design, the whole picture
+    // flickering a little, and it read as a rendering fault rather than film.
+    grain: false,
     antialias: true,
     autoRotate: false,
     quality: 'auto' as Quality,

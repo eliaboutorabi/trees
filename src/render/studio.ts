@@ -202,13 +202,21 @@ export class TreeStudio {
   private quality: Quality = 'auto';
   private renderScale = 2;
   private maxScale = 2;
+  /** The lowest the governor will go: the screen's CSS pixels, never under. */
+  private minScale = 1;
   private readonly adaptiveSamples: number[] = [];
-  private adaptiveCooldown = 0;
-  private adaptiveStable = 0;
-  /** Evaluations of calm before probing for more resolution; backs off on failure. */
-  private adaptiveProbeAfter = 8;
-  /** Scale a probe last failed at, so we stop pushing into a known wall. */
-  private adaptiveCeiling = Infinity;
+  /** No frames are judged before this — loading, a rebuild, a change of size. */
+  private settleUntil = 0;
+  /** Bad and good spells running, since one alone is as often another app's moment. */
+  private badSpells = 0;
+  private goodSpells = 0;
+  /** A scale that failed, and when it may be tried again (backing off each time). */
+  private failedScale = Infinity;
+  private retryAt = 0;
+  private retryWait = 30_000;
+  /** A change waiting for the hand to let go: never mid-gesture. */
+  private pendingScale: number | null = null;
+  private pointersDown = 0;
   /** Display refresh rate, measured — 60Hz is not a safe assumption. */
   private refreshHz = 60;
   private readonly refreshSamples: number[] = [];
@@ -279,8 +287,12 @@ export class TreeStudio {
 
   async init(): Promise<void> {
     this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, alpha: false });
+    // The screen's own density, up to twice: drawn under it and stretched up,
+    // the picture is soft and fine twigs shimmer.
     this.maxScale = Math.min(window.devicePixelRatio, 2);
+    this.minScale = Math.min(this.maxScale, 1);
     this.renderScale = this.maxScale;
+    this.settle(4000);
     this.renderer.setPixelRatio(this.renderScale);
     this.renderer.toneMapping = AgXToneMapping;
     this.renderer.toneMappingExposure = 1;
@@ -302,6 +314,7 @@ export class TreeStudio {
     this.controls.autoRotateSpeed = 0.35;
 
     this.post = createPostPipeline(this.renderer, this.scene, this.camera);
+    this.post.setPixelRatio(this.renderScale);
 
     this.camera.position.set(9, 5, 12);
     this.controls.target.set(0, 3.2, 0);
@@ -309,6 +322,10 @@ export class TreeStudio {
 
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    // Anywhere on the page: a slider in a card counts as much as the camera.
+    window.addEventListener('pointerdown', this.onAnyDown, true);
+    window.addEventListener('pointerup', this.onAnyUp, true);
+    window.addEventListener('pointercancel', this.onAnyUp, true);
 
     this.resize();
     // A handle for profiling from the console — hiding a mesh and watching the
@@ -391,8 +408,8 @@ export class TreeStudio {
     this.treeHeight = build.height;
     this.treeRadius = build.radius;
     this.updateShadowVolume();
-    // Different tree, possibly different cost — let the controller re-learn.
-    this.resetAdaptive();
+    // A new tree costs a few heavy frames to arrive; they are no measure.
+    this.settle(2000);
 
     this.stats = {
       ...this.stats,
@@ -471,7 +488,7 @@ export class TreeStudio {
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = params.exposure;
     this.post.uniforms.bloomStrength.value = params.bloom;
-    this.post.uniforms.bokeh.value = params.depthOfField ? 1.6 : 0;
+    this.post.setBokeh(params.depthOfField ? 1.6 : 0);
     this.lookToggles = {
       bloom: params.bloom > 0.001,
       dof: params.depthOfField,
@@ -672,6 +689,17 @@ export class TreeStudio {
     this.pointerInside = false;
   };
 
+  /** Whether a hand is on anything, for the resolution governor to wait on. */
+  private readonly onAnyDown = (): void => {
+    this.pointersDown++;
+  };
+
+  private readonly onAnyUp = (): void => {
+    this.pointersDown = Math.max(0, this.pointersDown - 1);
+    // A gesture just ended; the frames around it were not ordinary ones.
+    if (this.pointersDown === 0) this.settle(1000);
+  };
+
   /**
    * Chase the point on the tree the pointer is over.
    *
@@ -835,22 +863,95 @@ export class TreeStudio {
   }
 
   /**
-   * Nudge render resolution to hold the frame budget.
+   * Hold the frame rate by giving up resolution — rarely, and calmly.
    *
-   * Starts at full resolution and only ever falls back, because vsync makes
-   * headroom invisible: a GPU with cycles to spare still reports 16.7ms, so
-   * "am I comfortably inside budget?" is unanswerable. Instead it drops when it
-   * misses, then occasionally probes back upward — if the probe misses it
-   * simply falls again, which costs one evaluation window.
+   * The first version of this judged under a second of frames and stepped
+   * down whenever a tenth of them were late. Every rebuild, every slider drag
+   * and every swing of the camera has a few late frames, so the picture went
+   * soft whenever anything was touched, sharpened again later, and flickered
+   * between the two — every step reallocating every buffer. Resolution is the
+   * one thing the eye notices changing, so now:
    *
-   * Judges by dropped-frame rate rather than average or median frame time.
-   * Vsync quantises frame time to multiples of the refresh interval, so a
-   * struggling scene does not show up as a gradually rising number — it shows
-   * up as a mix of 16.7ms frames and 33.3ms ones. The median just reports 16.7
-   * and looks perfectly healthy while a quarter of frames are being dropped;
-   * the mean is skewed by any one-off compile hitch. The fraction of frames
-   * that missed vsync is the honest measure of "are we holding 60".
+   * - frames are judged in spells of a few seconds, and not at all while
+   *   loading, rebuilding, resizing, or while a pointer is down;
+   * - a spell with a long hitch in it (a shader compiling, a tree arriving) is
+   *   thrown away rather than counted;
+   * - it takes two slow spells running (under about 40fps) to step down, and
+   *   never below the screen's CSS pixels;
+   * - a scale that failed is not tried again for half a minute, then a minute,
+   *   and so on, so it does not sharpen and soften by turns;
+   * - and a change waits until the hand lets go.
+   *
+   * Going down is judged by the mean frame time over the spell (hitches are
+   * already excluded); going back up only once the frames keep pace with the
+   * display itself, since vsync hides any headroom short of that.
    */
+  private updateAdaptiveResolution(dt: number): void {
+    this.measureRefresh(dt);
+    if (this.quality !== 'auto') return;
+    const now = performance.now();
+
+    if (this.pendingScale !== null && this.pointersDown === 0) {
+      this.setRenderScale(this.pendingScale);
+      this.pendingScale = null;
+      return;
+    }
+    if (now < this.settleUntil || this.pointersDown > 0) {
+      this.adaptiveSamples.length = 0;
+      return;
+    }
+
+    const ms = dt * 1000;
+    if (ms > 250) {
+      // A hitch, not a trend.
+      this.adaptiveSamples.length = 0;
+      return;
+    }
+    this.adaptiveSamples.push(ms);
+    if (this.adaptiveSamples.length < 150) return;
+
+    const missThreshold = (1000 / this.refreshHz) * 1.4;
+    let missed = 0;
+    let total = 0;
+    for (const t of this.adaptiveSamples) {
+      if (t > missThreshold) missed++;
+      total += t;
+    }
+    const dropRate = missed / this.adaptiveSamples.length;
+    const meanMs = total / this.adaptiveSamples.length;
+    this.adaptiveSamples.length = 0;
+
+    // Slow is under about forty frames a second. This is a slow scene — a tree
+    // in a breeze, a camera you swing now and then — and between a sharp
+    // picture at forty-five and a soft one at sixty, sharp is the better
+    // trade: it was the softness that read as broken, never the frame rate.
+    if (meanMs > 25) {
+      this.goodSpells = 0;
+      if (++this.badSpells < 2 || this.renderScale <= this.minScale) return;
+      this.badSpells = 0;
+      // Back where it failed before, and failed again: wait longer next time.
+      if (this.renderScale >= this.failedScale) this.retryWait = Math.min(this.retryWait * 2, 5 * 60_000);
+      this.failedScale = this.renderScale;
+      this.retryAt = now + this.retryWait;
+      this.requestRenderScale(Math.max(this.minScale, this.renderScale - 0.25));
+    } else if (dropRate < 0.03) {
+      // Keeping up with the display itself: there may be room for more.
+      this.badSpells = 0;
+      if (
+        ++this.goodSpells >= 3 &&
+        this.renderScale < this.maxScale &&
+        (this.renderScale + 0.25 < this.failedScale || now > this.retryAt)
+      ) {
+        this.goodSpells = 0;
+        this.requestRenderScale(Math.min(this.maxScale, this.renderScale + 0.25));
+      }
+    } else {
+      // In between: hold.
+      this.badSpells = 0;
+      this.goodSpells = 0;
+    }
+  }
+
   /**
    * Estimate the refresh interval from the *fastest* frames seen. A frame can
    * always be slower than the display, never faster, so the low percentile of
@@ -864,93 +965,41 @@ export class TreeStudio {
     const fastest = sorted[Math.floor(sorted.length * 0.1)];
     this.refreshHz = MathUtils.clamp(Math.round(1000 / Math.max(1, fastest)), 30, 240);
   }
-
-  /** Forget what we learned about this machine — the workload just changed. */
-  private resetAdaptive(): void {
-    this.adaptiveSamples.length = 0;
-    this.adaptiveCooldown = 0;
-    this.adaptiveStable = 0;
-    this.adaptiveProbeAfter = 8;
-    this.adaptiveCeiling = Infinity;
+  private requestRenderScale(scale: number): void {
+    if (this.pointersDown > 0) this.pendingScale = scale;
+    else this.setRenderScale(scale);
   }
 
-  private updateAdaptiveResolution(dt: number): void {
-    this.measureRefresh(dt);
-    if (this.quality !== 'auto') return;
-    if (this.adaptiveCooldown > 0) {
-      this.adaptiveCooldown--;
-      return;
-    }
-
-    this.adaptiveSamples.push(dt * 1000);
-    if (this.adaptiveSamples.length < 45) return;
-
-    // Anything past 1.4 refresh intervals missed its vsync deadline.
-    const missThreshold = (1000 / this.refreshHz) * 1.4;
-    let missed = 0;
-    for (const ms of this.adaptiveSamples) if (ms > missThreshold) missed++;
-    const dropRate = missed / this.adaptiveSamples.length;
-    this.adaptiveSamples.length = 0;
-
-    let next = this.renderScale;
-
-    if (dropRate > 0.1) {
-      // If this was the frame right after a probe, we now know where the wall
-      // is; wait considerably longer before trying again.
-      this.adaptiveCeiling = Math.min(this.adaptiveCeiling, this.renderScale);
-      this.adaptiveProbeAfter = Math.min(64, this.adaptiveProbeAfter * 2);
-      next = Math.max(0.75, this.renderScale - 0.25);
-      this.adaptiveStable = 0;
-    } else if (dropRate > 0.02) {
-      // Holding, but not comfortably — stay put rather than probe upward.
-      this.adaptiveStable = 0;
-    } else if (
-      this.renderScale < this.maxScale &&
-      this.renderScale + 0.25 < this.adaptiveCeiling &&
-      ++this.adaptiveStable >= this.adaptiveProbeAfter
-    ) {
-      // Held budget for a long stretch — try for more resolution.
-      next = Math.min(this.maxScale, this.renderScale + 0.25);
-      this.adaptiveStable = 0;
-    }
-
-    if (next !== this.renderScale) {
-      this.renderScale = next;
-      this.renderer.setPixelRatio(next);
-      this.resize();
-      // Crossing the supersampling threshold changes whether FXAA is worth
-      // running, which is itself part of the budget being balanced here.
-      this.refreshPost();
-      // Resizing costs a frame or two; do not measure those.
-      this.adaptiveCooldown = 30;
-    }
+  private setRenderScale(scale: number): void {
+    if (scale === this.renderScale) return;
+    this.renderScale = scale;
+    this.renderer.setPixelRatio(scale);
+    this.post?.setPixelRatio(scale);
+    this.resize();
+    this.settle(2000);
   }
 
-  /**
-   * Push the requested effects to the pipeline, minus anything the current
-   * resolution has made pointless.
-   *
-   * Above about 1.75x device pixel ratio the frame is already supersampled
-   * several times over by the browser's own downscale, and FXAA has nothing
-   * left to find — it costs 2.5ms and returns a slightly softer image. So the
-   * antialias control means "smooth the edges if that needs doing", and at high
-   * resolution it does not.
-   */
+  /** Judge no frames for a while: the next few are not representative. */
+  settle(ms: number): void {
+    this.settleUntil = Math.max(this.settleUntil, performance.now() + ms);
+    this.adaptiveSamples.length = 0;
+    this.badSpells = 0;
+  }
+
+  /** Push the requested effects to the pipeline. */
   private refreshPost(): void {
     if (!this.post) return;
-    this.post.setToggles({
-      ...this.lookToggles,
-      antialias: this.lookToggles.antialias && this.renderScale < 1.75,
-    });
+    this.post.setToggles({ ...this.lookToggles });
   }
 
   private applyQuality(quality: Quality): void {
     if (this.quality === quality) return;
     this.quality = quality;
-    this.resetAdaptive();
+    this.settle(2000);
     if (quality !== 'auto') {
       this.renderScale = Math.min(this.maxScale, QUALITY_SCALE[quality]);
       this.renderer.setPixelRatio(this.renderScale);
+      this.post?.setPixelRatio(this.renderScale);
       this.resize();
     }
     this.refreshPost();
@@ -1039,6 +1088,9 @@ export class TreeStudio {
     this.disposed = true;
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    window.removeEventListener('pointerdown', this.onAnyDown, true);
+    window.removeEventListener('pointerup', this.onAnyUp, true);
+    window.removeEventListener('pointercancel', this.onAnyUp, true);
     this.renderer?.setAnimationLoop(null);
     this.tree.dispose();
     this.landscape.dispose();

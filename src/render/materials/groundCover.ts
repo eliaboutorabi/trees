@@ -23,14 +23,12 @@
 import { DoubleSide } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import {
-  cameraPosition,
+  attribute,
   float,
   instanceIndex,
   mix,
   positionLocal,
-  positionWorld,
   sin,
-  smoothstep,
   time,
   uv,
   vec3,
@@ -43,14 +41,10 @@ export interface GroundCoverOptions {
   /** Shading at the root, where 1 is fully lit. */
   rootShade?: number;
   roughness?: number;
-  /** Distance at which clumps start shrinking. */
-  fadeStart?: number;
-  /** Distance at which they collapse entirely. */
-  fadeEnd?: number;
 }
 
 export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverOptions = {}) {
-  const { sway = 0.5, rootShade = 0.3, roughness = 0.94, fadeStart = 26, fadeEnd = 55 } = options;
+  const { sway = 0.5, rootShade = 0.3, roughness = 0.94 } = options;
 
   const material = new MeshStandardNodeMaterial();
   // A blade is a single sheet of triangles; without this, half of every tuft is
@@ -62,44 +56,48 @@ export function createGroundCoverMaterial(u: TreeUniforms, options: GroundCoverO
   // Height along the blade, 0 at the root and 1 at the tip.
   const t = uv().y;
 
-  // Distance LOD. Clumps shrink over `fadeStart..fadeEnd` and reach zero at the
-  // far end, which collapses every triangle to zero area — the hardware drops
-  // those before rasterising, so it costs nothing at all beyond the vertex.
-  // Shrinking first rather than cutting straight to nothing is what makes the
-  // transition invisible: overdraw falls off gradually and there is no pop.
-  const clumpDist = cameraPosition.sub(positionWorld).length();
+  // Where this clump stands. three applies the instance's transform *before*
+  // `positionNode` runs, so `positionLocal` here is already out in the field,
+  // and scaling it shrinks the clump towards the tree, not into its own root.
+  // That is what this used to do: a level of detail keyed to the camera
+  // scaled every distant clump down, and zooming out swept the grass and
+  // flowers inward across the meadow towards the trunk, while snow gathered
+  // the whole sward into a ring around it. Every change of size is made about
+  // the clump's own root now, which the scatter hands over per instance. (How
+  // the patch thins out at its edge is settled once, in the scatter, by
+  // distance from the tree: nothing here depends on the camera.)
+  const root = attribute<'vec3'>('root', 'vec3');
+  const rel = positionLocal.sub(root);
+
   // Snow buries the sward rather than painting it: the blades shrink into it
   // and only the tips that are still clear of the drift keep swaying. Whitening
   // full-height grass instead gives a white shag carpet, not a snowfield.
-  const buried = u.snow.mul(0.93);
-  const lod = smoothstep(fadeEnd, fadeStart, clumpDist).mul(buried.oneMinus());
+  const keep = u.snow.mul(0.93).oneMinus();
 
   if (sway > 0) {
-    // Instance index is the only per-instance value available without spending
-    // another vertex buffer. Multiplying by the golden ratio and taking the
-    // fraction turns consecutive indices into a well-spread set of phases, so
-    // neighbouring tufts never beat in step.
+    // Instance index gives each clump its own phase for free. Multiplying by
+    // the golden ratio and taking the fraction turns consecutive indices into
+    // a well-spread set of phases, so neighbouring tufts never beat in step.
     const phase = instanceIndex.toFloat().mul(0.6180339887).fract().mul(Math.PI * 2);
     const speed = u.windSpeed.mul(1.7);
     const gust = sin(time.mul(speed).add(phase))
       .mul(0.62)
       .add(sin(time.mul(speed.mul(2.3)).add(phase.mul(1.7))).mul(0.38));
 
-    // Displacement proportional to height gives a straight blade a plausible
-    // hinge at the root; the y term shortens it so the tip traces an arc
-    // instead of stretching.
-    // Folding the LOD factor into the sway means a clump that is nearly gone
-    // also stops moving, so the trig result is thrown away rather than paid for
-    // twice.
-    const lean = gust.mul(u.wind).mul(sway).mul(t.mul(t).mul(0.65).add(t.mul(0.35))).mul(lod).mul(buried.oneMinus());
+    // Displacement proportional to height above the root gives a straight
+    // blade a plausible hinge there; the y term shortens it so the tip traces
+    // an arc instead of stretching. A buried clump barely moves.
+    const lean = gust.mul(u.wind).mul(sway).mul(t.mul(t).mul(0.65).add(t.mul(0.35))).mul(keep);
     const dir = u.windDir.normalize();
-    material.positionNode = vec3(
-      positionLocal.x.add(dir.x.mul(lean).mul(positionLocal.y)),
-      positionLocal.y.mul(float(1).sub(lean.mul(lean).mul(0.3))),
-      positionLocal.z.add(dir.y.mul(lean).mul(positionLocal.y)),
-    ).mul(lod);
+    material.positionNode = root.add(
+      vec3(
+        rel.x.add(dir.x.mul(lean).mul(rel.y)),
+        rel.y.mul(float(1).sub(lean.mul(lean).mul(0.3))),
+        rel.z.add(dir.y.mul(lean).mul(rel.y)),
+      ).mul(keep),
+    );
   } else {
-    material.positionNode = positionLocal.mul(lod);
+    material.positionNode = root.add(rel.mul(keep));
   }
 
   // Root-to-tip occlusion. `instanceColor` is multiplied in automatically by

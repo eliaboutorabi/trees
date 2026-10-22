@@ -15,6 +15,7 @@
  * near the tree, where the camera is, and thin out toward the horizon.
  */
 import {
+  InstancedBufferAttribute,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -397,6 +398,24 @@ function distantTreeGeometry(kind: 'conifer' | 'broadleaf' | 'columnar', variant
   return geo;
 }
 
+/**
+ * How likely a plant at (x, z) is to be there, near the rim of a patch.
+ *
+ * A patch scattered evenly over a disc ends in a circle, and from any height
+ * the circle is all you see. So the density falls away over the outer
+ * `softness` of the radius, towards a rim that itself wanders in and out with
+ * low-frequency noise — a ragged, uneven edge, the way a meadow gives way to
+ * shorter turf. 1 well inside the patch, 0 beyond its rim.
+ */
+export function rimKeep(x: number, z: number, maxRadius: number, softness: number, seed: number): number {
+  const wobble = fbm(x * 0.06 + 31.7, z * 0.06 - 12.3, seed + 911, 3);
+  const rim = maxRadius * (0.72 + 0.4 * wobble);
+  const start = rim * (1 - softness);
+  const r = Math.hypot(x, z);
+  const t = Math.min(1, Math.max(0, (r - start) / Math.max(1e-3, rim - start)));
+  return 1 - t * t * (3 - 2 * t);
+}
+
 export interface ScatterOptions {
   count: number;
   minRadius: number;
@@ -415,6 +434,14 @@ export interface ScatterOptions {
    * the land; a uniform scatter of trees reads as an orchard, or as wallpaper.
    */
   clump?: { scale: number; threshold: number };
+  /** Thin out towards an irregular rim over this fraction of the radius (see `rimKeep`). */
+  rim?: number;
+  /**
+   * Smaller towards the rim as well as fewer: full size inside the first
+   * radius, shrinking to nothing at the second. Baked into each instance once,
+   * by distance from the tree, so it is a fact about the field, not the view.
+   */
+  taper?: [number, number];
   /** Per-instance tint. Hue and value variation is what stops a field of
    *  identical instances from reading as wallpaper. */
   tint?: { base: number; vary: number };
@@ -438,6 +465,10 @@ function scatter(
   const sink = s.sink ?? 0;
   const yaw = s.yaw ?? Math.PI * 2;
 
+  // Each instance's root, for materials that need to grow or shrink it about
+  // its own base (see the ground cover material).
+  const roots = new Float32Array(s.count * 3);
+
   let placed = 0;
   for (let i = 0; i < s.count; i++) {
     // Square-root radial distribution keeps density even over the annulus.
@@ -452,15 +483,20 @@ function scatter(
       a = rng() * Math.PI * 2;
       x = Math.cos(a) * r;
       z = Math.sin(a) * r;
-      if (!s.clump) break;
-      if (fbm(x * s.clump.scale, z * s.clump.scale, opts.seed + 401, 3) >= s.clump.threshold) break;
+      const edgeOk = !s.rim || rng() < rimKeep(x, z, s.maxRadius, s.rim, opts.seed + s.seedOffset);
+      if (edgeOk && (!s.clump || fbm(x * s.clump.scale, z * s.clump.scale, opts.seed + 401, 3) >= s.clump.threshold)) break;
       if (attempt === 11) x = NaN;
     }
     if (Number.isNaN(x)) continue;
-    const scale = s.scale[0] + rng() * (s.scale[1] - s.scale[0]);
+    let scale = s.scale[0] + rng() * (s.scale[1] - s.scale[0]);
+    if (s.taper) {
+      const k = Math.min(1, Math.max(0, (s.taper[1] - Math.hypot(x, z)) / (s.taper[1] - s.taper[0])));
+      scale *= k * k * (3 - 2 * k);
+    }
     const i2 = placed++;
 
     pos.set(x, terrainHeight(x, z, opts) - sink * scale, z);
+    roots.set([pos.x, pos.y, pos.z], i2 * 3);
     quat.setFromAxisAngle(axis, (rng() - 0.5) * yaw);
     scl.set(scale, scale * (0.75 + rng() * 0.5), scale);
     mesh.setMatrixAt(i2, m.compose(pos, quat, scl));
@@ -478,6 +514,7 @@ function scatter(
   mesh.count = placed;
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  geometry.setAttribute('root', new InstancedBufferAttribute(roots, 3));
   // Grass and horizon trees are not worth a shadow-map draw: they are either
   // too small to read or outside the shadow frustum fitted around the tree.
   mesh.castShadow = s.castShadow ?? false;
@@ -528,9 +565,11 @@ export function createLandscape(
       // every mesh in the scene does not measurably change the frame, which is
       // fill-rate bound in post rather than geometry bound. Density is the one
       // lever here that buys realism without buying cost.
-      count: Math.round(44000 * opts.detail),
+      count: Math.round(52000 * opts.detail),
       minRadius: 1.2,
-      maxRadius: 22,
+      maxRadius: 30,
+      rim: 0.6,
+      taper: [17, 31],
       scale: [0.15, 0.34],
       seedOffset: 29,
       yaw: 0.7,
@@ -541,12 +580,14 @@ export function createLandscape(
   // Tussocks: taller, sparser, and allowed to spin freely because at this size
   // the eye reads the clump's silhouette rather than which way it leans.
   const tussockGeo = track(tuftGeometry({ blades: 8, lean: 0.7, height: 1.0, width: 0.06 }));
-  const tussockMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.4, rootShade: 0.22, fadeStart: 45, fadeEnd: 85 }));
+  const tussockMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.4, rootShade: 0.22 }));
   group.add(
     scatter(tussockGeo, tussockMat, opts, {
       count: Math.round(4200 * opts.detail),
       minRadius: 3,
-      maxRadius: 55,
+      maxRadius: 58,
+      rim: 0.45,
+      taper: [42, 60],
       scale: [0.28, 0.7],
       seedOffset: 71,
       yaw: 1.2,

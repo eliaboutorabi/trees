@@ -368,7 +368,7 @@
       aria-label={tool.label}
       aria-expanded={openId === tool.id}
     >
-      <Glyph name={tool.icon} size={26} weight={1.85} />
+      <Glyph name={tool.icon} size={29} weight={1.8} />
       <span class="tip">{tool.label}</span>
     </button>
   {/each}
@@ -408,8 +408,8 @@
   .tool {
     position: relative;
     flex: none;
-    width: 3.25rem;
-    height: 3.1rem;
+    width: 3.6rem;
+    height: 3.42rem;
     border-radius: var(--shape);
     display: grid;
     place-items: center;
@@ -787,8 +787,8 @@
       width: calc(100vw - 1.5rem);
     }
     .tool {
-      width: 2.75rem;
-      height: 2.65rem;
+      width: 3rem;
+      height: 2.88rem;
     }
     /* On a phone the dock scrolls sideways; fading its ends is what says so. */
     .dock {

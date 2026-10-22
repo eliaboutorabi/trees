@@ -703,7 +703,7 @@
   <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from="glow-off" to="glow-on" hint="Bloom: bright light spills softly around itself" />
   <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from="snail" to="swift" />
   <Fold>
-    <p class="help">Sharpness. <b>Auto</b> holds a smooth frame rate by adjusting it — currently {stats.renderScale.toFixed(2)}×.</p>
+    <p class="help">Sharpness. <b>Auto</b> draws at your screen's full density, and gives a little up only if the frame rate stays low — currently {stats.renderScale.toFixed(2)}×.</p>
     <div class="segmented">
       {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
         <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>

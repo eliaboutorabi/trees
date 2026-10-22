@@ -1,10 +1,19 @@
-/** Cinematic output chain: bloom → depth of field → grade → vignette/grain → AA. */
+/**
+ * Cinematic output chain: a multisampled scene → bloom → depth of field →
+ * grade → vignette/grain.
+ *
+ * Edges are smoothed by the GPU's multisampling, in the scene pass, not by a
+ * filter at the end. FXAA guessed at edges from the finished picture: it
+ * softened everything it touched, and on thin geometry — twigs, grass blades,
+ * a distant flower a pixel across — it could not tell an edge from detail, so
+ * those crawled and sparkled as anything moved. Four samples per pixel cover
+ * a thin blade for what it is, and it holds still as it turns.
+ */
 import type { Camera, Scene } from 'three';
 import { RenderPipeline, type WebGPURenderer } from 'three/webgpu';
 import { float, pass, saturation, screenCoordinate, screenUV, smoothstep, time, uniform, vec3, vec4, vibrance } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
-import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 
 /**
  * Depth of field is by far the most expensive thing in this frame — profiling
@@ -75,15 +84,47 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
   };
 
   const pipeline = new RenderPipeline(renderer);
-  const scenePass = pass(scene, camera);
-  const sceneColor = scenePass.getTextureNode('output');
-  const viewZ = scenePass.getViewZNode();
-
-  const bloomPass = bloom(sceneColor, uniforms.bloomStrength, uniforms.bloomRadius, uniforms.bloomThreshold);
-
   const toggles: PostToggles = { bloom: true, dof: true, grain: true, antialias: true };
 
+  /*
+   * Glow and focus blur are both measured in the frame's own pixels, so left
+   * alone they change size on screen whenever the drawing scale does: at twice
+   * the density the bokeh was half as wide, and the glow was computed over four
+   * times the pixels for the same soft result. Both are kept in the screen's
+   * CSS pixels instead — the glow drawn at half of those whatever the density
+   * (it is a blur; it has no detail to lose), and the bokeh scaled up with the
+   * density so it stays the same width on screen.
+   */
+  let pixelRatio = 1;
+  let bokehBase = 1.6;
+  const applyScale = () => {
+    bloomPass?.setResolutionScale(0.5 / pixelRatio);
+    uniforms.bokeh.value = bokehBase * (pixelRatio / 1.5);
+  };
+
+  // The scene pass, and the bloom fed from it, are made again only when the
+  // sample count changes — that is the one setting that needs new targets.
+  let samples = -1;
+  let scenePass!: ReturnType<typeof pass>;
+  let sceneColor!: ReturnType<ReturnType<typeof pass>['getTextureNode']>;
+  let viewZ!: ReturnType<ReturnType<typeof pass>['getViewZNode']>;
+  let bloomPass!: ReturnType<typeof bloom>;
+
+  function makeScenePass(): void {
+    const want = toggles.antialias ? 4 : 0;
+    if (want === samples) return;
+    samples = want;
+    scenePass?.dispose();
+    bloomPass?.dispose();
+    scenePass = pass(scene, camera, { samples });
+    sceneColor = scenePass.getTextureNode('output');
+    viewZ = scenePass.getViewZNode();
+    bloomPass = bloom(sceneColor, uniforms.bloomStrength, uniforms.bloomRadius, uniforms.bloomThreshold);
+    applyScale();
+  }
+
   function rebuild(): void {
+    makeScenePass();
     // Effect nodes are wrapped in a proxy at runtime that the published
     // typings do not model, so the chain needs a nudge to stay vec4.
     const asColor = (n: unknown) => n as typeof sceneColor;
@@ -142,8 +183,7 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
       rgb = rgb.mul(float(1).add(noise.mul(uniforms.grain).mul(2.2).mul(rolloff)));
     }
 
-    const graded = vec4(rgb, 1);
-    pipeline.outputNode = toggles.antialias ? fxaa(graded) : graded;
+    pipeline.outputNode = vec4(rgb, 1);
     pipeline.needsUpdate = true;
   }
 
@@ -163,6 +203,16 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
         }
       }
       if (changed) rebuild();
+    },
+    /** The renderer's pixel ratio, so the effects keep their size on screen. */
+    setPixelRatio(ratio: number): void {
+      pixelRatio = ratio;
+      applyScale();
+    },
+    /** How strongly out-of-focus things blur, in screen terms; 0 for none. */
+    setBokeh(amount: number): void {
+      bokehBase = amount;
+      applyScale();
     },
     render(): Promise<void> | void {
       return pipeline.render();
