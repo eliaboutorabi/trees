@@ -36,8 +36,8 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     /** 0 for no focus blur, 1 for the full effect. */
     dofAmount: uniform(1),
 
-    vibrance: uniform(0.3),
-    saturation: uniform(1.06),
+    vibrance: uniform(0.45),
+    saturation: uniform(1.1),
     vignette: uniform(0.58),
     grain: uniform(0.026),
   };
@@ -161,6 +161,31 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     setPixelRatio(ratio: number): void {
       pixelRatio = ratio;
       applyScale();
+    },
+    /**
+     * The Glow slider, 0–1.5. One number drives three: how much spills, how
+     * far, and — the part that makes it visible at all — from how bright. At
+     * the old fixed threshold only the sun's disc and the odd glint bloomed,
+     * so with the sun out of shot the slider did nothing. Turning it up now
+     * lowers the threshold too, until sunlit leaves and the bright sky round
+     * the sun glow softly, the way a lens with a little haze on it does.
+     */
+    setGlow(amount: number): void {
+      const t = Math.min(1, Math.max(0, amount / 1.5));
+      uniforms.bloomStrength.value = amount * 0.6;
+      uniforms.bloomThreshold.value = 1.15 - 0.6 * Math.sqrt(t);
+      uniforms.bloomRadius.value = 0.45 + 0.4 * t;
+    },
+    /**
+     * How much colour, 0 muted → 1 natural → 2 vivid. Vibrance does most of
+     * the work, since it lifts the muted colours (the meadow, the bark, the
+     * hills) more than the ones that are already strong (the sunlit leaves);
+     * a little plain saturation goes with it.
+     */
+    setColour(amount: number): void {
+      const c = Math.min(2, Math.max(0, amount));
+      uniforms.vibrance.value = 0.1 + 0.35 * c;
+      uniforms.saturation.value = 0.86 + 0.24 * c;
     },
     /** How strongly out-of-focus things blur: 0 for none, 1 for the full effect. */
     setFocusBlur(amount: number): void {

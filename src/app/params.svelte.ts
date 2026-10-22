@@ -77,6 +77,7 @@ export function paramsFromPreset(id: string, season: Season = 'summer', weather?
     sunAzimuth: 140,
     sunIntensity: s.sunIntensity,
     exposure: 1,
+    colour: 1,
 
     bloom: 0.5,
     depthOfField: true,

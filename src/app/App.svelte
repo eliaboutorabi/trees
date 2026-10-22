@@ -436,6 +436,7 @@
       fruitWax: params.fruitWax,
       fruitGloss: params.fruitGloss,
       exposure: params.exposure,
+      colour: params.colour,
       bloom: params.bloom,
       depthOfField: params.depthOfField,
       grain: params.grain,
@@ -700,6 +701,7 @@
   <SunDial bind:azimuth={params.sunAzimuth} bind:elevation={params.sunElevation} bearing={cameraBearing} />
   <PicSlider label="Sunlight" bind:value={params.sunIntensity} min={0} max={12} step={0.1} from="sun-soft" to="sun-strong" hint="How strong the sun's beam is" />
   <PicSlider label="Haze" bind:value={params.haze} min={0} max={1} from="hills-clear" to="hills-hazy" hint="Clear air, or a hazy sky that softens the sun and the distance" />
+  <PicSlider label="Colour" bind:value={params.colour} min={0} max={2} from="colour-muted" to="colour-vivid" hint="Muted, natural or vivid colour" />
   <Fold>
     <Slider label="Elevation" bind:value={params.sunElevation} min={-2} max={70} step={0.5} format={(v) => `${v.toFixed(1)}°`} hint="Height above the horizon. Low is golden, high is midday." />
     <Slider label="Azimuth" bind:value={params.sunAzimuth} min={0} max={360} step={1} format={(v) => `${v.toFixed(0)}°`} hint="Compass bearing — 0° is straight down +Z" />

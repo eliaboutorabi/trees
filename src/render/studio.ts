@@ -15,7 +15,7 @@ import {
   Vector2,
   Vector3,
 } from 'three';
-import { AgXToneMapping, WebGPURenderer } from 'three/webgpu';
+import { NeutralToneMapping, WebGPURenderer } from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from '../engine';
 import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
@@ -64,6 +64,8 @@ export interface LookParams {
   fruitWax: number;
   fruitGloss: number;
   exposure: number;
+  /** How much colour the picture carries: 0 muted, 1 natural, 2 vivid. */
+  colour: number;
   bloom: number;
   depthOfField: boolean;
   grain: boolean;
@@ -124,6 +126,8 @@ const GLIDE_SECONDS = 2.2;
 const OVERCAST_NEAR = new Color(0xa6acb2);
 const OVERCAST_FAR = new Color(0x8f979f);
 const MAX_ORNAMENTS = 1_800;
+/** Exposure under Neutral tone mapping that matches the old default brightness. */
+const NEUTRAL_LIFT = 1.18;
 /** How close to the ground the camera may come. */
 const CAMERA_FLOOR = 0.7;
 
@@ -157,6 +161,9 @@ export class TreeStudio {
   /** How wet everything should be heading for; `wetness` eases toward it. */
   private wetTarget = 0;
   private wetness = 0;
+  /** The exposure slider, and the sun's strength, which exposure partly follows. */
+  private userExposure = 1;
+  private sunPower = 5;
   /** The rainbow fades in and out rather than switching. */
   private rainbowTarget = 0;
   private rainbow = 0;
@@ -299,7 +306,12 @@ export class TreeStudio {
     this.renderScale = this.maxScale;
     this.settle(4000);
     this.renderer.setPixelRatio(this.renderScale);
-    this.renderer.toneMapping = AgXToneMapping;
+    // Khronos PBR Neutral rather than AgX. AgX is built to desaturate as it
+    // compresses, which is right for film-like highlights and wrong for a
+    // garden: everything but the brightest leaves came out olive-grey, and
+    // turning the sun up washed the picture toward white. Neutral leaves hue
+    // and saturation alone until a colour is genuinely close to white.
+    this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
@@ -492,8 +504,10 @@ export class TreeStudio {
     this.groundUniforms.snowCover.value = params.snow;
 
     if (!this.renderer) return;
-    this.renderer.toneMappingExposure = params.exposure;
-    this.post.uniforms.bloomStrength.value = params.bloom;
+    this.userExposure = params.exposure;
+    this.updateExposure();
+    this.post.setGlow(params.bloom);
+    this.post.setColour(params.colour);
     this.post.setFocusBlur(params.depthOfField ? 1 : 0);
     this.lookToggles = {
       bloom: params.bloom > 0.001,
@@ -554,6 +568,20 @@ export class TreeStudio {
     g.grassMid.value.lerp(t.grassMid, k);
     g.grassDry.value.lerp(t.grassDry, k);
     g.dirt.value.lerp(t.dirt, k);
+  }
+
+  /**
+   * Exposure follows the sun part of the way, as a camera's would. Without
+   * this the Sunlight slider was really a brightness control — the whole
+   * frame went toward white as it rose. Now a stronger sun mostly means more
+   * contrast between sun and shade, with the lit side keeping its colour.
+   */
+  private updateExposure(): void {
+    if (!this.renderer) return;
+    const follow = Math.pow(5 / Math.max(0.5, this.sunPower), 0.32);
+    // Neutral sits a little darker in the mid-tones than AgX did; this puts
+    // the default picture back where it was in brightness, with its colour.
+    this.renderer.toneMappingExposure = NEUTRAL_LIFT * this.userExposure * follow;
   }
 
   /** Show or hide the rainbow; it fades either way. */
@@ -618,6 +646,8 @@ export class TreeStudio {
     // `strength` is already the atmospheric dimming — a horizon sun is a
     // fraction of a noon one because its light has crossed 38 atmospheres.
     this.sun.intensity = params.sunIntensity * light.strength;
+    this.sunPower = params.sunIntensity;
+    this.updateExposure();
 
     this.tree.setSun(this.sunDir, this.sunTint);
 

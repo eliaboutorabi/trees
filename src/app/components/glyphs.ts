@@ -436,6 +436,17 @@ export const GLYPHS = {
     { d: 'M3 16.2h5M2.4 19h4.2', k: 'ink' },
   ],
 
+  'colour-muted': [
+    { d: ring(9.2, 9.6, 4.6), k: 'both', c: 'mist' },
+    { d: ring(14.8, 9.6, 4.6), k: 'both', c: 'mist', o: 0.8 },
+    { d: ring(12, 14.4, 4.6), k: 'both', c: 'mist', o: 0.6 },
+  ],
+  'colour-vivid': [
+    { d: ring(9.2, 9.6, 4.6), k: 'both', c: 'fruit' },
+    { d: ring(14.8, 9.6, 4.6), k: 'both', c: 'sun', o: 0.9 },
+    { d: ring(12, 14.4, 4.6), k: 'both', c: 'water', o: 0.85 },
+  ],
+
   // ---- The look card's switches.
 
   lens: [
