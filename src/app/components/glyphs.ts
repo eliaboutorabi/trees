@@ -206,6 +206,13 @@ export const GLYPHS = {
     { d: 'M14.1 10.2l1.7-1.7a3.1 3.1 0 0 1 4.4 4.4l-2.6 2.6a3.1 3.1 0 0 1-4.4 0', k: 'ink' },
     { d: 'M9.5 14.5l5-5', k: 'ink' },
   ],
+  // A rainbow: three bands, coloured in where the page allows.
+  rainbow: [
+    { d: 'M3 18a9 9 0 0 1 18 0h-2.7a6.3 6.3 0 0 0-12.6 0z', k: 'wash', c: 'fruit' },
+    { d: 'M5.7 18a6.3 6.3 0 0 1 12.6 0h-2.7a3.6 3.6 0 0 0-7.2 0z', k: 'wash', c: 'sun' },
+    { d: 'M3 18a9 9 0 0 1 18 0M5.7 18a6.3 6.3 0 0 1 12.6 0M8.4 18a3.6 3.6 0 0 1 7.2 0', k: 'ink' },
+  ],
+
   // Three sliders, for the exact controls.
   tune: [
     { d: 'M3.8 7.3c5.4-.3 10.8-.2 16.4 0M3.8 12.1c5.6.2 11-.1 16.4 0M3.8 17c5.4-.2 10.9.1 16.4-.1', k: 'ink' },

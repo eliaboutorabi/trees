@@ -124,6 +124,8 @@ const GLIDE_SECONDS = 2.2;
 const OVERCAST_NEAR = new Color(0xa6acb2);
 const OVERCAST_FAR = new Color(0x8f979f);
 const MAX_ORNAMENTS = 1_800;
+/** How close to the ground the camera may come. */
+const CAMERA_FLOOR = 0.7;
 
 // Scratch objects for the shadow fit, which runs whenever the sun moves.
 const _v1 = new Vector3();
@@ -155,6 +157,9 @@ export class TreeStudio {
   /** How wet everything should be heading for; `wetness` eases toward it. */
   private wetTarget = 0;
   private wetness = 0;
+  /** The rainbow fades in and out rather than switching. */
+  private rainbowTarget = 0;
+  private rainbow = 0;
   private readonly flock = new Flock(this.tree);
 
   private readonly sunDir = new Vector3();
@@ -309,8 +314,9 @@ export class TreeStudio {
     this.controls.dampingFactor = 0.06;
     this.controls.minDistance = 1.5;
     this.controls.maxDistance = 120;
-    // Stop just short of horizontal so the camera never dips under the ground.
-    this.controls.maxPolarAngle = Math.PI * 0.495;
+    // Low enough to stand under the crown and look up into it, or up at the
+    // sky; the ground itself is kept clear in the frame loop (see `frame`).
+    this.controls.maxPolarAngle = Math.PI * 0.62;
     this.controls.autoRotateSpeed = 0.35;
 
     this.post = createPostPipeline(this.renderer, this.scene, this.camera);
@@ -548,6 +554,34 @@ export class TreeStudio {
     g.grassMid.value.lerp(t.grassMid, k);
     g.grassDry.value.lerp(t.grassDry, k);
     g.dirt.value.lerp(t.dirt, k);
+  }
+
+  /** Show or hide the rainbow; it fades either way. */
+  setRainbow(on: boolean): void {
+    this.rainbowTarget = on ? 1 : 0;
+  }
+
+  /**
+   * Turn round to see the rainbow: it is always in the sky opposite the sun,
+   * so the camera comes round to stand between the sun and the tree, low,
+   * looking up past the crown — the bow is high and wide, and from the usual
+   * slightly-downward view only its feet would be in the picture.
+   */
+  showRainbow(): void {
+    const toSun = new Vector3(this.sunDir.x, 0, this.sunDir.z);
+    if (toSun.lengthSq() < 1e-6) return;
+    toSun.normalize();
+    const h = Math.max(2, this.treeHeight);
+    const flat = Math.max(9, Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z));
+    const target = new Vector3(0, h * 0.95, 0).addScaledVector(toSun, -h * 0.6);
+    const position = new Vector3(toSun.x * flat, CAMERA_FLOOR + 0.9, toSun.z * flat);
+    this.cameraGlide = {
+      fromTarget: this.controls.target.clone(),
+      fromPosition: this.camera.position.clone(),
+      target,
+      position,
+      t: 0,
+    };
   }
 
   /** A sparser season's leaves come down rather than disappearing. See `Tree.dropLeaves`. */
@@ -818,12 +852,21 @@ export class TreeStudio {
     }
 
     this.controls.update();
+    // Looking up is allowed; standing in the ground is not. (A little above
+    // the grass, too, or the first thing in the picture is a blade of it.)
+    if (this.camera.position.y < CAMERA_FLOOR) {
+      this.camera.position.y = CAMERA_FLOOR;
+      this.camera.lookAt(this.controls.target);
+    }
     // One clock for anything the CPU and the shader both have to agree on.
     this.tree.tick(dt);
     this.updateHover(dt);
     this.flock.update(dt);
 
     this.easeSeason(dt);
+
+    this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
+    this.sky.setRainbow(this.rainbow);
 
     // Things get wet in seconds and take a good while to dry.
     const rate = this.wetTarget > this.wetness ? 1 / 6 : 1 / 45;

@@ -7,7 +7,15 @@ export interface AppParams extends StudioParams {
   growthSpeed: number;
   /** Replay the growth animation whenever the tree is rebuilt. */
   autoGrow: boolean;
+  /** A rainbow in the sky opposite the sun. */
+  rainbow: boolean;
 }
+
+/**
+ * Switches that belong to the scene, not to the tree: choosing another
+ * species should not stop the camera circling or take the rainbow away.
+ */
+const SCENE_KEYS = ['autoRotate', 'depthOfField', 'rainbow', 'grain', 'antialias', 'quality'] as const;
 
 export const presets = PRESETS;
 
@@ -77,6 +85,7 @@ export function paramsFromPreset(id: string, season: Season = 'summer', weather?
     grain: false,
     antialias: true,
     autoRotate: false,
+    rainbow: false,
     quality: 'auto' as Quality,
 
     growthSpeed: 0.3,
@@ -106,7 +115,8 @@ export const STRUCTURAL_KEYS = [
 ] as const satisfies readonly (keyof AppParams)[];
 
 export function applyPreset(id: string, season: Season = params.season): void {
-  Object.assign(params, paramsFromPreset(id, season));
+  const kept = Object.fromEntries(SCENE_KEYS.map((k) => [k, params[k]]));
+  Object.assign(params, paramsFromPreset(id, season), kept);
 }
 
 /**

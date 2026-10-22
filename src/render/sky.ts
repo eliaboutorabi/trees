@@ -39,7 +39,10 @@ import {
 } from 'three';
 import { CubeRenderTarget, NodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
+  abs,
+  acos,
   float,
+  fract,
   mix,
   mx_fractal_noise_float,
   normalWorldGeometry,
@@ -180,7 +183,14 @@ export function createSkyUniforms() {
     overcast: uniform(0),
     cloudLow: uniform(new Color(0x9aa1a8)),
     cloudHigh: uniform(new Color(0x6f777f)),
+    /** How much of a rainbow is showing, 0–1. Never set on the environment sky. */
+    rainbow: uniform(0),
   };
+}
+
+/** A hue, 0 red → 0.78 violet, as a fully saturated colour. */
+function spectrum(hue: Node<'float'>): Vec3Node {
+  return abs(fract(vec3(hue).add(vec3(1, 2 / 3, 1 / 3))).mul(6).sub(3)).sub(1).clamp(0, 1) as unknown as Vec3Node;
 }
 
 export type SkyUniforms = ReturnType<typeof createSkyUniforms>;
@@ -220,6 +230,31 @@ export function skyNode(u: SkyUniforms, direction: Vec3Node): Vec3Node {
   // in the scene. A black-albedo sphere still rendered as a pale grey ball.
   const disc = smoothstep(0.99978, 0.99995, cosSun).mul(u.disc).mul(float(1).sub(haze.mul(0.5)));
   sky = sky.add(u.sunTint.mul(disc));
+
+  /*
+   * The rainbow. It is a circle about the point directly opposite the sun:
+   * the primary bow 40.6–42.4° out, violet inside and red outside; a fainter
+   * secondary at 50–53.6° with its colours the other way round; the sky
+   * brighter inside the primary, and Alexander's darker band between the two.
+   * Because it is centred on the antisolar point, it is only ever in the half
+   * of the sky facing away from the sun, and the higher the sun the lower it
+   * sits — above 42° there is none. Drawn into the sky before the cloud, so a
+   * closed sky hides it.
+   */
+  const theta = acos(dir.dot(u.sunDir.negate()).clamp(-1, 1)).mul(180 / Math.PI);
+  const x1 = theta.sub(40.4).div(2.2);
+  const bow1 = smoothstep(0, 0.22, x1).mul(smoothstep(1, 0.78, x1));
+  const x2 = theta.sub(50.0).div(3.6);
+  const bow2 = smoothstep(0, 0.25, x2).mul(smoothstep(1, 0.75, x2));
+  const colour1 = mix(spectrum(mix(float(0.78), float(0), x1.clamp(0, 1))), vec3(1), 0.12);
+  const colour2 = mix(spectrum(mix(float(0), float(0.78), x2.clamp(0, 1))), vec3(1), 0.2);
+  const shows = u.rainbow.mul(smoothstep(-0.01, 0.03, y)).mul(u.overcast.mul(0.8).oneMinus());
+  const darkBand = smoothstep(42.2, 43.4, theta).mul(smoothstep(50.4, 49.2, theta));
+  const brighterInside = smoothstep(40.6, 26, theta);
+  sky = sky
+    .mul(float(1).sub(darkBand.mul(0.1).mul(shows)))
+    .add(sky.mul(brighterInside.mul(0.07).mul(shows)))
+    .add(colour1.mul(bow1).mul(0.3).add(colour2.mul(bow2).mul(0.11)).mul(shows));
 
   // A brighter line right along the horizon, which is where the most air is.
   const hug = y.abs().mul(26).negate().exp().mul(float(0.05).add(haze.mul(0.3)));
@@ -355,6 +390,11 @@ export class ProceduralSky {
 
     this.envDirty = true;
     return this.light;
+  }
+
+  /** How much of a rainbow is showing, 0–1. The environment sky never has one: it would tint the light. */
+  setRainbow(amount: number): void {
+    this.uniforms.rainbow.value = amount;
   }
 
   /** Overall sky brightness — the ambient half of the lighting controls. */
