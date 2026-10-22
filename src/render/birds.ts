@@ -562,8 +562,12 @@ export class Flock {
           if (d.rest <= 0 && grown) this.arrive(d);
           break;
         case 'perched':
-          if (!grown) {
-            d.flushIn = Math.max(d.flushIn, this.rng() * 0.4);
+          // No tree to sit in, or the twig it was on went with the old tree:
+          // it is about to be put up (`flushIn`), and until then it simply
+          // holds still. (Sitting on perch -1 threw, every frame, and took
+          // the rest of the frame with it, so a species change stuttered.)
+          if (!grown || d.perch < 0) {
+            d.flushIn = d.flushIn >= 0 ? d.flushIn : this.rng() * 0.4;
             break;
           }
           this.sit(d, dt);

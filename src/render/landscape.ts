@@ -334,8 +334,11 @@ function distantTreeGeometry(kind: 'conifer' | 'broadleaf' | 'columnar', variant
   const segments = 7;
   const rings = kind === 'conifer' ? 8 : 6;
   const rand = mulberry32(variant * 7919 + 17);
+  // Three numbers for each ring of vertices — and there are rings + 1 of them,
+  // top and bottom both. (Sized for `rings`, the crown's tip read past the end,
+  // and its last row of vertices came out NaN.)
   const jitter: number[] = [];
-  for (let i = 0; i < rings * 3; i++) jitter.push(rand());
+  for (let i = 0; i < (rings + 1) * 3; i++) jitter.push(rand());
 
   // Trunk height as a fraction of the whole, and where the crown is widest.
   const bare = kind === 'conifer' ? 0.1 : kind === 'columnar' ? 0.08 : 0.3;
