@@ -174,9 +174,7 @@
 
   .rim {
     fill: rgba(169, 196, 216, 0.34);
-    stroke: rgba(255, 255, 255, 0.55);
-    stroke-width: 1.5;
-    filter: drop-shadow(0 3px 8px rgba(28, 20, 10, 0.12));
+    stroke: none;
   }
 
   .streak {

@@ -899,7 +899,7 @@
     background: var(--sheen), var(--glass);
     backdrop-filter: var(--frost);
     -webkit-backdrop-filter: var(--frost);
-    border: 1px solid rgba(255, 255, 255, 0.36);
+    border: none;
     box-shadow: var(--rim), 0 8px 18px rgba(28, 20, 10, 0.18);
     cursor: pointer;
     transition:
@@ -933,15 +933,14 @@
     margin: 0.4rem 0 0.4rem;
     padding: 0.62rem;
     border-radius: 20px 26px 22px 24px / 24px 20px 26px 22px;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    background: color-mix(in srgb, var(--tone) 52%, rgba(255, 255, 255, 0.18));
+    border: none;
+    background: color-mix(in srgb, var(--tone) 55%, rgba(255, 255, 255, 0.15));
     color: var(--tone-ink);
     font-family: var(--serif);
     font-size: 1rem;
     font-weight: 560;
     font-variation-settings: 'SOFT' 100;
     cursor: pointer;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 4px 10px rgba(28, 20, 10, 0.12);
     transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.3);
   }
 
@@ -1015,8 +1014,7 @@
     margin-bottom: 0.9rem;
     padding: 0.22rem;
     border-radius: 16px 20px 18px 14px;
-    background: rgba(60, 44, 28, 0.08);
-    box-shadow: inset 0 1px 2px rgba(28, 20, 10, 0.1);
+    background: rgba(255, 255, 255, 0.16);
   }
 
   .segmented button {
@@ -1036,9 +1034,8 @@
   }
 
   .segmented button.active {
-    background: color-mix(in srgb, var(--tone) 60%, rgba(255, 255, 255, 0.2));
+    background: color-mix(in srgb, var(--tone) 65%, transparent);
     color: var(--tone-ink);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 5px rgba(28, 20, 10, 0.1);
   }
 
   .sub {
@@ -1090,8 +1087,8 @@
     width: 100%;
     padding: 0.6rem;
     border-radius: 20px 26px 22px 24px / 24px 20px 26px 22px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(60, 44, 28, 0.07);
+    border: none;
+    background: rgba(255, 255, 255, 0.14);
     color: var(--ink-faint);
     font-family: var(--serif);
     font-size: 0.98rem;
@@ -1103,7 +1100,6 @@
     background: color-mix(in srgb, var(--tone) 60%, rgba(255, 255, 255, 0.2));
     color: var(--tone-ink);
     cursor: pointer;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 4px 10px rgba(28, 20, 10, 0.12);
   }
 
   .issues {

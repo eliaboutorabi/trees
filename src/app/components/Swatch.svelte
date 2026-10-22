@@ -27,8 +27,8 @@
 
   .swatch__label {
     flex: 1;
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
+    font-size: 0.74rem;
+    font-weight: 600;
     color: var(--ink-dim);
   }
 
@@ -44,13 +44,11 @@
      transparent on top of a well we draw ourselves. */
   .swatch__well {
     position: relative;
-    width: 30px;
-    height: 18px;
-    border-radius: 5px;
+    width: 1.6rem;
+    height: 1.5rem;
+    border-radius: 50% 46% 54% 48% / 48% 54% 46% 50%;
     background: var(--swatch);
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.22),
-      0 1px 5px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 1px 3px rgba(28, 20, 10, 0.18);
     transition: transform 0.12s ease;
   }
 

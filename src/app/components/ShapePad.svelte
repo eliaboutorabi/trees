@@ -154,13 +154,11 @@
   }
 
   svg:focus-visible .bed {
-    stroke: var(--accent);
+    fill: rgba(164, 187, 140, 0.4);
   }
 
   .bed {
     fill: rgba(164, 187, 140, 0.24);
-    stroke: rgba(255, 255, 255, 0.5);
-    stroke-width: 1.2;
   }
 
   .axis {

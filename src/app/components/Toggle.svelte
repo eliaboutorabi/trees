@@ -30,20 +30,16 @@
     cursor: pointer;
   }
 
-  /* A frosted pebble that fills with the card's colour when it is on. */
+  /* A soft pebble of light, filled with the card's colour when it is on. No rings. */
   .disc {
-    width: 2.5rem;
-    height: 2.4rem;
+    width: 2.6rem;
+    height: 2.5rem;
     border-radius: 52% 48% 55% 45% / 47% 55% 45% 53%;
     display: grid;
     place-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.34);
-    background: rgba(255, 255, 255, 0.22);
-    color: var(--ink-dim);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 3px 8px rgba(28, 20, 10, 0.08);
+    background: rgba(255, 255, 255, 0.2);
     transition:
-      background 0.25s,
-      color 0.2s,
+      background-color 0.25s,
       transform 0.32s cubic-bezier(0.25, 0.8, 0.3, 1.3);
   }
 
@@ -53,7 +49,7 @@
 
   .toggle:hover .disc {
     transform: translateY(-1px) rotate(-5deg);
-    color: var(--ink);
+    background: rgba(255, 255, 255, 0.32);
   }
 
   .toggle.on {
@@ -61,12 +57,7 @@
   }
 
   .toggle.on .disc {
-    background: color-mix(in srgb, var(--tone) 62%, rgba(255, 255, 255, 0.12));
-    color: color-mix(in srgb, var(--tone-ink) 85%, #000 15%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 0 0 1.5px color-mix(in srgb, var(--tone-ink) 45%, transparent),
-      0 4px 10px rgba(28, 20, 10, 0.12);
+    background: color-mix(in srgb, var(--tone) 70%, transparent);
   }
 
   .name {

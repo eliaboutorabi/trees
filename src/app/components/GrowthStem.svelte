@@ -383,7 +383,6 @@
     color: #2a4419;
     --glyph-wash: #fffaf0;
     --glyph-wash-opacity: 0.75;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
     cursor: pointer;
     transition:
       transform 0.3s cubic-bezier(0.25, 0.8, 0.3, 1.4),

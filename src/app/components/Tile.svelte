@@ -25,28 +25,30 @@
 
 <style>
   /*
-   * A pane of frost with a picture in it. Each tile is cut a little
-   * differently, so a row of them reads as pieces laid down by hand rather
-   * than stamped from one mould.
+   * A picture over a name, on the glass, with one edge and no more: the tile
+   * is a soft patch of light, its picture sits straight on it (a season's or
+   * the weather's colour, where it has one, washes the whole tile rather than
+   * boxing the picture), and the chosen one is told apart by colour alone.
+   * Every ring and inset that used to mark these added an outline inside an
+   * outline inside the card's own.
    */
   .tile {
     --cut: 18px 22px 17px 21px / 21px 17px 22px 18px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.3rem;
-    padding: 0.32rem 0.32rem 0.42rem;
+    gap: 0.25rem;
+    padding: 0.35rem 0.3rem 0.45rem;
+    border: none;
     border-radius: var(--cut);
-    border: 1px solid rgba(255, 255, 255, 0.34);
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--backdrop, rgba(255, 255, 255, 0.16));
     color: var(--ink-dim);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 3px 9px rgba(28, 20, 10, 0.08);
     cursor: pointer;
     transition:
       transform 0.32s cubic-bezier(0.25, 0.8, 0.3, 1.3),
-      background 0.25s,
-      box-shadow 0.25s,
-      color 0.2s;
+      background-color 0.25s,
+      color 0.2s,
+      filter 0.25s;
   }
 
   .tile:nth-child(3n + 2) {
@@ -58,33 +60,28 @@
   }
 
   .tile:hover {
-    transform: translateY(-2px) rotate(-1.2deg);
-    background: rgba(255, 255, 255, 0.26);
+    transform: translateY(-2px) rotate(-1deg);
     color: var(--ink);
+    filter: brightness(1.06);
   }
 
   .tile:nth-child(even):hover {
-    transform: translateY(-2px) rotate(1deg);
+    transform: translateY(-2px) rotate(0.8deg);
   }
 
+  /* Chosen: filled with the card's colour, over its own backdrop if it has one. */
   .tile.active {
-    background: color-mix(in srgb, var(--tone) 58%, rgba(255, 255, 255, 0.12));
-    color: var(--tone-ink);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 0 0 1.5px color-mix(in srgb, var(--tone-ink) 55%, transparent),
-      0 5px 14px rgba(28, 20, 10, 0.14);
+    background:
+      linear-gradient(color-mix(in srgb, var(--tone) 62%, transparent), color-mix(in srgb, var(--tone) 62%, transparent)),
+      var(--backdrop, transparent);
+    color: color-mix(in srgb, var(--tone-ink) 88%, #000 12%);
   }
 
   .art {
     width: 100%;
     aspect-ratio: 1;
-    border-radius: 14px 17px 13px 16px / 16px 13px 17px 14px;
-    overflow: hidden;
     display: grid;
     place-items: center;
-    background: var(--backdrop, rgba(255, 255, 255, 0.14));
-    box-shadow: inset 0 1px 3px rgba(28, 20, 10, 0.1);
   }
 
   .name {
@@ -96,6 +93,6 @@
   }
 
   .tile.active .name {
-    font-weight: 620;
+    font-weight: 640;
   }
 </style>

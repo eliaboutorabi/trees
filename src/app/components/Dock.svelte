@@ -427,8 +427,7 @@
     transform: rotate(var(--tilt));
     box-shadow:
       var(--rim),
-      inset 0 -7px 12px color-mix(in srgb, var(--tone-ink) 18%, transparent),
-      0 8px 18px rgba(20, 14, 6, 0.24);
+      0 8px 18px rgba(20, 14, 6, 0.22);
     transition:
       transform 0.35s cubic-bezier(0.25, 0.8, 0.3, 1.3),
       box-shadow 0.3s,
@@ -440,8 +439,7 @@
     transform: translateY(-5px) rotate(calc(var(--tilt) * -0.6)) scale(1.06);
     box-shadow:
       var(--rim),
-      inset 0 -7px 12px color-mix(in srgb, var(--tone-ink) 18%, transparent),
-      0 14px 24px rgba(20, 14, 6, 0.28);
+      0 14px 24px rgba(20, 14, 6, 0.26);
   }
 
   .tool.pinned {
@@ -556,7 +554,6 @@
     --glyph-wash: #fffaf0;
     --glyph-wash-opacity: 0.72;
     background: color-mix(in srgb, var(--tone) 72%, rgba(255, 255, 255, 0.2));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 2px 6px rgba(20, 14, 6, 0.12);
   }
 
   .title {
@@ -612,8 +609,7 @@
     padding: 0.32rem 0.7rem 0.32rem 0.5rem;
     border: none;
     border-radius: 14px 17px 13px 16px / 16px 13px 17px 14px;
-    background: rgba(255, 255, 255, 0.28);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(20, 14, 6, 0.08);
+    background: rgba(255, 255, 255, 0.24);
     color: var(--ink-dim);
     font-size: 0.74rem;
     font-weight: 600;
@@ -721,7 +717,6 @@
     --glyph-wash: #fffaf0;
     --glyph-wash-opacity: 0.72;
     background: color-mix(in srgb, var(--tone) 72%, rgba(255, 255, 255, 0.2));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   }
 
   .more__title {

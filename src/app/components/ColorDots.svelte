@@ -54,34 +54,32 @@
     gap: 0.45rem;
   }
 
+  /* A drop of colour, nothing round it; the chosen one is a little larger, with a single ring of light. */
   .dot {
     position: relative;
     width: 1.75rem;
     height: 1.75rem;
     border-radius: 50% 46% 54% 48% / 48% 54% 46% 50%;
-    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    border: none;
     background: var(--c);
     cursor: pointer;
-    box-shadow: 0 2px 5px rgba(28, 20, 10, 0.18), inset 0 -3px 4px rgba(0, 0, 0, 0.12), inset 0 2px 3px rgba(255, 255, 255, 0.3);
+    box-shadow: 0 1px 3px rgba(28, 20, 10, 0.18);
     transition:
-      transform 0.15s cubic-bezier(0.3, 0.7, 0.4, 1.5),
-      border-color 0.15s;
-  }
-
-  .dot:hover {
-    transform: scale(1.12);
+      transform 0.25s cubic-bezier(0.25, 0.8, 0.3, 1.4),
+      box-shadow 0.2s;
   }
 
   .dot:nth-child(even) {
     border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%;
   }
 
+  .dot:hover {
+    transform: scale(1.1);
+  }
+
   .dot.on {
-    transform: scale(1.12);
-    box-shadow:
-      0 0 0 2px rgba(255, 255, 255, 0.5),
-      0 0 0 3.5px var(--tone-ink),
-      inset 0 -3px 4px rgba(0, 0, 0, 0.12);
+    transform: scale(1.18);
+    box-shadow: 0 0 0 2.5px rgba(255, 252, 246, 0.9), 0 2px 6px rgba(28, 20, 10, 0.2);
   }
 
   /* The "anything else" dot: a rainbow until a custom colour is chosen. */

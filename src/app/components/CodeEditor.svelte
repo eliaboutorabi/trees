@@ -103,12 +103,11 @@
     line-height: 1.55;
     border-radius: 16px 19px 15px 18px / 18px 15px 19px 16px;
     background: rgba(38, 31, 25, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.3);
+    border: none;
   }
 
   .editor:focus-within {
-    border-color: rgba(219, 182, 111, 0.55);
+    background: rgba(38, 31, 25, 0.86);
   }
 
   /* The two layers must lay text out identically, character for character. */
