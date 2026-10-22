@@ -7,6 +7,7 @@
   import { shareUrl, takeIncomingState } from './share';
   import Glyph from './components/Glyph.svelte';
   import GrowthStem from './components/GrowthStem.svelte';
+  import QuickBar from './components/QuickBar.svelte';
   import Dock from './components/Dock.svelte';
   import Tile from './components/Tile.svelte';
   import PicSlider from './components/PicSlider.svelte';
@@ -534,6 +535,12 @@
       </div>
 
       <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} />
+      <QuickBar
+        items={[
+          { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
+          { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
+        ]}
+      />
 
       <Dock
         tools={[
@@ -694,10 +701,8 @@
 
 {#snippet lookPanel()}
   <div class="toggles">
-    <Toggle label="Focus blur" icon="lens" bind:checked={params.depthOfField} hint="Depth of field: the background softens behind the tree" />
     <Toggle label="Film grain" icon="grain" bind:checked={params.grain} />
     <Toggle label="Smooth edges" icon="smooth" bind:checked={params.antialias} hint="Anti-aliasing" />
-    <Toggle label="Orbit" icon="orbit" bind:checked={params.autoRotate} hint="The camera circles the tree slowly" />
     <Toggle label="Regrow" icon="sprout" bind:checked={params.autoGrow} hint="Grow the tree from seed again when it is redrawn" />
   </div>
   <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from="glow-off" to="glow-on" hint="Bloom: bright light spills softly around itself" />
@@ -975,7 +980,7 @@
 
   .toggles {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 0.3rem;
     margin: 0.3rem 0 1rem;
   }
