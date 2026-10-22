@@ -166,6 +166,7 @@ export class TreeStudio {
   private userExposure = 1;
   private sunPower = 5;
   private fadingWarmed = false;
+  private lookShown = false;
   /** The rainbow fades in and out rather than switching. */
   private rainbowTarget = 0;
   private rainbow = 0;
@@ -521,13 +522,16 @@ export class TreeStudio {
     this.updateExposure();
     this.post.setGlow(params.bloom);
     this.post.setColour(params.colour);
-    this.post.setFocusBlur(params.depthOfField ? 1 : 0);
-    this.lookToggles = {
-      bloom: params.bloom > 0.001,
-      dof: params.depthOfField,
-      grain: params.grain,
-      antialias: params.antialias,
-    };
+    this.post.setFocusBlur(params.depthOfField);
+    this.post.setGrain(params.grain);
+    if (!this.lookShown) {
+      this.lookShown = true;
+      this.post.settleFades();
+    }
+    // Glow stays in the chain even at zero (it is cheap at its resolution),
+    // so moving the slider through nothing does not rebuild it. Focus blur
+    // and grain fade in and out on their own (see `setFocusBlur`).
+    this.lookToggles = { ...this.lookToggles, antialias: params.antialias };
     this.refreshPost();
     this.controls.autoRotate = params.autoRotate;
     this.applyQuality(params.quality);
@@ -950,6 +954,7 @@ export class TreeStudio {
     this.easeSeason(dt);
 
     this.easeSky(dt);
+    this.post.tick(dt);
     this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
     this.sky.setRainbow(this.rainbow);
 
@@ -1121,7 +1126,7 @@ export class TreeStudio {
   /** Push the requested effects to the pipeline. */
   private refreshPost(): void {
     if (!this.post) return;
-    this.post.setToggles({ ...this.lookToggles });
+    this.post.setToggles({ antialias: this.lookToggles.antialias });
   }
 
   private applyQuality(quality: Quality): void {

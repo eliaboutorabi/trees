@@ -40,10 +40,13 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     saturation: uniform(1.1),
     vignette: uniform(0.58),
     grain: uniform(0.026),
+    /** 0–1, eased: how much of the grain is showing (see `fade`). */
+    grainAmount: uniform(1),
   };
 
   const pipeline = new RenderPipeline(renderer);
   const toggles: PostToggles = { bloom: true, dof: true, grain: true, antialias: true };
+  const fades = { dof: { target: 1 }, grain: { target: 1 } };
 
   /*
    * The glow is measured in the frame's own pixels, so left alone it changed
@@ -149,7 +152,7 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
       // Eased off in the highlights too — blown film has no grain left to show.
       const lum = rgb.dot(vec3(0.2126, 0.7152, 0.0722));
       const rolloff = smoothstep(2.2, 0.5, lum).mul(0.75).add(0.25);
-      rgb = rgb.mul(float(1).add(noise.mul(uniforms.grain).mul(2.2).mul(rolloff)));
+      rgb = rgb.mul(float(1).add(noise.mul(uniforms.grain).mul(uniforms.grainAmount).mul(2.2).mul(rolloff)));
     }
 
     pipeline.outputNode = vec4(rgb, 1);
@@ -194,9 +197,56 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
       uniforms.vibrance.value = 0.1 + 0.35 * c;
       uniforms.saturation.value = 0.86 + 0.24 * c;
     },
-    /** How strongly out-of-focus things blur: 0 for none, 1 for the full effect. */
-    setFocusBlur(amount: number): void {
-      uniforms.dofAmount.value = amount;
+    /**
+     * Focus blur and grain on or off — faded, not switched. Each eases to its
+     * target over a third of a second (see `tick`), and only leaves the chain
+     * once it has faded to nothing; turning one on puts it back at nothing
+     * first. Rebuilding the chain is a shader compile, so it used to be a
+     * hitch *and* a cut; now the rebuild happens where it cannot be seen.
+     */
+    setFocusBlur(on: boolean): void {
+      fades.dof.target = on ? 1 : 0;
+      if (on && !toggles.dof) {
+        uniforms.dofAmount.value = 0;
+        toggles.dof = true;
+        rebuild();
+      }
+    },
+    setGrain(on: boolean): void {
+      fades.grain.target = on ? 1 : 0;
+      if (on && !toggles.grain) {
+        uniforms.grainAmount.value = 0;
+        toggles.grain = true;
+        rebuild();
+      }
+    },
+    /** Land every fade where it is heading at once — for the first look. */
+    settleFades(): void {
+      uniforms.dofAmount.value = fades.dof.target;
+      uniforms.grainAmount.value = fades.grain.target;
+      const dof = fades.dof.target > 0;
+      const grain = fades.grain.target > 0;
+      if (dof !== toggles.dof || grain !== toggles.grain) {
+        toggles.dof = dof;
+        toggles.grain = grain;
+        rebuild();
+      }
+    },
+    /** Advance the fades; call once a frame. */
+    tick(dt: number): void {
+      const k = 1 - Math.exp(-dt / 0.33);
+      let rebuildNeeded = false;
+      for (const key of ['dof', 'grain'] as const) {
+        const f = fades[key];
+        const u = key === 'dof' ? uniforms.dofAmount : uniforms.grainAmount;
+        u.value += (f.target - u.value) * k;
+        if (f.target === 0 && u.value < 0.004 && toggles[key]) {
+          u.value = 0;
+          toggles[key] = false;
+          rebuildNeeded = true;
+        }
+      }
+      if (rebuildNeeded) rebuild();
     },
     render(): Promise<void> | void {
       return pipeline.render();
