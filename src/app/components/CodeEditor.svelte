@@ -101,9 +101,10 @@
     font-family: var(--mono);
     font-size: 0.7rem;
     line-height: 1.55;
-    border-radius: 10px;
-    background: rgba(0, 0, 0, 0.28);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    background: #3b3029;
+    border: 3px solid #fffdf8;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
   }
 
   .editor:focus-within {
@@ -130,7 +131,7 @@
   }
 
   pre {
-    color: var(--ink-dim);
+    color: #e9dccb;
     pointer-events: none;
     scrollbar-width: none;
   }

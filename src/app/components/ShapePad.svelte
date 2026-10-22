@@ -158,15 +158,15 @@
   }
 
   .bed {
-    fill: rgba(255, 255, 255, 0.035);
-    stroke: rgba(255, 255, 255, 0.12);
+    fill: #f1f8e6;
+    stroke: #fff;
+    stroke-width: 3;
   }
 
   .axis {
-    font-size: 7.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    fill: rgba(255, 255, 255, 0.32);
+    font-size: 8px;
+    font-weight: 800;
+    fill: rgba(85, 107, 34, 0.55);
   }
 
   .tree line {
@@ -175,8 +175,8 @@
   }
 
   .handle {
-    fill: #fff8ef;
-    stroke: var(--accent);
+    fill: #fff;
+    stroke: var(--tone-ink);
     stroke-width: 3;
     filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
     cursor: grab;

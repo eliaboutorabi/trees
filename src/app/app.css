@@ -1,15 +1,44 @@
 :root {
-  --panel: rgba(22, 17, 13, 0.72);
-  --panel-solid: #17110d;
-  --hairline: rgba(255, 255, 255, 0.1);
-  --ink: rgba(255, 250, 244, 0.92);
-  --ink-dim: rgba(255, 246, 236, 0.6);
-  --ink-faint: rgba(255, 246, 236, 0.38);
-  --accent: #f0b064;
+  /*
+   * Paper and ink, with a box of pastels.
+   *
+   * The interface sits on the scene as warm cream cards with soft brown ink,
+   * and every tool has a colour of its own — the way a cosy builder game's
+   * toolbar does — instead of one dark glass for everything.
+   */
+  --paper: #fffaf2;
+  --paper-2: #f7eee1;
+  --paper-3: #efe2cf;
+  --ink: #4b3a2f;
+  --ink-dim: #7a6556;
+  --ink-faint: #a8937f;
+  --line: rgba(110, 80, 50, 0.14);
+  --shadow: 0 10px 28px rgba(70, 45, 25, 0.22), 0 2px 6px rgba(70, 45, 25, 0.12);
 
+  --mint: #bfe8cf;
+  --peach: #ffd2b5;
+  --butter: #ffe9a3;
+  --lilac: #dcccff;
+  --sky: #bfe0ff;
+  --rose: #ffc7d5;
+  --sage: #d5e7b3;
+  --sand: #f2dcb4;
+  --aqua: #b6ebe3;
+  --coral: #ffb8a3;
+
+  /* What a control is coloured with when its card does not say otherwise. */
+  --tone: #ffcf8f;
+  --tone-ink: #8a5a24;
+  --accent: #f0a65a;
+
+  /* Kept for the few dark surfaces that remain (the code editor). */
+  --panel-solid: #3b3029;
+  --hairline: var(--line);
+
+  --round: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -26,14 +55,14 @@ body {
 }
 
 body {
-  font-family: ui-sans-serif, -apple-system, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--round);
   -webkit-font-smoothing: antialiased;
   color: var(--ink);
 }
 
 ::selection {
-  background: var(--accent);
-  color: #21160c;
+  background: var(--butter);
+  color: var(--ink);
 }
 
 ::-webkit-scrollbar {
@@ -45,12 +74,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(110, 80, 50, 0.18);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(110, 80, 50, 0.3);
 }
 
 button {

@@ -112,9 +112,9 @@
   >
     <defs>
       <radialGradient id="dial-sky" cx="50%" cy="50%" r="50%">
-        <stop offset="0" stop-color="#3c6aa8" stop-opacity="0.55" />
-        <stop offset="0.72" stop-color="#9fb6cf" stop-opacity="0.32" />
-        <stop offset="1" stop-color="#f0a85c" stop-opacity="0.5" />
+        <stop offset="0" stop-color="#8ec5f5" />
+        <stop offset="0.7" stop-color="#cfe6fb" />
+        <stop offset="1" stop-color="#ffd7a8" />
       </radialGradient>
       <radialGradient id="dial-glow">
         <stop offset="0" stop-color={sunColor} stop-opacity="0.9" />
@@ -122,10 +122,10 @@
       </radialGradient>
     </defs>
 
-    <circle cx={C} cy={C} r={R} fill="url(#dial-sky)" stroke="rgba(255,255,255,0.18)" />
+    <circle cx={C} cy={C} r={R} fill="url(#dial-sky)" stroke="#fff" stroke-width="3" />
     <!-- 30° and 60° above the horizon -->
-    <circle cx={C} cy={C} r={R * (60 / 90)} fill="none" stroke="rgba(255,255,255,0.08)" stroke-dasharray="2 4" />
-    <circle cx={C} cy={C} r={R * (30 / 90)} fill="none" stroke="rgba(255,255,255,0.08)" stroke-dasharray="2 4" />
+    <circle cx={C} cy={C} r={R * (60 / 90)} fill="none" stroke="rgba(255,255,255,0.55)" stroke-dasharray="2 4" />
+    <circle cx={C} cy={C} r={R * (30 / 90)} fill="none" stroke="rgba(255,255,255,0.55)" stroke-dasharray="2 4" />
 
     <!-- the tree, from above, and you, at the bottom of the rim -->
     <circle cx={C} cy={C} r="9" fill="#5d7a33" stroke="#2f4419" stroke-width="1.5" />
@@ -137,10 +137,10 @@
     <text x={C} y="15" text-anchor="middle" class="tag">behind the tree</text>
 
     <!-- the light falling across the tree -->
-    <line x1={sunX} y1={sunY} x2={C} y2={C} stroke={sunColor} stroke-opacity="0.35" stroke-width="1.5" stroke-dasharray="3 3" />
+    <line x1={sunX} y1={sunY} x2={C} y2={C} stroke="#e48a2e" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" />
 
     <circle cx={sunX} cy={sunY} r="22" fill="url(#dial-glow)" />
-    <circle cx={sunX} cy={sunY} r="8.5" fill={sunColor} stroke="#fff" stroke-width="2" class="sun" />
+    <circle cx={sunX} cy={sunY} r="9" fill={sunColor} stroke="#e48a2e" stroke-width="3" class="sun" />
   </svg>
   <p class="reading"><b>{when}</b>, {where}</p>
 </div>
@@ -170,7 +170,7 @@
   }
 
   .sun {
-    filter: drop-shadow(0 0 6px rgba(255, 200, 120, 0.9));
+    filter: drop-shadow(0 2px 4px rgba(150, 80, 20, 0.35));
     transition: r 0.15s;
   }
 
@@ -180,10 +180,9 @@
   }
 
   .tag {
-    font-size: 8px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    fill: rgba(255, 255, 255, 0.4);
+    font-size: 8.5px;
+    font-weight: 800;
+    fill: rgba(60, 90, 130, 0.55);
   }
 
   .reading {

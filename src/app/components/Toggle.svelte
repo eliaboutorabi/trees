@@ -36,8 +36,10 @@
     border-radius: 50%;
     display: grid;
     place-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.04);
+    border: 3px solid #fffdf8;
+    background: var(--paper-2);
+    color: var(--ink-faint);
+    box-shadow: 0 3px 8px rgba(70, 45, 25, 0.14);
     transition:
       background 0.18s,
       color 0.18s,
@@ -54,14 +56,14 @@
   }
 
   .toggle.on .disc {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #21160c;
+    background: var(--tone);
+    color: var(--tone-ink);
+    box-shadow: 0 3px 8px rgba(70, 45, 25, 0.2), inset 0 -3px 0 rgba(0, 0, 0, 0.07);
   }
 
   .name {
-    font-size: 0.62rem;
-    letter-spacing: 0.03em;
+    font-size: 0.68rem;
+    font-weight: 700;
     white-space: nowrap;
   }
 </style>

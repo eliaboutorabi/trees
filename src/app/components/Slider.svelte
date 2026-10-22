@@ -50,8 +50,8 @@
   }
 
   .slider__label {
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
+    font-size: 0.74rem;
+    font-weight: 700;
     color: var(--ink-dim);
   }
 
@@ -64,7 +64,8 @@
   .slider__value {
     font-family: var(--mono);
     font-size: 0.7rem;
-    color: var(--accent);
+    font-weight: 700;
+    color: var(--tone-ink);
     font-variant-numeric: tabular-nums;
   }
 
@@ -72,14 +73,14 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 3px;
-    border-radius: 3px;
+    height: 6px;
+    border-radius: 6px;
     background: linear-gradient(
       to right,
-      var(--accent) 0%,
-      var(--accent) var(--fill),
-      rgba(255, 255, 255, 0.13) var(--fill),
-      rgba(255, 255, 255, 0.13) 100%
+      var(--tone) 0%,
+      var(--tone) var(--fill),
+      var(--paper-3) var(--fill),
+      var(--paper-3) 100%
     );
     outline: none;
     cursor: pointer;
@@ -91,9 +92,9 @@
     width: 13px;
     height: 13px;
     border-radius: 50%;
-    background: var(--panel-solid);
-    border: 2px solid var(--accent);
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+    background: #fff;
+    border: 3px solid var(--tone-ink);
+    box-shadow: 0 1px 4px rgba(70, 45, 25, 0.3);
     transition: transform 0.12s ease;
   }
 
@@ -106,7 +107,7 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: var(--panel-solid);
-    border: 2px solid var(--accent);
+    background: #fff;
+    border: 3px solid var(--tone-ink);
   }
 </style>

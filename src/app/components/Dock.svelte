@@ -12,6 +12,9 @@
     wide?: boolean;
     /** Tools in the same group sit together; a gap separates groups. */
     group: number;
+    /** The tool's pastel, and a deeper shade of it for ink on top. */
+    tone: string;
+    toneInk: string;
   }
 </script>
 
@@ -149,7 +152,7 @@
       class:wide={open.wide}
       class:pinned={pinned === open.id}
       bind:this={card}
-      style="left: {cardLeft}px; bottom: {cardBottom}px; --notch: {notch}px"
+      style="left: {cardLeft}px; bottom: {cardBottom}px; --notch: {notch}px; --tone: {open.tone}; --tone-ink: {open.toneInk}"
       role="dialog"
       aria-label={open.label}
       tabindex="-1"
@@ -158,7 +161,7 @@
       onpointerdown={grab}
     >
       <div class="card__head">
-        <Icon icon={open.icon} size={15} strokeWidth={1.8} />
+        <span class="badge"><Icon icon={open.icon} size={16} strokeWidth={2} /></span>
         <span>{open.label}</span>
       </div>
       <div class="card__body">
@@ -173,6 +176,7 @@
     {#if i > 0 && tool.group !== tools[i - 1].group}<span class="gap"></span>{/if}
     <button
       class="tool"
+      style="--tone: {tool.tone}; --tone-ink: {tool.toneInk}"
       class:active={openId === tool.id}
       class:pinned={pinned === tool.id}
       bind:this={buttons[tool.id]}
@@ -182,7 +186,7 @@
       aria-label={tool.label}
       aria-expanded={openId === tool.id}
     >
-      <Icon icon={tool.icon} size={20} strokeWidth={1.7} />
+      <Icon icon={tool.icon} size={21} strokeWidth={2} />
       <span class="tip">{tool.label}</span>
     </button>
   {/each}
@@ -193,87 +197,88 @@
 </nav>
 
 <style>
+  /*
+   * No tray: the tools are a row of separate round pastel buttons sitting on
+   * the scene, each in its own colour, that bob up when you reach for them.
+   */
   .dock {
     position: absolute;
     left: 50%;
-    bottom: 1.4rem;
+    bottom: 1.3rem;
     transform: translateX(-50%);
     z-index: 6;
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.45rem 0.6rem;
-    border-radius: 999px;
-    background: linear-gradient(to bottom, rgba(34, 27, 21, 0.66), rgba(18, 14, 11, 0.6));
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(22px) saturate(1.4);
-    -webkit-backdrop-filter: blur(22px) saturate(1.4);
-    box-shadow:
-      0 14px 44px rgba(0, 0, 0, 0.42),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    max-width: calc(100vw - 1.5rem);
+    gap: 0.5rem;
+    padding: 0.6rem 0.4rem 0.2rem;
+    max-width: calc(100vw - 1rem);
     overflow-x: auto;
     scrollbar-width: none;
   }
 
   .gap {
-    width: 1px;
-    height: 1.6rem;
-    margin: 0 0.25rem;
-    background: rgba(255, 255, 255, 0.12);
+    width: 0.55rem;
     flex: none;
+  }
+
+  .gap.wide {
+    width: 0.9rem;
   }
 
   .tool {
     position: relative;
     flex: none;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 3.1rem;
+    height: 3.1rem;
     border-radius: 50%;
     display: grid;
     place-items: center;
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--ink-dim);
+    border: 3px solid #fffaf2;
+    background: var(--tone);
+    color: var(--tone-ink);
     cursor: pointer;
+    box-shadow:
+      0 6px 14px rgba(70, 45, 25, 0.25),
+      inset 0 -4px 0 rgba(0, 0, 0, 0.07),
+      inset 0 3px 0 rgba(255, 255, 255, 0.45);
     transition:
-      transform 0.18s cubic-bezier(0.3, 0.7, 0.4, 1.4),
-      background 0.18s,
-      color 0.18s,
-      border-color 0.18s;
+      transform 0.22s cubic-bezier(0.3, 0.7, 0.4, 1.6),
+      box-shadow 0.22s;
   }
 
   .tool:hover,
   .tool.active {
-    transform: translateY(-3px) scale(1.06);
-    background: rgba(255, 255, 255, 0.11);
-    color: #fff;
+    transform: translateY(-6px) rotate(-4deg) scale(1.08);
+    box-shadow:
+      0 12px 22px rgba(70, 45, 25, 0.28),
+      inset 0 -4px 0 rgba(0, 0, 0, 0.07),
+      inset 0 3px 0 rgba(255, 255, 255, 0.45);
   }
 
   .tool.pinned {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #21160c;
+    transform: translateY(-8px) scale(1.1);
+    border-color: var(--tone-ink);
   }
 
   .tool:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 3px solid var(--tone-ink);
     outline-offset: 2px;
   }
 
-  /* The name, floated just above the button while it is hovered. */
+  /* The name, in a little cream bubble above the button. */
   .tip {
     position: absolute;
-    bottom: calc(100% + 0.5rem);
+    bottom: calc(100% + 0.55rem);
     left: 50%;
     transform: translate(-50%, 4px);
-    padding: 0.2rem 0.5rem;
-    border-radius: 6px;
-    font-size: 0.66rem;
-    letter-spacing: 0.04em;
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
     white-space: nowrap;
     color: var(--ink);
-    background: rgba(14, 11, 9, 0.85);
+    background: var(--paper);
+    box-shadow: 0 4px 10px rgba(70, 45, 25, 0.2);
     opacity: 0;
     pointer-events: none;
     transition:
@@ -281,29 +286,19 @@
       transform 0.15s;
   }
 
-  @media (hover: hover) {
-    .tool:hover:not(.active) .tip {
-      opacity: 1;
-      transform: translate(-50%, 0);
-    }
-  }
-
   .card {
     position: fixed;
     z-index: 7;
     width: 20rem;
-    max-height: min(62vh, 36rem);
+    max-height: min(64vh, 38rem);
     display: flex;
     flex-direction: column;
-    border-radius: 18px;
-    background: linear-gradient(to bottom, rgba(34, 27, 21, 0.72), rgba(18, 14, 11, 0.66));
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    backdrop-filter: blur(28px) saturate(1.45);
-    -webkit-backdrop-filter: blur(28px) saturate(1.45);
-    box-shadow:
-      0 22px 60px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    animation: rise 0.2s cubic-bezier(0.2, 0.8, 0.3, 1.15);
+    border-radius: 26px;
+    background: var(--paper);
+    border: 3px solid #fffdf8;
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    animation: rise 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.35);
     transform-origin: 50% 100%;
   }
 
@@ -316,48 +311,58 @@
     content: '';
     position: absolute;
     left: var(--notch, 50%);
-    bottom: -6px;
-    width: 12px;
-    height: 12px;
+    bottom: -9px;
+    width: 14px;
+    height: 14px;
     transform: translateX(-50%) rotate(45deg);
-    background: rgba(18, 14, 11, 0.72);
-    border-right: 1px solid rgba(255, 255, 255, 0.13);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.13);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
-  }
-
-  .card.pinned::after {
-    border-color: rgba(240, 176, 100, 0.45);
-  }
-
-  .card.pinned {
-    border-color: rgba(240, 176, 100, 0.45);
+    background: var(--paper);
+    border-right: 3px solid #fffdf8;
+    border-bottom: 3px solid #fffdf8;
+    border-bottom-right-radius: 4px;
   }
 
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(10px) scale(0.96);
+      transform: translateY(14px) scale(0.92);
     }
   }
 
   .card__head {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.85rem 1.1rem 0.4rem;
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ink-dim);
+    gap: 0.55rem;
+    margin: 0.55rem 0.55rem 0.3rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 18px;
+    background: var(--tone);
+    color: var(--tone-ink);
+    font-size: 0.86rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .badge {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.6);
   }
 
   .card__body {
-    padding: 0.35rem 1.1rem 1.05rem;
+    padding: 0.5rem 1.1rem 1.1rem;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    scrollbar-color: rgba(110, 80, 50, 0.2) transparent;
+  }
+
+  @media (hover: hover) {
+    .tool:hover:not(.active) .tip {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
   }
 
   @media (max-width: 640px) {
@@ -366,8 +371,8 @@
       width: calc(100vw - 1.5rem);
     }
     .tool {
-      width: 2.45rem;
-      height: 2.45rem;
+      width: 2.7rem;
+      height: 2.7rem;
     }
     /* On a phone the dock scrolls sideways; fading its ends is what says so. */
     .dock {

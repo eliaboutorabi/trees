@@ -110,8 +110,8 @@
     <defs>
       <clipPath id="compass-clip"><circle cx={C} cy={C} r={R} /></clipPath>
     </defs>
-    <circle cx={C} cy={C} r={R} fill="rgba(160, 190, 210, 0.1)" stroke="rgba(255,255,255,0.18)" />
-    <circle cx={C} cy={C} r={R * 0.5} fill="none" stroke="rgba(255,255,255,0.07)" stroke-dasharray="2 4" />
+    <circle cx={C} cy={C} r={R} fill="#dcefff" stroke="#fff" stroke-width="3" />
+    <circle cx={C} cy={C} r={R * 0.5} fill="none" stroke="rgba(255,255,255,0.8)" stroke-dasharray="2 4" />
 
     <g clip-path="url(#compass-clip)">
       <g transform="rotate({phi} {C} {C})">
@@ -172,7 +172,7 @@
   }
 
   .streak {
-    stroke: rgba(230, 240, 250, 0.35);
+    stroke: rgba(70, 120, 175, 0.4);
     stroke-width: 1.4;
     stroke-linecap: round;
     animation: blow linear infinite;
@@ -202,25 +202,25 @@
   }
 
   .shaft {
-    stroke: var(--accent);
+    stroke: var(--tone-ink);
     stroke-width: 3;
     stroke-linecap: round;
   }
 
   .head {
-    fill: var(--accent);
+    fill: var(--tone-ink);
   }
 
   .grip {
     fill: rgba(255, 248, 239, 0.001);
-    stroke: rgba(255, 248, 239, 0);
+    stroke: rgba(47, 95, 143, 0);
     stroke-width: 2;
     transition: stroke 0.15s;
   }
 
   svg:hover .grip,
   svg.dragging .grip {
-    stroke: rgba(255, 248, 239, 0.8);
+    stroke: rgba(47, 95, 143, 0.7);
   }
 
   .reading {

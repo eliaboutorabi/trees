@@ -77,7 +77,13 @@
   let unsupported = $state(false);
   let fatal = $state<string | null>(null);
   // The season and weather buttons wear the current choice, so the dock itself
-  // says what the scene is doing.
+  // says what the scene is doing — the season's button its colour, too.
+  const SEASON_TONES = {
+    spring: ['#ffc7d5', '#9a3d58'],
+    summer: ['#ffe9a3', '#8a6a12'],
+    autumn: ['#ffd2b5', '#9a4f22'],
+    winter: ['#cfe6ff', '#2f5f8f'],
+  } as const;
   const SEASON_ICONS = { spring: FlowerIcon, summer: Sun03Icon, autumn: Leaf03Icon, winter: SnowIcon } as const;
   // Leaf and fruit shapes, as tiles.
   const LEAF_SHAPES = [
@@ -570,21 +576,7 @@
         </button>
       </div>
 
-      <Dock
-        tools={[
-          { id: 'species', label: 'Species', icon: TreesIcon, panel: speciesPanel, group: 0 },
-          { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0 },
-          { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0 },
-          { id: 'shape', label: 'Shape', icon: Tree01Icon, panel: shapePanel, group: 1 },
-          { id: 'foliage', label: 'Foliage', icon: Leaf01Icon, panel: foliagePanel, group: 1 },
-          { id: 'bloom', label: 'Bloom & fruit', icon: CherryIcon, panel: bloomPanel, group: 1 },
-          { id: 'light', label: 'Light', icon: SunsetIcon, panel: lightPanel, group: 2 },
-          { id: 'wind', label: 'Wind', icon: CloudFastWindIcon, panel: windPanel, group: 2 },
-          { id: 'look', label: 'Look', icon: ApertureIcon, panel: lookPanel, group: 3 },
-          { id: 'grammar', label: 'Grammar', icon: SourceCodeIcon, panel: grammarPanel, group: 3, wide: true },
-        ]}
-      >
-        <div class="growth">
+      <div class="growth">
           <button class="mini" onclick={redraw} title="Grow the tree again from seed (R)" aria-label="Grow again">
             <Icon icon={Rotate01Icon} size={15} strokeWidth={2} />
           </button>
@@ -606,6 +598,21 @@
           />
           <span class="pct">{Math.round(growth * 100)}%</span>
         </div>
+
+      <Dock
+        tools={[
+          { id: 'species', label: 'Species', icon: TreesIcon, panel: speciesPanel, group: 0, tone: '#bfe8cf', toneInk: '#2f6b48' },
+          { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
+          { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0, tone: '#b6ebe3', toneInk: '#26716a' },
+          { id: 'shape', label: 'Shape', icon: Tree01Icon, panel: shapePanel, group: 1, tone: '#d5e7b3', toneInk: '#556b22' },
+          { id: 'foliage', label: 'Foliage', icon: Leaf01Icon, panel: foliagePanel, group: 1, tone: '#c6efb6', toneInk: '#3c7a28' },
+          { id: 'bloom', label: 'Bloom & fruit', icon: CherryIcon, panel: bloomPanel, group: 1, tone: '#ffc7d5', toneInk: '#9a3d58' },
+          { id: 'light', label: 'Light', icon: SunsetIcon, panel: lightPanel, group: 2, tone: '#ffe08f', toneInk: '#86601a' },
+          { id: 'wind', label: 'Wind', icon: CloudFastWindIcon, panel: windPanel, group: 2, tone: '#bfe0ff', toneInk: '#2f5f8f' },
+          { id: 'look', label: 'Look', icon: ApertureIcon, panel: lookPanel, group: 3, tone: '#dcccff', toneInk: '#5b47a0' },
+          { id: 'grammar', label: 'Grammar', icon: SourceCodeIcon, panel: grammarPanel, group: 3, tone: '#f2dcb4', toneInk: '#7a5a2a', wide: true },
+        ]}
+      >
       </Dock>
     {/if}
   </div>
@@ -839,12 +846,14 @@
 
   /* ---------------------------------------------------------- overlays */
 
+  /* ---------------------------------------------------------- overlays */
+
   .overlay {
     position: absolute;
     inset: 0;
     display: grid;
     place-items: center;
-    background: radial-gradient(ellipse at 50% 60%, #241a12, #0d0a08);
+    background: radial-gradient(ellipse at 50% 60%, #fdf3e3, #efdcc0);
     padding: 2rem;
   }
 
@@ -855,10 +864,9 @@
   }
 
   .card h2 {
-    font-size: 1.1rem;
-    font-weight: 500;
+    font-size: 1.2rem;
+    font-weight: 800;
     margin-bottom: 0.6rem;
-    letter-spacing: 0.02em;
   }
 
   .card p {
@@ -870,66 +878,84 @@
   .loading {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    gap: 0.7rem;
+    font-size: 0.95rem;
+    font-weight: 700;
     color: var(--ink-dim);
   }
 
   .pulse {
-    width: 7px;
-    height: 7px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    background: var(--accent);
-    animation: pulse 1.3s ease-in-out infinite;
+    background: var(--mint);
+    box-shadow: 0 0 0 3px #fff;
+    animation: pulse 1.2s ease-in-out infinite;
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 0.25; transform: scale(0.8); }
+    0%, 100% { opacity: 0.5; transform: scale(0.8); }
     50% { opacity: 1; transform: scale(1.25); }
   }
 
   /* ------------------------------------------------------------- HUD */
 
   /*
-   * Everything floats over the scene: the name and a quiet readout top-left,
-   * the camera and file actions top-right, and the tools in the dock along the
-   * bottom. Nothing reserves space, so the tree has the whole window.
+   * Everything floats over the scene as small pieces of paper: the name in a
+   * cream tag top-left, round buttons top-right, the tools along the bottom.
    */
   .brand {
     position: absolute;
-    top: 1.05rem;
-    left: 1.25rem;
+    top: 1rem;
+    left: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.4rem 0.9rem 0.4rem 0.5rem;
+    border-radius: 999px;
+    background: var(--paper);
+    border: 3px solid #fffdf8;
+    box-shadow: var(--shadow);
     pointer-events: none;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
   }
 
   .brand h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     font-size: 1.05rem;
-    font-weight: 300;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.01em;
     color: var(--ink);
   }
 
+  .brand h1::before {
+    content: '';
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 38%, #8cc66a 0 42%, transparent 43%),
+      linear-gradient(#a07650, #a07650) 50% 100% / 18% 45% no-repeat,
+      var(--mint);
+  }
+
   .readout {
-    margin-top: 0.3rem;
     display: flex;
-    gap: 0.85rem;
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    color: rgba(255, 255, 255, 0.5);
+    gap: 0.6rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--ink-faint);
     font-variant-numeric: tabular-nums;
   }
 
   .readout b {
-    color: rgba(255, 255, 255, 0.85);
-    font-weight: 500;
+    color: var(--ink-dim);
+    font-weight: 800;
   }
 
   .readout .warn {
-    color: #ffb057;
+    color: #c4572e;
   }
 
   .actions {
@@ -937,42 +963,51 @@
     top: 1rem;
     right: 1.1rem;
     display: flex;
-    gap: 0.45rem;
+    gap: 0.5rem;
   }
 
   .round {
-    width: 2.35rem;
-    height: 2.35rem;
+    width: 2.6rem;
+    height: 2.6rem;
     border-radius: 50%;
     display: grid;
     place-items: center;
     color: var(--ink-dim);
-    background: linear-gradient(to bottom, rgba(34, 27, 21, 0.62), rgba(18, 14, 11, 0.56));
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(18px) saturate(1.35);
-    -webkit-backdrop-filter: blur(18px) saturate(1.35);
-    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
+    background: var(--paper);
+    border: 3px solid #fffdf8;
+    box-shadow: var(--shadow);
     cursor: pointer;
     transition:
-      transform 0.18s cubic-bezier(0.3, 0.7, 0.4, 1.4),
-      color 0.18s;
+      transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.6),
+      color 0.18s,
+      background 0.18s;
   }
 
   .round:hover {
-    color: #fff;
-    transform: translateY(-2px) scale(1.05);
+    color: var(--ink);
+    background: var(--butter);
+    transform: translateY(-2px) rotate(-6deg) scale(1.06);
   }
 
   .round.done {
-    color: var(--accent);
+    background: var(--mint);
+    color: #2f6b48;
   }
 
-  /* Growth, at the end of the dock. */
+  /* Growth, in its own little paper pill at the top, out of the tools' way. */
   .growth {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding-right: 0.3rem;
+    gap: 0.35rem;
+    padding: 0.3rem 0.8rem 0.3rem 0.35rem;
+    border-radius: 999px;
+    background: var(--paper);
+    border: 3px solid #fffdf8;
+    box-shadow: 0 6px 14px rgba(70, 45, 25, 0.25);
     flex: none;
   }
 
@@ -982,59 +1017,52 @@
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: transparent;
+    background: var(--paper-2);
     border: none;
     color: var(--ink-dim);
     cursor: pointer;
+    transition:
+      background 0.15s,
+      transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.6);
   }
 
   .mini:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--ink);
+    background: var(--sage);
+    transform: scale(1.08);
   }
 
   .scrub {
     -webkit-appearance: none;
     appearance: none;
-    width: 7.5rem;
-    height: 3px;
-    border-radius: 3px;
-    background: linear-gradient(
-      to right,
-      var(--accent) var(--fill),
-      rgba(255, 255, 255, 0.16) var(--fill)
-    );
+    width: 7rem;
+    height: 8px;
+    border-radius: 8px;
+    background: linear-gradient(to right, #9fd07a var(--fill), var(--paper-3) var(--fill));
     cursor: pointer;
   }
 
   .scrub::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     background: #fff;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+    border: 3px solid #6fae4a;
+    box-shadow: 0 2px 5px rgba(70, 45, 25, 0.3);
   }
 
   .pct {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.65);
-    width: 2.6rem;
+    min-width: 2.4rem;
     text-align: right;
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: var(--ink-dim);
     font-variant-numeric: tabular-nums;
   }
 
-  /* ------------------------------------------------------------ panel */
-
-
-
-
-
-
-
-
+  /* ----------------------------------------------------------- cards */
 
   .another {
     display: flex;
@@ -1042,22 +1070,21 @@
     justify-content: center;
     gap: 0.5rem;
     width: 100%;
-    margin: 0.2rem 0 0.4rem;
-    padding: 0.65rem;
-    border-radius: 12px;
-    border: 1px solid rgba(240, 176, 100, 0.4);
-    background: rgba(240, 176, 100, 0.1);
-    color: var(--ink);
-    font-size: 0.78rem;
+    margin: 0.3rem 0 0.4rem;
+    padding: 0.7rem;
+    border-radius: 999px;
+    border: 3px solid #fffdf8;
+    background: var(--tone);
+    color: var(--tone-ink);
+    font-size: 0.9rem;
+    font-weight: 800;
     cursor: pointer;
-    transition:
-      background 0.18s,
-      transform 0.18s cubic-bezier(0.3, 0.7, 0.4, 1.5);
+    box-shadow: 0 4px 10px rgba(70, 45, 25, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.07);
+    transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.6);
   }
 
   .another:hover {
-    background: rgba(240, 176, 100, 0.22);
-    transform: translateY(-1px);
+    transform: translateY(-2px) scale(1.02);
   }
 
   .another:active :global(svg) {
@@ -1069,21 +1096,22 @@
     flex-wrap: wrap;
     gap: 0.35rem 0.8rem;
     margin: 0.1rem 0 0.8rem;
-    font-size: 0.62rem;
+    font-size: 0.7rem;
+    font-weight: 600;
     color: var(--ink-faint);
   }
 
   .legend b {
     font-family: var(--mono);
-    font-weight: 600;
+    font-weight: 700;
     margin-right: 0.15rem;
   }
 
-  .k-draw { color: #9fd36b; }
-  .k-branch { color: #e9a7ff; }
-  .k-turn { color: #79b8ff; }
-  .k-global { color: #7fdbca; }
-  .k-num { color: #7fdbca; }
+  .k-draw { color: #4f9a2c; }
+  .k-branch { color: #a24fc4; }
+  .k-turn { color: #3d7fc4; }
+  .k-global { color: #2b968a; }
+  .k-num { color: #2b968a; }
 
   .toggles {
     display: grid;
@@ -1094,8 +1122,8 @@
 
   .tiles {
     display: grid;
-    gap: 0.45rem;
-    margin: 0.2rem 0 0.7rem;
+    gap: 0.5rem;
+    margin: 0.2rem 0 0.75rem;
   }
 
   .tiles.three {
@@ -1107,46 +1135,37 @@
   }
 
   .weather-art {
-    color: rgba(255, 255, 255, 0.9);
-    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+    color: #fff;
+    filter: drop-shadow(0 2px 4px rgba(60, 40, 20, 0.35));
   }
-
-
-
-
-
 
   .blurb {
-    font-size: 0.72rem;
-    line-height: 1.5;
-    color: var(--ink-faint);
-    margin: 0.6rem 0 0.9rem;
-    font-style: italic;
+    margin: 0 0 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-dim);
+    text-align: center;
   }
-
-
-
-
 
   .segmented {
     display: flex;
-    gap: 2px;
-    padding: 2px;
-    border-radius: 7px;
-    background: rgba(0, 0, 0, 0.28);
-    margin-bottom: 0.85rem;
+    gap: 0.3rem;
+    margin-bottom: 0.9rem;
+    padding: 0.25rem;
+    border-radius: 999px;
+    background: var(--paper-2);
   }
 
   .segmented button {
     flex: 1;
-    padding: 0.32rem 0;
-    font-size: 0.7rem;
+    padding: 0.38rem 0;
+    border-radius: 999px;
     border: none;
-    border-radius: 5px;
     background: transparent;
     color: var(--ink-dim);
+    font-size: 0.74rem;
+    font-weight: 700;
     cursor: pointer;
-    transition: all 0.14s ease;
   }
 
   .segmented button:hover {
@@ -1154,40 +1173,36 @@
   }
 
   .segmented button.active {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--accent);
+    background: var(--tone);
+    color: var(--tone-ink);
+    box-shadow: 0 2px 6px rgba(70, 45, 25, 0.15);
   }
-
-
 
   .sub {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    margin: 0.9rem 0 0.6rem;
-    font-size: 0.64rem;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
+    margin: 1rem 0 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--ink-dim);
   }
 
   .sub:first-of-type {
-    margin-top: 0.2rem;
+    margin-top: 0.3rem;
   }
 
   .help {
-    font-size: 0.68rem;
-    line-height: 1.65;
-    color: var(--ink-faint);
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.8rem;
+    font-size: 0.76rem;
+    line-height: 1.55;
+    color: var(--ink-dim);
   }
-
 
   .card code {
     font-family: var(--mono);
     font-size: 0.92em;
-    color: var(--accent);
+    color: var(--tone-ink);
   }
 
   .field {
@@ -1197,12 +1212,11 @@
 
   .field span {
     display: block;
-    font-size: 0.68rem;
-    letter-spacing: 0.05em;
+    margin-bottom: 0.35rem;
+    font-size: 0.74rem;
+    font-weight: 800;
     color: var(--ink-dim);
-    margin-bottom: 0.3rem;
   }
-
 
   .mono {
     font-family: var(--mono);
@@ -1210,45 +1224,42 @@
 
   .apply {
     width: 100%;
-    padding: 0.5rem;
-    font-size: 0.72rem;
-    border-radius: 6px;
-    border: 1px solid var(--hairline);
-    background: transparent;
+    padding: 0.65rem;
+    border-radius: 999px;
+    border: 3px solid #fffdf8;
+    background: var(--paper-2);
     color: var(--ink-faint);
-    cursor: not-allowed;
+    font-size: 0.86rem;
+    font-weight: 800;
+    cursor: default;
   }
 
   .apply.dirty {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #21160c;
-    font-weight: 500;
+    background: var(--tone);
+    color: var(--tone-ink);
     cursor: pointer;
+    box-shadow: 0 4px 10px rgba(70, 45, 25, 0.18), inset 0 -3px 0 rgba(0, 0, 0, 0.07);
   }
 
   .issues {
-    margin-top: 0.65rem;
-    padding: 0.55rem 0.7rem;
-    border-radius: 6px;
-    background: rgba(190, 60, 40, 0.16);
-    border: 1px solid rgba(230, 110, 80, 0.34);
+    margin-top: 0.7rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 14px;
+    background: #ffe3dc;
     list-style: none;
   }
 
   .issues li {
-    font-size: 0.68rem;
+    font-size: 0.74rem;
     line-height: 1.5;
-    color: #ffb59b;
+    color: #9a3b26;
   }
 
   .issues b {
-    font-family: var(--mono);
-    color: #ff8f6b;
+    font-weight: 800;
+    margin-right: 0.3rem;
   }
 
-
-  /* The pill has to fit the strip beside the panel, not just the window. */
   @media (max-width: 640px) {
     .scrub {
       width: 4.5rem;
@@ -1256,6 +1267,11 @@
     .readout {
       display: none;
     }
+    /* No room between the name and the buttons on a phone: tuck it under. */
+    .growth {
+      top: 4.2rem;
+      left: 1.1rem;
+      transform: none;
+    }
   }
-
 </style>

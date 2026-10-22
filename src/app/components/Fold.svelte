@@ -31,7 +31,7 @@
 <style>
   .fold {
     margin-top: 0.4rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 2px dashed var(--line);
     padding-top: 0.5rem;
   }
 
@@ -43,9 +43,8 @@
     padding: 0.2rem 0;
     background: none;
     border: none;
-    font-size: 0.66rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-size: 0.76rem;
+    font-weight: 800;
     color: var(--ink-faint);
     cursor: pointer;
   }

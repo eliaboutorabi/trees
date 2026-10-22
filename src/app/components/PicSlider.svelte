@@ -63,11 +63,10 @@
 
   .caption {
     display: block;
-    margin-bottom: 0.3rem;
-    font-size: 0.64rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
+    margin-bottom: 0.35rem;
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: var(--ink-dim);
   }
 
   .row {
@@ -81,7 +80,7 @@
     width: 1.3rem;
     display: grid;
     place-items: center;
-    color: var(--ink-dim);
+    color: var(--tone-ink);
   }
 
   .end.small {
@@ -99,15 +98,16 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 6px;
-    border-radius: 6px;
+    height: 10px;
+    border-radius: 10px;
     background: linear-gradient(
       to right,
-      rgba(240, 176, 100, 0.55) 0%,
-      var(--accent) var(--fill),
-      rgba(255, 255, 255, 0.1) var(--fill),
-      rgba(255, 255, 255, 0.1) 100%
+      var(--tone) 0%,
+      var(--tone) var(--fill),
+      var(--paper-3) var(--fill),
+      var(--paper-3) 100%
     );
+    box-shadow: inset 0 1px 2px rgba(70, 45, 25, 0.12);
     outline: none;
     cursor: pointer;
   }
@@ -115,12 +115,12 @@
   input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    background: #fff8ef;
-    border: 3px solid var(--accent);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    background: #fff;
+    border: 4px solid var(--tone-ink);
+    box-shadow: 0 2px 6px rgba(70, 45, 25, 0.3);
     transition: transform 0.14s cubic-bezier(0.3, 0.7, 0.4, 1.5);
   }
 
@@ -134,8 +134,8 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #fff8ef;
-    border: 3px solid var(--accent);
+    background: #fff;
+    border: 4px solid var(--tone-ink);
   }
 
   .bubble {
@@ -145,10 +145,11 @@
     transform: translate(-50%, 4px);
     padding: 0.12rem 0.42rem;
     border-radius: 6px;
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    color: #21160c;
-    background: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--tone-ink);
+    background: var(--tone);
+    box-shadow: 0 2px 6px rgba(70, 45, 25, 0.2);
     opacity: 0;
     pointer-events: none;
     white-space: nowrap;

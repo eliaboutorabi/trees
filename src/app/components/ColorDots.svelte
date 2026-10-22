@@ -41,10 +41,9 @@
   .caption {
     display: block;
     margin-bottom: 0.4rem;
-    font-size: 0.64rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: var(--ink-dim);
   }
 
   .row {
@@ -55,13 +54,13 @@
 
   .dot {
     position: relative;
-    width: 1.6rem;
-    height: 1.6rem;
+    width: 1.75rem;
+    height: 1.75rem;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.15);
+    border: 3px solid #fff;
     background: var(--c);
     cursor: pointer;
-    box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 2px 5px rgba(70, 45, 25, 0.2), inset 0 -3px 0 rgba(0, 0, 0, 0.1);
     transition:
       transform 0.15s cubic-bezier(0.3, 0.7, 0.4, 1.5),
       border-color 0.15s;
@@ -72,10 +71,10 @@
   }
 
   .dot.on {
-    border-color: #fff8ef;
+    transform: scale(1.12);
     box-shadow:
-      0 0 0 2px var(--accent),
-      inset 0 -3px 6px rgba(0, 0, 0, 0.25);
+      0 0 0 3px var(--tone-ink),
+      inset 0 -3px 0 rgba(0, 0, 0, 0.1);
   }
 
   /* The "anything else" dot: a rainbow until a custom colour is chosen. */
