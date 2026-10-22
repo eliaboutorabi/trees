@@ -477,9 +477,18 @@ export class ProceduralSky {
    */
   refresh(renderer: WebGPURenderer): void {
     if (!this.envDirty) return;
+    // At most ten times a second. While the sun is dragged, or night falls,
+    // the sky changes every frame, and re-rendering and refiltering the cube
+    // that often was a large share of the frame for light that changes
+    // slowly; the last change still always lands.
+    const now = performance.now();
+    if (now - this.lastRefresh < 100) return;
+    this.lastRefresh = now;
     this.envDirty = false;
     this.envCamera.update(renderer, this.envScene);
   }
+
+  private lastRefresh = -Infinity;
 
   dispose(): void {
     this.envMesh.geometry.dispose();

@@ -140,6 +140,12 @@ const ORBIT_SPEED = 0.35;
 /** How close to the ground the camera may come. */
 const CAMERA_FLOOR = 0.7;
 
+/** The parts of the Battery Status API used here. */
+interface BatteryLike extends EventTarget {
+  charging: boolean;
+  level: number;
+}
+
 // Scratch objects for the shadow fit, which runs whenever the sun moves.
 const _v1 = new Vector3();
 const _v2 = new Vector3();
@@ -234,6 +240,12 @@ export class TreeStudio {
   /** The lowest the governor will go: the screen's CSS pixels, never under. */
   private minScale = 1;
   private readonly adaptiveSamples: number[] = [];
+  private spellMs = 0;
+  /** The last step down, to undo if it turns out not to have helped. */
+  private lastDrop: { scale: number; msaaShed: boolean; meanMs: number } | null = null;
+  /** No steps down before this: the last one showed the GPU was not the limit. */
+  private holdUntil = 0;
+  private frameGap = 0.016;
   /** No frames are judged before this — loading, a rebuild, a change of size. */
   private settleUntil = 0;
   /** Bad and good spells running, since one alone is as often another app's moment. */
@@ -243,6 +255,12 @@ export class TreeStudio {
   private failedScale = Infinity;
   private retryAt = 0;
   private retryWait = 30_000;
+  /** Multisampling given up because even the lowest resolution was too slow. */
+  private msaaShed = false;
+  /** Frames a second to draw at most, or 0 for as many as the display shows. */
+  private frameCap = 0;
+  /** The screen's own density (up to 2): the ceiling when not saving power. */
+  private nativeScale = 2;
   /** A change waiting for the hand to let go: never mid-gesture. */
   private pendingScale: number | null = null;
   private pointersDown = 0;
@@ -320,7 +338,9 @@ export class TreeStudio {
     // The screen's own density, up to twice: drawn under it and stretched up,
     // the picture is soft and fine twigs shimmer.
     this.maxScale = Math.min(window.devicePixelRatio, 2);
+    this.nativeScale = this.maxScale;
     this.minScale = Math.min(this.maxScale, 1);
+    void this.watchBattery();
     this.renderScale = this.maxScale;
     this.settle(4000);
     this.renderer.setPixelRatio(this.renderScale);
@@ -988,7 +1008,16 @@ export class TreeStudio {
     // frame back; the floor matters because a negative dt runs `1 - exp(-dt*k)`
     // off to -Infinity, and one NaN in the hover uniform blanks every vertex of
     // the tree.
-    const dt = this.lastTime ? MathUtils.clamp((timeMs - this.lastTime) / 1000, 0, 0.05) : 0.016;
+    // The ceiling is a tenth of a second, not a twentieth: below twenty frames
+    // a second a 0.05 cap slowed every glide, morph and growth along with the
+    // frame rate, so a struggling machine felt slower still. A real gap — a
+    // tab coming back — is still not taken as a step.
+    // In low-power mode, draw at most `frameCap` times a second.
+    if (this.frameCap && this.lastTime && timeMs - this.lastTime < 1000 / this.frameCap - 3) return;
+    const gap = this.lastTime ? (timeMs - this.lastTime) / 1000 : 0.016;
+    const dt = gap > 0.5 ? 0.016 : MathUtils.clamp(gap, 0, 0.1);
+    // The governor wants the real gap, not the clamped step.
+    this.frameGap = MathUtils.clamp(gap, 0, 2);
     this.lastTime = timeMs;
 
     if (this.growth !== this.growthTarget) {
@@ -1120,19 +1149,30 @@ export class TreeStudio {
     }
     if (now < this.settleUntil || this.pointersDown > 0) {
       this.adaptiveSamples.length = 0;
+      this.spellMs = 0;
       return;
     }
 
-    const ms = dt * 1000;
-    if (ms > 250) {
-      // A hitch, not a trend.
+    const ms = this.frameGap * 1000;
+    // A hitch, not a trend: a shader compiling, a tree arriving. (Set high
+    // enough that a machine simply running at four frames a second is still
+    // measured, not discarded frame by frame.)
+    if (ms > 600) {
       this.adaptiveSamples.length = 0;
+      this.spellMs = 0;
       return;
     }
     this.adaptiveSamples.push(ms);
-    if (this.adaptiveSamples.length < 150) return;
+    this.spellMs += ms;
+    // A spell is two and a half seconds, however many frames that is: counted
+    // in frames, a machine managing ten a second took half a minute a step.
+    if (this.spellMs < 2500 || this.adaptiveSamples.length < 20) return;
+    this.spellMs = 0;
 
-    const missThreshold = (1000 / this.refreshHz) * 1.4;
+    // Judged against the pace it is meant to keep: the display's, or the cap's.
+    const interval = Math.max(1000 / this.refreshHz, this.frameCap ? 1000 / this.frameCap : 0);
+    const missThreshold = interval * 1.4;
+    const slowMs = Math.max(25, interval * 1.3);
     let missed = 0;
     let total = 0;
     for (const t of this.adaptiveSamples) {
@@ -1147,18 +1187,59 @@ export class TreeStudio {
     // in a breeze, a camera you swing now and then — and between a sharp
     // picture at forty-five and a soft one at sixty, sharp is the better
     // trade: it was the softness that read as broken, never the frame rate.
-    if (meanMs > 25) {
+    // Did the last step down help? If the frames are no faster for it, the
+    // GPU was never what held them up — the machine is throttled, or busy
+    // elsewhere — and a softer picture buys nothing. Put it back, and do not
+    // try again for a while.
+    const drop = this.lastDrop;
+    if (drop) {
+      this.lastDrop = null;
+      if (meanMs > drop.meanMs * 0.88) {
+        this.msaaShed = drop.msaaShed;
+        this.refreshPost();
+        this.requestRenderScale(drop.scale);
+        this.holdUntil = now + 90_000;
+        this.badSpells = 0;
+        this.goodSpells = 0;
+        return;
+      }
+    }
+
+    if (meanMs > slowMs) {
       this.goodSpells = 0;
-      if (++this.badSpells < 2 || this.renderScale <= this.minScale) return;
+      if (now < this.holdUntil) return;
+      if (++this.badSpells < 2) return;
+      if (this.renderScale <= this.minScale) {
+        // Nothing left to give in resolution: let the multisampling go too,
+        // the next most expensive thing in the frame. It comes back first
+        // when there is room again.
+        if (!this.msaaShed && this.lookToggles.antialias) {
+          this.badSpells = 0;
+          this.lastDrop = { scale: this.renderScale, msaaShed: false, meanMs };
+          this.msaaShed = true;
+          this.refreshPost();
+          this.settle(2000);
+        }
+        return;
+      }
       this.badSpells = 0;
       // Back where it failed before, and failed again: wait longer next time.
       if (this.renderScale >= this.failedScale) this.retryWait = Math.min(this.retryWait * 2, 5 * 60_000);
       this.failedScale = this.renderScale;
       this.retryAt = now + this.retryWait;
-      this.requestRenderScale(Math.max(this.minScale, this.renderScale - 0.25));
+      // Far too slow: a bigger step, so it gets somewhere usable quickly.
+      const step = meanMs > slowMs * 1.8 ? 0.5 : 0.25;
+      this.lastDrop = { scale: this.renderScale, msaaShed: this.msaaShed, meanMs };
+      this.requestRenderScale(Math.max(this.minScale, this.renderScale - step));
     } else if (dropRate < 0.03) {
       // Keeping up with the display itself: there may be room for more.
       this.badSpells = 0;
+      if (this.msaaShed && ++this.goodSpells >= 3) {
+        this.goodSpells = 0;
+        this.msaaShed = false;
+        this.refreshPost();
+        return;
+      }
       if (
         ++this.goodSpells >= 3 &&
         this.renderScale < this.maxScale &&
@@ -1205,13 +1286,44 @@ export class TreeStudio {
   settle(ms: number): void {
     this.settleUntil = Math.max(this.settleUntil, performance.now() + ms);
     this.adaptiveSamples.length = 0;
+    this.spellMs = 0;
     this.badSpells = 0;
   }
 
   /** Push the requested effects to the pipeline. */
   private refreshPost(): void {
     if (!this.post) return;
-    this.post.setToggles({ antialias: this.lookToggles.antialias });
+    this.post.setToggles({ antialias: this.lookToggles.antialias && !this.msaaShed });
+  }
+
+  /**
+   * Low-power mode: on battery and below a fifth of it, draw at most thirty
+   * frames a second and no sharper than 1.5×. A slow scene in the wind looks
+   * much the same at thirty, and the GPU is the biggest draw on the battery.
+   * Where the browser does not say (Safari), nothing changes.
+   */
+  private async watchBattery(): Promise<void> {
+    const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
+    if (!nav.getBattery) return;
+    try {
+      const battery = await nav.getBattery();
+      const apply = () => {
+        const low = !battery.charging && battery.level <= 0.2;
+        this.frameCap = low ? 30 : 0;
+        const ceiling = low ? Math.min(this.nativeScale, 1.5) : this.nativeScale;
+        if (ceiling !== this.maxScale) {
+          this.maxScale = ceiling;
+          this.minScale = Math.min(this.maxScale, 1);
+          if (this.renderScale > this.maxScale) this.requestRenderScale(this.maxScale);
+          this.settle(2000);
+        }
+      };
+      apply();
+      battery.addEventListener('levelchange', apply);
+      battery.addEventListener('chargingchange', apply);
+    } catch {
+      // Not allowed here; carry on as normal.
+    }
   }
 
   private applyQuality(quality: Quality): void {
