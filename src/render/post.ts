@@ -9,7 +9,7 @@
  * those crawled and sparkled as anything moved. Four samples per pixel cover
  * a thin blade for what it is, and it holds still as it turns.
  */
-import type { Camera, Scene } from 'three';
+import { Vector3, type Camera, type Scene } from 'three';
 import { RenderPipeline, type WebGPURenderer } from 'three/webgpu';
 import { float, pass, saturation, screenCoordinate, screenUV, smoothstep, time, uniform, vec3, vec4, vibrance } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -42,6 +42,8 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     grain: uniform(0.026),
     /** 0–1, eased: how much of the grain is showing (see `fade`). */
     grainAmount: uniform(1),
+    /** A cool cast for night: the eye in moonlight sees blue, and little colour. */
+    tint: uniform(new Vector3(1, 1, 1)),
   };
 
   const pipeline = new RenderPipeline(renderer);
@@ -66,6 +68,14 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
   // up lowers the threshold into the mid-tones, over a soft knee, and widens
   // the spread: at the top end the whole lit side of the scene glows a little,
   // the way a lens with a breath of haze on it does.
+  let colour = 1;
+  let night = 0;
+  const applyColour = () => {
+    uniforms.vibrance.value = (0.1 + 0.35 * colour) * (1 - 0.7 * night);
+    uniforms.saturation.value = (0.86 + 0.24 * colour) * (1 - 0.4 * night);
+    uniforms.tint.value.set(1 - 0.16 * night, 1 - 0.07 * night, 1 + 0.1 * night);
+  };
+
   let glow = 0.5;
   const applyGlow = () => {
     const t = glow / 1.5;
@@ -109,7 +119,7 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     }
 
     // Grading works on colour only — `vibrance` and `saturation` return vec3.
-    let rgb = saturation(vibrance(node.rgb, uniforms.vibrance), uniforms.saturation);
+    let rgb = saturation(vibrance(node.rgb, uniforms.vibrance), uniforms.saturation).mul(uniforms.tint);
 
     const falloff = screenUV.sub(0.5).length().mul(uniforms.vignette);
     rgb = rgb.mul(float(1).sub(falloff.mul(falloff)).clamp(0, 1));
@@ -193,9 +203,13 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
      * a little plain saturation goes with it.
      */
     setColour(amount: number): void {
-      const c = Math.min(2, Math.max(0, amount));
-      uniforms.vibrance.value = 0.1 + 0.35 * c;
-      uniforms.saturation.value = 0.86 + 0.24 * c;
+      colour = Math.min(2, Math.max(0, amount));
+      applyColour();
+    },
+    /** Day 0 → night 1: colour drains and the picture cools, as it does to the eye. */
+    setNight(amount: number): void {
+      night = amount;
+      applyColour();
     },
     /**
      * Focus blur and grain on or off — faded, not switched. Each eases to its

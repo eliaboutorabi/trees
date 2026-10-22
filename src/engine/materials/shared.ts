@@ -92,6 +92,8 @@ export function createTreeUniforms() {
      * moment the gust speed changed; an integrated phase only changes pace.
      */
     windPhase: uniform(0),
+    /** 0 day, 1 night — for anything that keeps different hours, like butterflies. */
+    night: uniform(0),
     windDir: uniform(new Vector2(1, 0.35)),
     /** Peak lean of the crown, in radians, at wind = 1. */
     windBend: uniform(0.22),

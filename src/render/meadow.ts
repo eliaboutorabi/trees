@@ -511,7 +511,8 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   // They go with the flowers they live off. Scaled rather than faded would be
   // better still, but at this size a fade over a second reads the same and
   // costs one multiply.
-  material.opacityNode = smoothstep(90, 60, dist).mul(smoothstep(0, 0.35, u.meadowBloom));
+  // And they go to roost at night.
+  material.opacityNode = smoothstep(90, 60, dist).mul(smoothstep(0, 0.35, u.meadowBloom)).mul(u.night.oneMinus());
 
   return material;
 }

@@ -129,6 +129,11 @@ const OVERCAST_FAR = new Color(0x8f979f);
 const MAX_ORNAMENTS = 1_800;
 /** Exposure under Neutral tone mapping that matches the old default brightness. */
 const NEUTRAL_LIFT = 1.18;
+/** Moonlight, and the blues of a night sky and the distance under it. */
+const MOONLIGHT = new Color(0.62, 0.72, 1.0);
+const NIGHT_FILL = new Color(0.32, 0.42, 0.72);
+const NIGHT_NEAR = new Color(0.035, 0.045, 0.075);
+const NIGHT_FAR = new Color(0.02, 0.028, 0.05);
 /** How fast Orbit circles, in OrbitControls' units. */
 const ORBIT_SPEED = 0.35;
 /** How close to the ground the camera may come. */
@@ -168,6 +173,9 @@ export class TreeStudio {
   private userExposure = 1;
   private sunPower = 5;
   private fadingWarmed = false;
+  private nightTarget = 0;
+  private nightness = 0;
+  private readonly moonDir = new Vector3(0, 0.5, -1);
   private orbitTarget = 0;
   private lookShown = false;
   /** The rainbow fades in and out rather than switching. */
@@ -602,7 +610,9 @@ export class TreeStudio {
     const follow = Math.pow(5 / Math.max(0.5, this.sunPower), 0.32);
     // Neutral sits a little darker in the mid-tones than AgX did; this puts
     // the default picture back where it was in brightness, with its colour.
-    this.renderer.toneMappingExposure = NEUTRAL_LIFT * this.userExposure * follow;
+    // At night the eye opens up: a moonlit garden is dark, but you can see it.
+    const adapt = 1 + 0.45 * this.nightness;
+    this.renderer.toneMappingExposure = NEUTRAL_LIFT * this.userExposure * follow * adapt;
   }
 
   /** Show or hide the rainbow; it fades either way. */
@@ -701,14 +711,26 @@ export class TreeStudio {
     sunDirection(settings, this.sunDir);
     this.sunTint.copy(light.color);
 
+    // At night the same dial places the moon, and the key light is moonlight:
+    // from the moon, cool, and dim. In between, every part of it is a blend.
+    const n = this.nightness;
+    sunDirection({ ...settings, elevation: MathUtils.clamp(params.sunElevation, 20, 65) }, this.moonDir);
+    this.sky.setNight(n, this.moonDir);
+    if (n > 0) {
+      this.sunDir.lerp(this.moonDir, n).normalize();
+      this.sunTint.lerp(MOONLIGHT, n);
+    }
+
     // Keep the shadow map wrapped around the new light direction; a low sun
     // throws a much longer shadow than a high one.
     this.updateShadowVolume();
     this.sun.color.copy(this.sunTint);
     // `strength` is already the atmospheric dimming — a horizon sun is a
     // fraction of a noon one because its light has crossed 38 atmospheres.
-    this.sun.intensity = params.sunIntensity * light.strength;
-    this.sunPower = params.sunIntensity;
+    // The same slider sets the moon's strength at night, about a third of the sun's range.
+    const moonlight = 1.5 * Math.pow(Math.max(0.05, params.sunIntensity) / 5, 0.7);
+    this.sun.intensity = MathUtils.lerp(params.sunIntensity * light.strength, moonlight * (1 - 0.75 * params.overcast), n);
+    this.sunPower = MathUtils.lerp(params.sunIntensity, 5, n);
     this.updateExposure();
 
     this.tree.setSun(this.sunDir, this.sunTint);
@@ -743,6 +765,31 @@ export class TreeStudio {
     this.groundUniforms.fadeDistance.value *= 1 - 0.55 * o;
     this.groundUniforms.horizon.value.lerp(OVERCAST_NEAR, 0.75 * o);
     this.groundUniforms.aerialFar.value.lerp(OVERCAST_FAR, 0.8 * o);
+
+    // Night: the fill is the dark blue of the sky, and the distance goes to it.
+    if (n > 0) {
+      this.scene.environmentIntensity = MathUtils.lerp(this.scene.environmentIntensity, 1.3 * params.skyLight, n);
+      this.fill.color.lerp(NIGHT_FILL, n);
+      this.fill.intensity = MathUtils.lerp(this.fill.intensity, 0.32 * params.skyLight, n);
+      this.groundUniforms.horizon.value.lerp(NIGHT_NEAR, n);
+      this.groundUniforms.aerialFar.value.lerp(NIGHT_FAR, n);
+      this.groundUniforms.snow.value.lerp(MOONLIGHT, n);
+    }
+  }
+
+  /** Day or night; the change takes a few seconds, like a dusk. */
+  setNight(on: boolean): void {
+    this.nightTarget = on ? 1 : 0;
+    this.flock.roost(on);
+  }
+
+  private easeNight(dt: number): void {
+    if (Math.abs(this.nightTarget - this.nightness) < 1e-4) return;
+    this.nightness += (this.nightTarget - this.nightness) * (1 - Math.exp(-dt / 1.3));
+    if (Math.abs(this.nightTarget - this.nightness) < 2e-3) this.nightness = this.nightTarget;
+    this.tree.uniforms.night.value = this.nightness;
+    this.post.setNight(this.nightness);
+    if (this.skyNow) this.applySkyNow(this.skyNow);
   }
 
   // --------------------------------------------------------------- growth
@@ -962,6 +1009,7 @@ export class TreeStudio {
     this.easeSeason(dt);
 
     this.easeSky(dt);
+    this.easeNight(dt);
     this.post.tick(dt);
     this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
     this.sky.setRainbow(this.rainbow);

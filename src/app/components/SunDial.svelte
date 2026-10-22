@@ -19,12 +19,14 @@
     bearing: number;
     min?: number;
     max?: number;
+    /** At night the same dial places the moon. */
+    night?: boolean;
   }
 
   import Viewpoint from './Viewpoint.svelte';
   import { wobble } from './wobble';
 
-  let { azimuth = $bindable(), elevation = $bindable(), bearing, min = -2, max = 70 }: Props = $props();
+  let { azimuth = $bindable(), elevation = $bindable(), bearing, min = -2, max = 70, night = false }: Props = $props();
 
   const R = 92;
   const C = 100;
@@ -40,11 +42,13 @@
 
   // The sun's own colour, from deep orange on the horizon to white overhead.
   const sunColor = $derived(
-    elevation < 4 ? '#ff8a3c' : elevation < 14 ? '#ffb45c' : elevation < 30 ? '#ffd889' : '#fff4d6',
+    night ? '#eef1fa' : elevation < 4 ? '#ff8a3c' : elevation < 14 ? '#ffb45c' : elevation < 30 ? '#ffd889' : '#fff4d6',
   );
 
   const when = $derived(
-    elevation < 1
+    night
+      ? 'Moonlight'
+      : elevation < 1
       ? 'At the horizon'
       : elevation < 12
         ? 'Golden hour'
@@ -116,9 +120,9 @@
   >
     <defs>
       <radialGradient id="dial-sky" cx="50%" cy="50%" r="50%">
-        <stop offset="0" stop-color="#9cc3e2" stop-opacity="0.62" />
-        <stop offset="0.7" stop-color="#cfe0ea" stop-opacity="0.5" />
-        <stop offset="1" stop-color="#f0cf9e" stop-opacity="0.62" />
+        <stop offset="0" stop-color={night ? '#1d2a52' : '#9cc3e2'} stop-opacity="0.62" />
+        <stop offset="0.7" stop-color={night ? '#2c3a68' : '#cfe0ea'} stop-opacity="0.55" />
+        <stop offset="1" stop-color={night ? '#4a5686' : '#f0cf9e'} stop-opacity="0.62" />
       </radialGradient>
       <radialGradient id="dial-glow">
         <stop offset="0" stop-color={sunColor} stop-opacity="0.9" />
@@ -137,10 +141,15 @@
     <circle cx={C - 3} cy={C - 3} r="3.5" fill="#86a83c" />
 
     <!-- the light falling across the tree -->
-    <line x1={sunX} y1={sunY} x2={C} y2={C} stroke="#b87730" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" />
+    <line x1={sunX} y1={sunY} x2={C} y2={C} stroke={night ? '#9aa6d6' : '#b87730'} stroke-opacity="0.5" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" />
 
     <circle cx={sunX} cy={sunY} r="22" fill="url(#dial-glow)" />
-    <circle cx={sunX} cy={sunY} r="9" fill={sunColor} stroke="#b87730" stroke-width="2" class="sun" />
+    <circle cx={sunX} cy={sunY} r="9" fill={sunColor} stroke={night ? '#7f8bbd' : '#b87730'} stroke-width="2" class="sun" />
+    {#if night}
+      <!-- the dark of the moon, cut from the disc to leave a crescent -->
+      <defs><clipPath id="moon-disc"><circle cx={sunX} cy={sunY} r="9" /></clipPath></defs>
+      <circle cx={sunX + 4.5} cy={sunY - 3} r="8" fill="#3a4677" fill-opacity="0.85" clip-path="url(#moon-disc)" pointer-events="none" />
+    {/if}
   </svg>
   <p class="reading"><b>{when}</b>, {where}</p>
 </div>

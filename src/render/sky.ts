@@ -41,10 +41,15 @@ import { CubeRenderTarget, NodeMaterial, type WebGPURenderer } from 'three/webgp
 import {
   abs,
   acos,
+  dot,
+  exp,
   float,
   fract,
   mix,
   mx_fractal_noise_float,
+  mx_noise_float,
+  sin,
+  step,
   normalWorldGeometry,
   positionWorldDirection,
   smoothstep,
@@ -185,6 +190,12 @@ export function createSkyUniforms() {
     cloudHigh: uniform(new Color(0x6f777f)),
     /** How much of a rainbow is showing, 0–1. Never set on the environment sky. */
     rainbow: uniform(0),
+    /** 0 day, 1 night, eased between. */
+    night: uniform(0),
+    /** Where the moon is. */
+    moonDir: uniform(new Vector3(0, 0.5, -1).normalize()),
+    /** 1 for the sky you see; 0 for the environment bake, which wants no stars or moon disc. */
+    detail: uniform(1),
   };
 }
 
@@ -248,7 +259,7 @@ export function skyNode(u: SkyUniforms, direction: Vec3Node): Vec3Node {
   const bow2 = smoothstep(0, 0.25, x2).mul(smoothstep(1, 0.75, x2));
   const colour1 = mix(spectrum(mix(float(0.78), float(0), x1.clamp(0, 1))), vec3(1), 0.12);
   const colour2 = mix(spectrum(mix(float(0), float(0.78), x2.clamp(0, 1))), vec3(1), 0.2);
-  const shows = u.rainbow.mul(smoothstep(-0.01, 0.03, y)).mul(u.overcast.mul(0.8).oneMinus());
+  const shows = u.rainbow.mul(smoothstep(-0.01, 0.03, y)).mul(u.overcast.mul(0.8).oneMinus()).mul(u.night.oneMinus());
   const darkBand = smoothstep(42.2, 43.4, theta).mul(smoothstep(50.4, 49.2, theta));
   const brighterInside = smoothstep(40.6, 26, theta);
   sky = sky
@@ -278,11 +289,56 @@ export function skyNode(u: SkyUniforms, direction: Vec3Node): Vec3Node {
     float(0.9).sub(u.overcast.mul(0.55)),
     billow.mul(0.5).add(0.5),
   ).max(u.overcast.sub(0.75).mul(4).clamp(0, 1));
-  sky = mix(sky, ceiling, coverage.mul(smoothstep(-0.02, 0.06, y)).mul(u.overcast.mul(4).clamp(0, 1)));
+  const cloudMask = coverage.mul(smoothstep(-0.02, 0.06, y)).mul(u.overcast.mul(4).clamp(0, 1));
+  sky = mix(sky, ceiling, cloudMask);
 
   // Below the horizon, fade to the dusty bounce coming off the ground.
   const below = smoothstep(0, 0.35, y.negate());
   sky = mix(sky, u.ground, below.mul(0.9));
+
+  /*
+   * Night. A deep blue that is darker overhead than at the horizon; a moon
+   * with its seas and a darker limb, a soft halo round it; stars, which are
+   * hashed into a fine grid of cells on the sphere — only a few cells hold
+   * one, each a small soft point of its own brightness, twinkling slowly and
+   * thinning out toward the horizon where the air is thickest; and the faint
+   * band of the Milky Way across them. Cloud covers all of it.
+   */
+  let nightSky = mix(vec3(0.03, 0.042, 0.078), vec3(0.006, 0.012, 0.034), t) as unknown as Vec3Node;
+
+  const cosMoon = dir.dot(u.moonDir).clamp(-1, 1);
+  const moonGlow = cosMoon.clamp(0, 1).pow(420).mul(0.22).add(cosMoon.clamp(0, 1).pow(18).mul(0.025));
+  nightSky = nightSky.add(vec3(0.55, 0.63, 0.82).mul(moonGlow));
+
+  const above = smoothstep(0.0, 0.2, y);
+  const cell = dir.mul(160);
+  const id = cell.floor();
+  const h = fract(sin(dot(id, vec3(127.1, 311.7, 74.7))).mul(43758.5453));
+  const h2 = fract(h.mul(17.31));
+  const point = smoothstep(0.17, 0.0, cell.fract().sub(0.5).length());
+  const twinkle = sin(time.mul(h2.mul(2.5).add(1.2)).add(h.mul(90))).mul(0.22).add(0.78);
+  const star = step(0.968, h).mul(point).mul(h2.pow(3).mul(2.4).add(0.3)).mul(twinkle);
+  const milky = exp(dot(dir, vec3(0.32, 0.58, -0.75)).pow(2).mul(-26));
+  const dust = mx_fractal_noise_float(dir.mul(5.5), 4, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
+  nightSky = nightSky
+    .add(vec3(0.55, 0.6, 0.82).mul(milky.mul(dust).mul(0.06)).mul(above))
+    .add(vec3(0.92, 0.94, 1).mul(star).mul(above).mul(u.detail));
+
+  const moonR = 0.026;
+  const moonAngle = acos(cosMoon);
+  const moonDisc = smoothstep(moonR, moonR * 0.93, moonAngle).mul(u.detail);
+  const local = dir.sub(u.moonDir.mul(cosMoon)).div(moonR);
+  const seas = smoothstep(0.38, 0.62, mx_noise_float(local.mul(1.7).add(3.1)).mul(0.5).add(0.5));
+  const limb = moonAngle.div(moonR).clamp(0, 1).pow(2).oneMinus().sqrt();
+  const moon = vec3(0.96, 0.94, 0.87).mul(mix(float(0.66), float(1), seas)).mul(mix(float(0.6), float(1), limb)).mul(1.15);
+  nightSky = mix(nightSky, moon, moonDisc);
+
+  // Night cloud: dark, lit a little at the edges by the moon.
+  const nightCloud = vec3(0.028, 0.034, 0.05).mul(billow.mul(0.3).add(0.85)).add(vec3(0.3, 0.34, 0.45).mul(moonGlow.mul(0.6)));
+  nightSky = mix(nightSky, nightCloud, cloudMask);
+  nightSky = mix(nightSky, vec3(0.018, 0.022, 0.032), below.mul(0.9));
+
+  sky = mix(sky, nightSky, u.night);
 
   return sky.mul(u.intensity);
 }
@@ -314,6 +370,7 @@ export class ProceduralSky {
     // hold `disc` at zero while sharing every other value; `update` mirrors the
     // rest across, so the two skies cannot drift.
     this.envUniforms.disc.value = 0;
+    this.envUniforms.detail.value = 0;
 
     const material = new NodeMaterial();
     material.name = 'Sky.environment';
@@ -390,6 +447,15 @@ export class ProceduralSky {
 
     this.envDirty = true;
     return this.light;
+  }
+
+  /** Day to night, 0–1, and where the moon is. */
+  setNight(amount: number, moon: Vector3): void {
+    this.uniforms.night.value = amount;
+    this.envUniforms.night.value = amount;
+    this.uniforms.moonDir.value.copy(moon);
+    this.envUniforms.moonDir.value.copy(moon);
+    this.envDirty = true;
   }
 
   /** How much of a rainbow is showing, 0–1. The environment sky never has one: it would tint the light. */

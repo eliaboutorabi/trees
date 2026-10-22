@@ -472,6 +472,12 @@
     studio?.setRainbow(on);
   });
 
+  $effect(() => {
+    const on = params.night;
+    if (!ready) return;
+    studio?.setNight(on);
+  });
+
   /**
    * A rainbow wants a low sun — above 42° there is none at all — and the sky
    * opposite it. So asking for one brings the sun down if it is high, and the
@@ -559,6 +565,7 @@
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
           { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
           { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow },
+          { id: 'night', label: params.night ? 'Day' : 'Night', icon: params.night ? 'season-summer' : 'moon', on: params.night, tone: '#9aa6d6', toneInk: '#2c3566', toggle: () => (params.night = !params.night) },
         ]}
       />
 
@@ -698,8 +705,8 @@
 {/snippet}
 
 {#snippet lightPanel()}
-  <SunDial bind:azimuth={params.sunAzimuth} bind:elevation={params.sunElevation} bearing={cameraBearing} />
-  <PicSlider label="Sunlight" bind:value={params.sunIntensity} min={0} max={12} step={0.1} from="sun-soft" to="sun-strong" hint="How strong the sun's beam is" />
+  <SunDial bind:azimuth={params.sunAzimuth} bind:elevation={params.sunElevation} bearing={cameraBearing} night={params.night} />
+  <PicSlider label={params.night ? 'Moonlight' : 'Sunlight'} bind:value={params.sunIntensity} min={0} max={12} step={0.1} from="sun-soft" to="sun-strong" hint="How strong the sun's beam is" />
   <PicSlider label="Haze" bind:value={params.haze} min={0} max={1} from="hills-clear" to="hills-hazy" hint="Clear air, or a hazy sky that softens the sun and the distance" />
   <PicSlider label="Colour" bind:value={params.colour} min={0} max={2} from="colour-muted" to="colour-vivid" hint="Muted, natural or vivid colour" />
   <Fold>

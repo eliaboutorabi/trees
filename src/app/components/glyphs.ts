@@ -206,6 +206,13 @@ export const GLYPHS = {
     { d: 'M14.1 10.2l1.7-1.7a3.1 3.1 0 0 1 4.4 4.4l-2.6 2.6a3.1 3.1 0 0 1-4.4 0', k: 'ink' },
     { d: 'M9.5 14.5l5-5', k: 'ink' },
   ],
+  // A crescent moon and two stars.
+  moon: [
+    { d: 'M14.6 3.6a8.6 8.6 0 1 0 5.9 14.5 7 7 0 1 1-5.9-14.5z', k: 'both', c: 'sun' },
+    { d: 'M18.6 5.2l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z', k: 'dot' },
+    { d: ring(20.6, 10.6, 0.7), k: 'dot' },
+  ],
+
   // A rainbow: three bands, coloured in where the page allows.
   rainbow: [
     { d: 'M3 18a9 9 0 0 1 18 0h-2.7a6.3 6.3 0 0 0-12.6 0z', k: 'wash', c: 'fruit' },

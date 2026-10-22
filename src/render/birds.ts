@@ -357,7 +357,7 @@ function doveMaterial(r: Rig) {
 // --------------------------------------------------------------- behaviour
 
 type Mode = 'away' | 'perched' | 'ground' | 'flying';
-type Landing = 'perch' | 'ground';
+type Landing = 'perch' | 'ground' | 'away';
 type Act = 'still' | 'peck' | 'preen' | 'coo' | 'walk';
 
 interface Dove {
@@ -520,6 +520,28 @@ export class Flock {
    * other and wheel round the tree together before coming back down — and if
    * the crown is still being rustled when they get back, they go up again.
    */
+  /**
+   * Night: everyone leaves for wherever doves sleep, and nobody comes until
+   * morning. Each flies off from where it is — off a twig, up from the grass,
+   * or turning away mid-flight — to a point well out of sight.
+   */
+  roost(on: boolean): void {
+    this.roosting = on;
+    if (!on) return;
+    for (const d of this.doves) {
+      if (d.mode === 'away' || d.landing === 'away') continue;
+      if (d.mode === 'perched' && d.perch >= 0) this.taken.delete(d.perch);
+      d.flushIn = -1;
+      d.landing = 'away';
+      this.offstage(d.spot);
+      if (d.mode === 'flying' && d.curve) d.pos.copy(d.curve.getPointAt(along(d.t, d.ramp)));
+      d.mode = 'flying';
+      this.launch(d, []);
+    }
+  }
+
+  private roosting = false;
+
   startle(point: Vector3): void {
     if (this.clock - this.startledAt > 6) this.wheelTurn = this.rng() < 0.5 ? -1 : 1;
     this.startledAt = this.clock;
@@ -559,7 +581,7 @@ export class Flock {
       switch (d.mode) {
         case 'away':
           d.rest -= dt;
-          if (d.rest <= 0 && grown) this.arrive(d);
+          if (d.rest <= 0 && grown && !this.roosting) this.arrive(d);
           break;
         case 'perched':
           // No tree to sit in, or the twig it was on went with the old tree:
@@ -791,6 +813,12 @@ export class Flock {
   private land(d: Dove): void {
     d.curve = null;
     d.beat = 0;
+    if (d.landing === 'away') {
+      d.mode = 'away';
+      d.landing = 'ground';
+      d.rest = 4 + this.rng() * 14;
+      return;
+    }
     if (d.landing === 'perch' && d.perch >= 0) {
       d.mode = 'perched';
       // Across the branch, facing whichever way it came in.

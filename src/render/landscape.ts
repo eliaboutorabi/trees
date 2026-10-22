@@ -27,7 +27,7 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
 import { createGroundMaterial } from './materials/ground';
 import { createGroundCoverMaterial } from './materials/groundCover';
@@ -452,7 +452,7 @@ export interface ScatterOptions {
 
 function scatter(
   geometry: BufferGeometry,
-  material: MeshStandardNodeMaterial,
+  material: MeshStandardNodeMaterial | MeshLambertNodeMaterial,
   opts: LandscapeOptions,
   s: ScatterOptions,
 ): InstancedMesh {
@@ -620,11 +620,14 @@ export function createLandscape(
   // A distant treeline. Three silhouettes rather than one, clumped into stands
   // that follow the land, because a uniform scatter of identical shapes reads
   // as an orchard at best and as wallpaper at worst.
-  const distantMat = track(new MeshStandardNodeMaterial());
-  // Dark. Their normals lean upward so they do not go black under a low sun,
-  // which also means they catch a great deal of sky — a mid-tone albedo comes
-  // out pale grey and the stand reads as fog rather than as woodland.
-  distantMat.roughness = 1;
+  // Diffuse only. Their normals lean upward so they do not go black under a
+  // low sun, which also means a specular lobe — even a fully rough one — throws
+  // a glancing sheen straight at a camera looking toward the light: facing
+  // the low sun, or the moon at night, the whole treeline lit up pale, a row
+  // of ghosts on the hill. Woodland at this distance has no shine to give.
+  const distantMat = track(new MeshLambertNodeMaterial());
+  // Dark: they catch a great deal of sky, and a mid-tone albedo comes out pale
+  // grey, so the stand reads as fog rather than as woodland.
   distantMat.color = new Color(0x2b3520);
   const stands: [Parameters<typeof distantTreeGeometry>[0], number, number, [number, number]][] = [
     ['conifer', 0, 620, [2.6, 6.5]],

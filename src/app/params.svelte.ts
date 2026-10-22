@@ -9,13 +9,15 @@ export interface AppParams extends StudioParams {
   autoGrow: boolean;
   /** A rainbow in the sky opposite the sun. */
   rainbow: boolean;
+  /** Night, with a moon and stars, instead of day. */
+  night: boolean;
 }
 
 /**
  * Switches that belong to the scene, not to the tree: choosing another
  * species should not stop the camera circling or take the rainbow away.
  */
-const SCENE_KEYS = ['autoRotate', 'depthOfField', 'rainbow', 'grain', 'antialias', 'quality'] as const;
+const SCENE_KEYS = ['autoRotate', 'depthOfField', 'rainbow', 'night', 'grain', 'antialias', 'quality'] as const;
 
 export const presets = PRESETS;
 
@@ -87,6 +89,7 @@ export function paramsFromPreset(id: string, season: Season = 'summer', weather?
     antialias: true,
     autoRotate: false,
     rainbow: false,
+    night: false,
     quality: 'auto' as Quality,
 
     growthSpeed: 0.3,
