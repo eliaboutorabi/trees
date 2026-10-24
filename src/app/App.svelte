@@ -557,6 +557,16 @@
         <button class="round" onclick={resetToDefaults} title="Start this species over" aria-label="Reset to defaults">
           <Glyph name="reset" size={21} />
         </button>
+        <a
+          class="round"
+          href="https://github.com/eliaboutorabi/trees"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="The project on GitHub"
+          aria-label="Open the project on GitHub"
+        >
+          <Glyph name="github" size={21} />
+        </a>
       </div>
 
       <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} />
@@ -928,6 +938,7 @@
     height: 2.55rem;
     display: grid;
     place-items: center;
+    text-decoration: none;
     color: var(--ink);
     background: var(--sheen), var(--glass);
     backdrop-filter: var(--frost);
@@ -944,6 +955,7 @@
   .round:nth-child(2) { border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%; }
   .round:nth-child(3) { border-radius: 55% 45% 51% 49% / 50% 56% 44% 50%; }
   .round:nth-child(4) { border-radius: 49% 51% 45% 55% / 45% 50% 50% 55%; }
+  .round:nth-child(5) { border-radius: 53% 47% 50% 50% / 48% 53% 47% 52%; }
 
   .round:hover {
     transform: translateY(-2px) rotate(-4deg);
