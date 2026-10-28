@@ -13,6 +13,20 @@ import type { SketchLook, SketchSource } from './sketch';
 
 export type Knob = 'angle' | 'step' | 'shrink' | 'tropism' | 'seed';
 
+/** A lesson's grammar on its way to the garden, with leaves to suit it. */
+export interface Planting extends SketchSource {
+  leafScale: number;
+}
+
+/** The board's leaf size when a lesson does not say. */
+export const LEAF_SCALE = 0.34;
+/**
+ * The garden's leaves are a fuller shape than the board's almonds — a blade
+ * with a stalk, wider at the shoulder — so the same size reads as a much
+ * bigger leaf there. Planted, they are taken down to match.
+ */
+export const PLANT_LEAF_RATIO = 0.55;
+
 export interface Lesson {
   id: string;
   title: string;
@@ -23,6 +37,8 @@ export interface Lesson {
   look: SketchLook;
   /** Leaf size on the board, in the drawing's own units. */
   leafScale?: number;
+  /** Leaf size when planted, if not the board's. */
+  plantLeafScale?: number;
   /** Show the derived word: worth it while it is short enough to read. */
   showWord?: boolean;
   /** The controls under the drawing, besides generations. */
@@ -219,6 +235,7 @@ export const LESSONS: Lesson[] = [
     maxIterations: 10,
     look: 'tree',
     leafScale: 0.2,
+    plantLeafScale: oak.params.leafScale,
     knobs: ['angle', 'shrink', 'seed'],
     tries: ['Find the `137.5` rolls, and change them.', 'Open the crown: raise `ANG`.', 'Give it blossom: change one `L` to a `K`.'],
     plant: true,

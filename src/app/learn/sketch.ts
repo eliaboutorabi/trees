@@ -159,7 +159,7 @@ export class Sketch {
    * Build a grammar and draw it. `grow` draws it in from the root; otherwise
    * it simply becomes the new drawing, which is what you want while typing.
    */
-  show(src: SketchSource, look: SketchLook, options: { grow: boolean; leafScale?: number }): SketchInfo {
+  show(src: SketchSource, look: SketchLook, options: { grow: boolean; leafScale: number }): SketchInfo {
     const build = buildTree({
       axiom: src.axiom,
       rules: src.rules,
@@ -171,7 +171,7 @@ export class Sketch {
       seed: src.seed,
       trunkRadius: 1,
       pipeExponent: 2.4,
-      leafScale: options.leafScale ?? 0.34,
+      leafScale: options.leafScale,
       autoLeaves: false,
       maxModules: MAX_MODULES,
       maxSegments: MAX_SEGMENTS,

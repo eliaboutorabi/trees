@@ -13,13 +13,13 @@
   import Glyph from '../components/Glyph.svelte';
   import Slider from '../components/Slider.svelte';
   import { cut } from '../components/paper';
-  import { LESSONS, prose, type Knob } from './lessons';
+  import { LEAF_SCALE, LESSONS, PLANT_LEAF_RATIO, prose, type Knob, type Planting } from './lessons';
   import { Sketch, type SketchInfo, type SketchSource } from './sketch';
 
   interface Props {
     onclose: () => void;
     /** Grow a lesson's grammar in the garden. */
-    onplant?: (source: SketchSource) => void;
+    onplant?: (planting: Planting) => void;
   }
 
   let { onclose, onplant }: Props = $props();
@@ -58,7 +58,7 @@
     if (!board) return;
     clearTimeout(typing);
     const draw = () => {
-      info = board.show(src, LESSONS[i].look, { grow: i !== shown, leafScale: LESSONS[i].leafScale });
+      info = board.show(src, LESSONS[i].look, { grow: i !== shown, leafScale: LESSONS[i].leafScale ?? LEAF_SCALE });
       shown = i;
     };
     if (i !== shown) draw();
@@ -90,7 +90,7 @@
   }
 
   function plant() {
-    onplant?.({ ...draft });
+    onplant?.({ ...draft, leafScale: lesson.plantLeafScale ?? (lesson.leafScale ?? LEAF_SCALE) * PLANT_LEAF_RATIO });
   }
 
   function lines(text: string) {

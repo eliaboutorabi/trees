@@ -24,6 +24,7 @@
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
   import Learn from './learn/Learn.svelte';
+  import type { Planting } from './learn/lessons';
 
   let canvas = $state<HTMLCanvasElement>();
   let stage = $state<HTMLDivElement>();
@@ -303,6 +304,32 @@
   /** Another tree of the same kind: the old one grows back and the new one grows out. */
   function shuffleSeed() {
     params.seed = Math.floor(Math.random() * 1_000_000);
+    if (!studio) return;
+    const snapshot = structureSnapshot();
+    built = snapshot;
+    studio.transitionTo(snapshot, activePreset.palette, params.growthSpeed).then((info) => {
+      if (info) issues = info.issues;
+    });
+  }
+
+  /**
+   * Grow a grammar from the Learn page in the garden: it becomes this tree's
+   * grammar, the one standing grows back into the ground, and the new one
+   * grows out — the same change of tree as picking a species.
+   */
+  function plantLesson(src: Planting) {
+    params.axiom = src.axiom;
+    params.rules = src.rules;
+    params.iterations = src.iterations;
+    params.angle = src.angle;
+    params.step = src.step;
+    params.shrink = src.shrink;
+    params.tropism = src.tropism;
+    params.seed = src.seed;
+    params.leafScale = src.leafScale;
+    axiomDraft = params.axiom;
+    rulesDraft = params.rules;
+    learnOpen = false;
     if (!studio) return;
     const snapshot = structureSnapshot();
     built = snapshot;
@@ -616,7 +643,7 @@
 </div>
 
 {#if learnOpen}
-  <Learn onclose={() => (learnOpen = false)} />
+  <Learn onclose={() => (learnOpen = false)} onplant={plantLesson} />
 {/if}
 
 {#snippet speciesPanel()}
