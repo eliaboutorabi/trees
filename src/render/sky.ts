@@ -359,129 +359,155 @@ export function createAuroraDome(u: SkyUniforms): Mesh {
  * tone-mapped background used simultaneously as an IBL source.
  */
 export function skyNode(u: SkyUniforms, direction: Vec3Node): Vec3Node {
-  const dir = direction.normalize();
-  const y = dir.y;
-  const haze = u.haze;
-
-  // Gradient, compressed toward the horizon and flattened further by haze.
-  const t = y.clamp(0, 1).pow(float(0.42).add(haze.mul(0.3)));
-  let sky = mix(u.horizon, u.zenith, t);
-
-  // Warm forward scatter: a tight halo on the sun, and a broad band along its
-  // azimuth that hugs the horizon. Haze widens both, because that is what more
-  // aerosol does — it spreads the sun's light over more of the sky.
-  const cosSun = dir.dot(u.sunDir).clamp(0, 1);
-  const halo = cosSun.pow(mix(float(16), float(4), haze)).mul(0.5).add(cosSun.pow(mix(float(4), float(1.5), haze)).mul(0.11));
-  const band = y.abs().mul(float(7).sub(haze.mul(4))).negate().exp().mul(cosSun.pow(1.5)).mul(0.26);
-  sky = sky.add(u.sunTint.mul(halo.add(band).mul(haze.mul(0.5).add(1))));
-
-  // The disc. Bright enough to bloom, dim enough to stay orange rather than
-  // clipping to white — and switched off entirely for the environment map,
-  // because a specular lobe at any real roughness integrates a wide cone, so a
-  // disc carrying 30x the surrounding radiance smears over every rough surface
-  // in the scene. A black-albedo sphere still rendered as a pale grey ball.
-  const disc = smoothstep(0.99978, 0.99995, cosSun).mul(u.disc).mul(float(1).sub(haze.mul(0.5)));
-  sky = sky.add(u.sunTint.mul(disc));
-
   /*
-   * The rainbow. It is a circle about the point directly opposite the sun:
-   * the primary bow 40.6–42.4° out, violet inside and red outside; a fainter
-   * secondary at 50–53.6° with its colours the other way round; the sky
-   * brighter inside the primary, and Alexander's darker band between the two.
-   * Because it is centred on the antisolar point, it is only ever in the half
-   * of the sky facing away from the sun, and the higher the sun the lower it
-   * sits — above 42° there is none. Drawn into the sky before the cloud, so a
-   * closed sky hides it.
+   * Built as a function with branches on uniforms, so a part that cannot show
+   * is skipped outright rather than computed and multiplied by zero. The sky
+   * is a large share of the screen, and profiling under load found it the
+   * most expensive surface in the frame per pixel — because every pixel of it
+   * was working out stars, the Milky Way, the moon's seas, a cloud layer and
+   * a rainbow, by day under a clear sky. Each branch tests a uniform, the
+   * same for the whole frame, so taking or skipping it costs nothing.
    */
-  const theta = acos(dir.dot(u.sunDir.negate()).clamp(-1, 1)).mul(180 / Math.PI);
-  const x1 = theta.sub(40.4).div(2.2);
-  const bow1 = smoothstep(0, 0.22, x1).mul(smoothstep(1, 0.78, x1));
-  const x2 = theta.sub(50.0).div(3.6);
-  const bow2 = smoothstep(0, 0.25, x2).mul(smoothstep(1, 0.75, x2));
-  const colour1 = mix(spectrum(mix(float(0.78), float(0), x1.clamp(0, 1))), vec3(1), 0.12);
-  const colour2 = mix(spectrum(mix(float(0), float(0.78), x2.clamp(0, 1))), vec3(1), 0.2);
-  const shows = u.rainbow.mul(smoothstep(-0.01, 0.03, y)).mul(u.overcast.mul(0.8).oneMinus()).mul(u.night.oneMinus());
-  const darkBand = smoothstep(42.2, 43.4, theta).mul(smoothstep(50.4, 49.2, theta));
-  const brighterInside = smoothstep(40.6, 26, theta);
-  sky = sky
-    .mul(float(1).sub(darkBand.mul(0.1).mul(shows)))
-    .add(sky.mul(brighterInside.mul(0.07).mul(shows)))
-    .add(colour1.mul(bow1).mul(0.3).add(colour2.mul(bow2).mul(0.11)).mul(shows));
+  return Fn(() => {
+    const dir = direction.normalize().toVar();
+    const y = dir.y;
+    const haze = u.haze;
 
-  // A brighter line right along the horizon, which is where the most air is.
-  const hug = y.abs().mul(26).negate().exp().mul(float(0.05).add(haze.mul(0.3)));
-  sky = sky.add(u.horizon.mul(hug));
+    // Gradient, compressed toward the horizon and flattened further by haze.
+    const t = y.clamp(0, 1).pow(float(0.42).add(haze.mul(0.3))).toVar();
+    const sky = mix(u.horizon, u.zenith, t).toVar();
 
-  /*
-   * Cloud. A layer projected onto a plane overhead — dividing by the height of
-   * the ray is what makes it recede into the horizon with the right
-   * perspective, cells large overhead and crowding into a band low down — and
-   * shaded by a few octaves of noise, drifting, so a closed sky is a ceiling
-   * with weight and texture rather than a flat grey card. It also swallows the
-   * sun's halo and disc, which were added above; that is the point.
-   */
-  const plane = vec3(dir.x, 0, dir.z).div(y.max(0.045)).mul(0.42);
-  const drift = time.mul(0.012);
-  const billow = mx_fractal_noise_float(vec3(plane.x.add(drift), plane.z, drift.mul(0.4)), 4, 2.0, 0.5, 1.0);
-  const ceiling = mix(u.cloudLow, u.cloudHigh, t).mul(billow.mul(0.32).add(0.92));
-  // Patchy as it thickens: at half cover there are gaps, at full there are none.
-  const coverage = smoothstep(
-    float(0.62).sub(u.overcast.mul(0.95)),
-    float(0.9).sub(u.overcast.mul(0.55)),
-    billow.mul(0.5).add(0.5),
-  ).max(u.overcast.sub(0.75).mul(4).clamp(0, 1));
-  const cloudMask = coverage.mul(smoothstep(-0.02, 0.06, y)).mul(u.overcast.mul(4).clamp(0, 1));
-  sky = mix(sky, ceiling, cloudMask);
+    // Warm forward scatter: a tight halo on the sun, and a broad band along its
+    // azimuth that hugs the horizon. Haze widens both, because that is what more
+    // aerosol does — it spreads the sun's light over more of the sky.
+    const cosSun = dir.dot(u.sunDir).clamp(0, 1);
+    const halo = cosSun.pow(mix(float(16), float(4), haze)).mul(0.5).add(cosSun.pow(mix(float(4), float(1.5), haze)).mul(0.11));
+    const band = y.abs().mul(float(7).sub(haze.mul(4))).negate().exp().mul(cosSun.pow(1.5)).mul(0.26);
+    sky.addAssign(u.sunTint.mul(halo.add(band).mul(haze.mul(0.5).add(1))));
 
-  // Below the horizon, fade to the dusty bounce coming off the ground.
-  const below = smoothstep(0, 0.35, y.negate());
-  sky = mix(sky, u.ground, below.mul(0.9));
+    // The disc. Bright enough to bloom, dim enough to stay orange rather than
+    // clipping to white — and switched off entirely for the environment map,
+    // because a specular lobe at any real roughness integrates a wide cone, so a
+    // disc carrying 30x the surrounding radiance smears over every rough surface
+    // in the scene. A black-albedo sphere still rendered as a pale grey ball.
+    const disc = smoothstep(0.99978, 0.99995, cosSun).mul(u.disc).mul(float(1).sub(haze.mul(0.5)));
+    sky.addAssign(u.sunTint.mul(disc));
 
-  /*
-   * Night. A deep blue that is darker overhead than at the horizon; a moon
-   * with its seas and a darker limb, a soft halo round it; stars, which are
-   * hashed into a fine grid of cells on the sphere — only a few cells hold
-   * one, each a small soft point of its own brightness, twinkling slowly and
-   * thinning out toward the horizon where the air is thickest; and the faint
-   * band of the Milky Way across them. Cloud covers all of it.
-   */
-  let nightSky = mix(vec3(0.03, 0.042, 0.078), vec3(0.006, 0.012, 0.034), t) as unknown as Vec3Node;
+    /*
+     * The rainbow. It is a circle about the point directly opposite the sun:
+     * the primary bow 40.6–42.4° out, violet inside and red outside; a fainter
+     * secondary at 50–53.6° with its colours the other way round; the sky
+     * brighter inside the primary, and Alexander's darker band between the two.
+     * Because it is centred on the antisolar point, it is only ever in the half
+     * of the sky facing away from the sun, and the higher the sun the lower it
+     * sits — above 42° there is none. Drawn into the sky before the cloud, so a
+     * closed sky hides it.
+     */
+    If(u.rainbow.mul(u.night.oneMinus()).greaterThan(0.001), () => {
+      const theta = acos(dir.dot(u.sunDir.negate()).clamp(-1, 1)).mul(180 / Math.PI);
+      const x1 = theta.sub(40.4).div(2.2);
+      const bow1 = smoothstep(0, 0.22, x1).mul(smoothstep(1, 0.78, x1));
+      const x2 = theta.sub(50.0).div(3.6);
+      const bow2 = smoothstep(0, 0.25, x2).mul(smoothstep(1, 0.75, x2));
+      const colour1 = mix(spectrum(mix(float(0.78), float(0), x1.clamp(0, 1))), vec3(1), 0.12);
+      const colour2 = mix(spectrum(mix(float(0), float(0.78), x2.clamp(0, 1))), vec3(1), 0.2);
+      const shows = u.rainbow.mul(smoothstep(-0.01, 0.03, y)).mul(u.overcast.mul(0.8).oneMinus()).mul(u.night.oneMinus());
+      const darkBand = smoothstep(42.2, 43.4, theta).mul(smoothstep(50.4, 49.2, theta));
+      const brighterInside = smoothstep(40.6, 26, theta);
+      sky.assign(
+        sky
+          .mul(float(1).sub(darkBand.mul(0.1).mul(shows)))
+          .add(sky.mul(brighterInside.mul(0.07).mul(shows)))
+          .add(colour1.mul(bow1).mul(0.3).add(colour2.mul(bow2).mul(0.11)).mul(shows)),
+      );
+    });
 
-  const cosMoon = dir.dot(u.moonDir).clamp(-1, 1);
-  const moonGlow = cosMoon.clamp(0, 1).pow(420).mul(0.22).add(cosMoon.clamp(0, 1).pow(18).mul(0.025));
-  nightSky = nightSky.add(vec3(0.55, 0.63, 0.82).mul(moonGlow));
+    // A brighter line right along the horizon, which is where the most air is.
+    const hug = y.abs().mul(26).negate().exp().mul(float(0.05).add(haze.mul(0.3)));
+    sky.addAssign(u.horizon.mul(hug));
 
-  const above = smoothstep(0.0, 0.2, y);
-  const cell = dir.mul(160);
-  const id = cell.floor();
-  const h = fract(sin(dot(id, vec3(127.1, 311.7, 74.7))).mul(43758.5453));
-  const h2 = fract(h.mul(17.31));
-  const point = smoothstep(0.17, 0.0, cell.fract().sub(0.5).length());
-  const twinkle = sin(time.mul(h2.mul(2.5).add(1.2)).add(h.mul(90))).mul(0.22).add(0.78);
-  const star = step(0.968, h).mul(point).mul(h2.pow(3).mul(2.4).add(0.3)).mul(twinkle);
-  const milky = exp(dot(dir, vec3(0.32, 0.58, -0.75)).pow(2).mul(-26));
-  const dust = mx_fractal_noise_float(dir.mul(5.5), 4, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
-  nightSky = nightSky
-    .add(vec3(0.55, 0.6, 0.82).mul(milky.mul(dust).mul(0.06)).mul(above))
-    .add(vec3(0.92, 0.94, 1).mul(star).mul(above).mul(u.detail));
+    /*
+     * Cloud. A layer projected onto a plane overhead — dividing by the height of
+     * the ray is what makes it recede into the horizon with the right
+     * perspective, cells large overhead and crowding into a band low down — and
+     * shaded by a few octaves of noise, drifting, so a closed sky is a ceiling
+     * with weight and texture rather than a flat grey card. It also swallows the
+     * sun's halo and disc, which were added above; that is the point. Under a
+     * clear sky none of it is computed.
+     */
+    const billow = float(0).toVar();
+    const cloudMask = float(0).toVar();
+    If(u.overcast.greaterThan(0.001), () => {
+      const plane = vec3(dir.x, 0, dir.z).div(y.max(0.045)).mul(0.42);
+      const drift = time.mul(0.012);
+      billow.assign(mx_fractal_noise_float(vec3(plane.x.add(drift), plane.z, drift.mul(0.4)), 4, 2.0, 0.5, 1.0));
+      const ceiling = mix(u.cloudLow, u.cloudHigh, t).mul(billow.mul(0.32).add(0.92));
+      // Patchy as it thickens: at half cover there are gaps, at full there are none.
+      const coverage = smoothstep(
+        float(0.62).sub(u.overcast.mul(0.95)),
+        float(0.9).sub(u.overcast.mul(0.55)),
+        billow.mul(0.5).add(0.5),
+      ).max(u.overcast.sub(0.75).mul(4).clamp(0, 1));
+      cloudMask.assign(coverage.mul(smoothstep(-0.02, 0.06, y)).mul(u.overcast.mul(4).clamp(0, 1)));
+      sky.assign(mix(sky, ceiling, cloudMask));
+    });
 
-  const moonR = 0.026;
-  const moonAngle = acos(cosMoon);
-  const moonDisc = smoothstep(moonR, moonR * 0.93, moonAngle).mul(u.detail);
-  const local = dir.sub(u.moonDir.mul(cosMoon)).div(moonR);
-  const seas = smoothstep(0.38, 0.62, mx_noise_float(local.mul(1.7).add(3.1)).mul(0.5).add(0.5));
-  const limb = moonAngle.div(moonR).clamp(0, 1).pow(2).oneMinus().sqrt();
-  const moon = vec3(0.96, 0.94, 0.87).mul(mix(float(0.66), float(1), seas)).mul(mix(float(0.6), float(1), limb)).mul(1.15);
-  nightSky = mix(nightSky, moon, moonDisc);
+    // Below the horizon, fade to the dusty bounce coming off the ground.
+    const below = smoothstep(0, 0.35, y.negate()).toVar();
+    sky.assign(mix(sky, u.ground, below.mul(0.9)));
 
-  // Night cloud: dark, lit a little at the edges by the moon.
-  const nightCloud = vec3(0.028, 0.034, 0.05).mul(billow.mul(0.3).add(0.85)).add(vec3(0.3, 0.34, 0.45).mul(moonGlow.mul(0.6)));
-  nightSky = mix(nightSky, nightCloud, cloudMask);
-  nightSky = mix(nightSky, vec3(0.018, 0.022, 0.032), below.mul(0.9));
+    /*
+     * Night. A deep blue that is darker overhead than at the horizon; a moon
+     * with its seas and a darker limb, a soft halo round it; stars, which are
+     * hashed into a fine grid of cells on the sphere — only a few cells hold
+     * one, each a small soft point of its own brightness, twinkling slowly and
+     * thinning out toward the horizon where the air is thickest; and the faint
+     * band of the Milky Way across them. Cloud covers all of it. By day, none
+     * of it is computed.
+     */
+    If(u.night.greaterThan(0.001), () => {
+      const nightSky = mix(vec3(0.03, 0.042, 0.078), vec3(0.006, 0.012, 0.034), t).toVar();
 
-  sky = mix(sky, nightSky, u.night);
+      const cosMoon = dir.dot(u.moonDir).clamp(-1, 1).toVar();
+      const moonGlow = cosMoon.clamp(0, 1).pow(420).mul(0.22).add(cosMoon.clamp(0, 1).pow(18).mul(0.025)).toVar();
+      nightSky.addAssign(vec3(0.55, 0.63, 0.82).mul(moonGlow));
 
-  return sky.mul(u.intensity);
+      // Stars, the Milky Way and the moon's disc only in the sky you see: the
+      // environment bake wants none of them, and cannot resolve them anyway.
+      If(u.detail.greaterThan(0.5), () => {
+        const above = smoothstep(0.0, 0.2, y);
+        const cell = dir.mul(160);
+        const id = cell.floor();
+        const h = fract(sin(dot(id, vec3(127.1, 311.7, 74.7))).mul(43758.5453));
+        const h2 = fract(h.mul(17.31));
+        const point = smoothstep(0.17, 0.0, cell.fract().sub(0.5).length());
+        const twinkle = sin(time.mul(h2.mul(2.5).add(1.2)).add(h.mul(90))).mul(0.22).add(0.78);
+        const star = step(0.968, h).mul(point).mul(h2.pow(3).mul(2.4).add(0.3)).mul(twinkle);
+        const milky = exp(dot(dir, vec3(0.32, 0.58, -0.75)).pow(2).mul(-26));
+        const dust = mx_fractal_noise_float(dir.mul(5.5), 4, 2.0, 0.5, 1.0).mul(0.5).add(0.5);
+        nightSky.addAssign(vec3(0.55, 0.6, 0.82).mul(milky.mul(dust).mul(0.06)).mul(above));
+        nightSky.addAssign(vec3(0.92, 0.94, 1).mul(star).mul(above));
+
+        const moonR = 0.026;
+        const moonAngle = acos(cosMoon);
+        const moonDisc = smoothstep(moonR, moonR * 0.93, moonAngle);
+        const local = dir.sub(u.moonDir.mul(cosMoon)).div(moonR);
+        const seas = smoothstep(0.38, 0.62, mx_noise_float(local.mul(1.7).add(3.1)).mul(0.5).add(0.5));
+        const limb = moonAngle.div(moonR).clamp(0, 1).pow(2).oneMinus().sqrt();
+        const moon = vec3(0.96, 0.94, 0.87).mul(mix(float(0.66), float(1), seas)).mul(mix(float(0.6), float(1), limb)).mul(1.15);
+        nightSky.assign(mix(nightSky, moon, moonDisc));
+      });
+
+      // Night cloud: dark, lit a little at the edges by the moon.
+      const nightCloud = vec3(0.028, 0.034, 0.05).mul(billow.mul(0.3).add(0.85)).add(vec3(0.3, 0.34, 0.45).mul(moonGlow.mul(0.6)));
+      nightSky.assign(mix(nightSky, nightCloud, cloudMask));
+      nightSky.assign(mix(nightSky, vec3(0.018, 0.022, 0.032), below.mul(0.9)));
+
+      sky.assign(mix(sky, nightSky, u.night));
+    });
+
+    return sky.mul(u.intensity);
+  })() as unknown as Vec3Node;
 }
 
 /**
