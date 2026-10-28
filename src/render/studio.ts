@@ -339,7 +339,10 @@ export class TreeStudio {
   }
 
   async init(): Promise<void> {
-    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, alpha: false });
+    // `?profile` in the address turns on GPU timestamp queries, for measuring
+    // where the frame goes (see `gpuTime`); off otherwise, as they cost a little.
+    const profiling = new URLSearchParams(location.search).has('profile');
+    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, alpha: false, trackTimestamp: profiling });
     // The screen's own density, up to twice: drawn under it and stretched up,
     // the picture is soft and fine twigs shimmer.
     this.maxScale = Math.min(window.devicePixelRatio, 2);
@@ -1354,6 +1357,46 @@ export class TreeStudio {
     this.post?.setPixelRatio(scale);
     this.resize();
     this.settle(2000);
+  }
+
+  /**
+   * Developer aid: the GPU's own time per frame, in milliseconds, averaged
+   * over `frames` frames — what the frame actually costs, which the frame
+   * rate cannot say once it is pinned to the display or throttled. Needs
+   * `?profile` in the address (and a browser that offers timestamp queries).
+   */
+  async gpuTime(frames = 30): Promise<number> {
+    const samples: number[] = [];
+    for (let i = 0; i < frames; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      await this.renderer.resolveTimestampsAsync('render');
+      const ms = this.renderer.info.render.timestamp;
+      if (ms > 0) samples.push(ms);
+    }
+    samples.sort((a, b) => a - b);
+    return samples.length ? samples[Math.floor(samples.length / 2)] : NaN;
+  }
+
+  /**
+   * Developer aid: one frame's GPU passes in the order they ran, with their
+   * cost in milliseconds. Needs `?profile`, like `gpuTime`.
+   */
+  async gpuPasses(): Promise<{ call: number; ms: number }[]> {
+    const pool = (this.renderer.backend as unknown as { timestampQueryPool: Record<string, { timestamps: Map<string, number> }> }).timestampQueryPool.render;
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      await this.renderer.resolveTimestampsAsync('render');
+    }
+    const frames = new Map<number, { call: number; ms: number }[]>();
+    for (const [uid, ms] of pool.timestamps) {
+      const m = uid.match(/^r:(\d+):\d+:f(\d+)$/);
+      if (!m) continue;
+      const f = Number(m[2]);
+      if (!frames.has(f)) frames.set(f, []);
+      frames.get(f)!.push({ call: Number(m[1]), ms: +ms.toFixed(2) });
+    }
+    const last = Math.max(...frames.keys());
+    return (frames.get(last) ?? []).sort((a, b) => a.call - b.call);
   }
 
   /** Judge no frames for a while: the next few are not representative. */
