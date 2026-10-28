@@ -96,8 +96,11 @@
     onplant?.({ ...draft, leafScale: lesson.plantLeafScale ?? (lesson.leafScale ?? LEAF_SCALE) * PLANT_LEAF_RATIO });
   }
 
+  /** Rows enough for the rules as they wrap in the editor, and one to spare. */
   function lines(text: string) {
-    return Math.max(2, text.split('\n').length + 1);
+    const perRow = 46;
+    const rows = text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / perRow)), 0);
+    return Math.max(2, rows + 1);
   }
 
   const code = (src: string) => highlight(src);
