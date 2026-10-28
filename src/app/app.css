@@ -153,3 +153,10 @@ button {
   inherits: true;
   initial-value: #3f5a31;
 }
+
+/* How far a card has faded in, 0–1: animated, and read by every layer of it. */
+@property --fade {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}

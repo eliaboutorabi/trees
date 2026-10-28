@@ -198,7 +198,7 @@
     return {
       duration: 150,
       easing: cubicIn,
-      css: (t: number) => `opacity: ${t}; transform: translateY(${(1 - t) * 10}px) scale(${0.97 + 0.03 * t})`,
+      css: (t: number) => `--fade: ${t}; transform: translateY(${(1 - t) * 10}px) scale(${0.97 + 0.03 * t})`,
     };
   }
 
@@ -206,7 +206,7 @@
     return {
       duration: 170,
       easing: cubicIn,
-      css: (t: number) => `opacity: ${t}; transform: translateX(${(1 - t) * (toLeft ? 18 : -18)}px)`,
+      css: (t: number) => `--fade: ${t}; transform: translateX(${(1 - t) * (toLeft ? 18 : -18)}px)`,
     };
   }
 
@@ -343,6 +343,7 @@
       class:wide={open.wide}
       class:pinned={pinned === open.id}
       class:covered={moreOpen && moreOver && moreReady}
+      class:cut={!!cardCut}
       bind:this={card}
       bind:clientWidth={cardW}
       bind:clientHeight={cardH}
@@ -392,6 +393,7 @@
     class="more"
     class:over={moreOver}
     class:ready={moreReady}
+    class:cut={!!moreCut}
     class:left={!moreOver && moreLeft < cardLeft}
     bind:this={morePanel}
     bind:clientWidth={moreW}
@@ -636,14 +638,14 @@
     inset: 8px 0 -10px 0;
     z-index: -2;
     background: var(--cut-shadow) 0 0 / 100% 100% no-repeat;
-    opacity: 0.28;
+    opacity: calc(0.28 * var(--fade));
     filter: blur(14px);
     pointer-events: none;
   }
 
   @keyframes rise {
     from {
-      opacity: 0;
+      --fade: 0;
       transform: translateY(12px) scale(0.96) rotate(-0.6deg);
     }
   }
@@ -700,16 +702,34 @@
     padding: 0.7rem 1.2rem 1.15rem;
   }
 
+  /*
+   * Fading in and out without losing the frost. The frosted sheet is a layer
+   * inside the card, and a parent fading by its own opacity cuts its children
+   * off from what is behind it — so while the card faded in, its sheet showed
+   * the scene unblurred, and the frost snapped in when the fade ended. Cards
+   * fade their layers instead, through `--fade`, which every layer reads.
+   */
+  .card > *,
+  .more > * {
+    opacity: var(--fade);
+  }
+
   .card {
-    transition:
-      opacity 0.25s,
-      filter 0.25s;
+    transition: --fade 0.25s;
   }
 
   /* While its exact controls stand in for it, the card steps back. */
   .card.covered {
-    opacity: 0;
+    --fade: 0;
     pointer-events: none;
+  }
+
+  /* Until its outline is measured and cut, the sheet is not shown at all. */
+  .card:not(.cut) .sheet,
+  .card:not(.cut)::before,
+  .more:not(.cut) .sheet,
+  .more:not(.cut)::before {
+    visibility: hidden;
   }
 
   /* The Fine-tune button, at the right of the card's header. */
@@ -786,14 +806,14 @@
 
   @keyframes slide-out {
     from {
-      opacity: 0;
+      --fade: 0;
       transform: translateX(-28px) rotate(-1deg) scale(0.97);
     }
   }
 
   @keyframes slide-out-left {
     from {
-      opacity: 0;
+      --fade: 0;
       transform: translateX(28px) rotate(1deg) scale(0.97);
     }
   }
@@ -801,7 +821,7 @@
   /* Where it takes the card's place, it turns over like the card's back. */
   @keyframes flip-in {
     from {
-      opacity: 0;
+      --fade: 0;
       transform: perspective(900px) rotateY(-70deg);
     }
   }
