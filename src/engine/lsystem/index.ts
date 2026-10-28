@@ -1,7 +1,7 @@
 import { mulberry32 } from '../../lib/rng';
 import { derive } from './derive';
 import type { EvalEnv } from './expr';
-import { parseAxiom, parseRules } from './grammar';
+import { parseAxiom, parseRules, type Module } from './grammar';
 import { interpret, type Skeleton } from './turtle';
 
 export type { Module, Production } from './grammar';
@@ -23,6 +23,8 @@ export interface TreeConfig {
   autoLeaves?: boolean;
   maxModules?: number;
   maxSegments?: number;
+  /** Hand back the derived word as well, for showing it. */
+  keepWord?: boolean;
 }
 
 export interface GrammarIssue {
@@ -34,6 +36,8 @@ export interface GrammarIssue {
 export interface TreeBuild {
   skeleton: Skeleton | null;
   issues: GrammarIssue[];
+  /** The derived word, when `keepWord` asked for it. */
+  word?: Module[];
   stats: {
     modules: number;
     nodes: number;
@@ -92,6 +96,7 @@ export function buildTree(cfg: TreeConfig): TreeBuild {
   return {
     skeleton,
     issues,
+    word: cfg.keepWord ? derived.word : undefined,
     stats: {
       modules: derived.word.length,
       nodes: skeleton.count,
