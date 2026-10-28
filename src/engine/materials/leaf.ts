@@ -11,6 +11,7 @@ import {
   attribute,
   cameraPosition,
   float,
+  Loop,
   mix,
   normalWorld,
   positionLocal,
@@ -28,7 +29,6 @@ import {
   growthPosition,
   hoverAt,
   LEAF_SLOTS,
-  MAX_GUESTS,
   rotateAboutAxis,
   treeParams,
   vec3Attribute,
@@ -145,15 +145,17 @@ export function createLeafMaterial(
    * air, and the leaves in it fold back toward their stems and lean out of the
    * way. Measured at the leaf's pivot, so a leaf moves as one piece.
    *
-   * Unrolled over a fixed number of guests rather than looped: an empty slot
-   * has a radius of zero and contributes nothing, and there is no branch to
-   * diverge on.
+   * Looped over the guests actually there, which is usually none or a few:
+   * this runs for every vertex of the canopy, in the shadow pass as well as
+   * the picture, and unrolled over every slot it was sixteen rounds of work
+   * per vertex whether or not a bird was in the tree. The count is the same
+   * for every vertex, so the loop never diverges.
    */
   const guestArray = uniformArray(guests, 'vec4');
-  let clear: FloatNode = float(0);
-  let shove: Node<'vec3'> = vec3(0, 0, 0);
-  for (let g = 0; g < MAX_GUESTS; g++) {
-    const guest = guestArray.element(g) as unknown as Vec4Node;
+  const clear = float(0).toVar();
+  const shove = vec3(0, 0, 0).toVar();
+  Loop({ start: 0, end: u.guestCount, type: 'int' }, ({ i }) => {
+    const guest = guestArray.element(i) as unknown as Vec4Node;
     const seat = vec3(guest.x, guest.y, guest.z);
     const r = guest.w;
     // Out of the crown, and a little up: where the window has to open.
@@ -165,9 +167,9 @@ export function createLeafMaterial(
     const d2 = off.dot(off);
     const near = float(1).sub(d2.div(r.mul(r).max(1e-4))).max(0);
     const w = near.mul(near).mul(step(0.001, r));
-    clear = clear.max(w);
-    shove = shove.add(off.div(d2.sqrt().max(0.02)).mul(w));
-  }
+    clear.assign(clear.max(w));
+    shove.addAssign(off.div(d2.sqrt().max(0.02)).mul(w));
+  });
   const hanging = pivot.add(swaying.sub(pivot).mul(clear.mul(0.75).oneMinus())).add(shove.mul(0.22));
 
 

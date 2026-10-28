@@ -466,6 +466,7 @@ export class Tree {
       if (g) this.guests[i].set(g.x, g.y, g.z, g.radius);
       else this.guests[i].set(0, 0, 0, 0);
     }
+    this.uniforms.guestCount.value = Math.min(list.length, MAX_GUESTS);
     this.guestsDirty = true;
   }
 

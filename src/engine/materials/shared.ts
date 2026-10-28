@@ -99,6 +99,8 @@ export function createTreeUniforms() {
     windBend: uniform(0.22),
     /** Peak turn of a single leaf about its stem, in radians, at wind = 1. */
     leafFlutter: uniform(0.5),
+    /** How many of the guest slots are in use (see `Tree.setGuests`). */
+    guestCount: uniform(0, 'int'),
 
     /** Direction from a surface toward the sun. */
     sunDir: uniform(new Vector3(-0.55, 0.28, 0.78)),
