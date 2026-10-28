@@ -18,7 +18,9 @@ npm run dev
 
 This README is a tour of how it works, and of the many ways it didn't work
 first. If you only read one section, read
-[The hall of things that lied](#the-hall-of-things-that-lied).
+[The hall of things that lied](#the-hall-of-things-that-lied). If you'd
+rather learn to *write* trees, open the Grammar card and press **Learn to write
+a tree** (see [The Learn page](#the-learn-page)).
 
 ---
 
@@ -550,6 +552,59 @@ information.
 
 ---
 
+## The Learn page
+
+The Grammar card has a **Learn to write a tree** button. It opens a short
+course: eleven lessons scrolling down the left, each a few sentences and a
+grammar you can edit, and a drawing board on the right. The board draws
+whichever lesson you are reading, grows it in as you arrive, and follows as
+you type.
+
+The lessons build one idea at a time:
+
+1. A turtle with a pen: `FF+FF+FF+FF` is a square.
+2. One rule, rewriting everything at once: a Koch curve, with its word shown
+   growing five times longer each generation.
+3. Branches: `[` and `]`.
+4. Buds: symbols that draw nothing and still grow.
+5. Numbers in symbols: `A(s)` and arithmetic.
+6. Conditions, and the first match wins; leaves.
+7. Chance: weighted rules and `rand()`, with dice.
+8. Off the page: pitch, roll and the golden angle.
+9. The sliders as names: `ANG`, `LEN`, `SHRINK`, `N`, `n`.
+10. Gravity: tropism, and why it can't bend a vertical shoot.
+11. The oak from the garden, which by then uses nothing you haven't met.
+
+From lesson 6 on, any tree on the board can be **planted in the garden**: the
+standing tree grows back into the ground and the lesson's grows out in its
+place, waiting in the Grammar card for you to keep going.
+
+The board isn't the garden's renderer. A lesson wants to show what a grammar
+*says* (the turtle's path, the branching, where the leaves go), and a lit,
+shaded, wind-blown tree buries that. So the same engine builds the same
+skeleton ([`buildTree`](src/engine/lsystem/index.ts), asked to hand back the
+derived word too), and a 2D canvas draws it as ink on paper
+([`learn/sketch.ts`](src/app/learn/sketch.ts)):
+
+- a line per internode, thick as the pipe model makes it;
+- an almond of green per leaf;
+- drawn in along the branches by distance from the root, the same wavefront
+  the garden grows by.
+
+A grammar that leaves the page turns slowly and can be dragged round. Lines
+are batched by thickness and depth, so the 14,000-leaf oak turns at 60 fps.
+
+Three details:
+
+- **Depth is judged on the wood alone.** Leaves are set at a random twist, so
+  their tips leave the page even on a tree drawn flat. Counted in, they made
+  every flat lesson spin.
+- **The growing front runs past the last tip.** Leaves sit exactly at the
+  farthest arc, so a front that stopped there never quite reached them, and
+  the leaves never appeared.
+- **The garden stops drawing while the course is open.** It's covered
+  completely, so the board gets the GPU (and a laptop its battery) to itself.
+
 ## Writing grammars
 
 ```
@@ -625,6 +680,7 @@ src/
     index.ts    the entire public surface
   render/   this app: studio, sky, aurora, landscape, meadow, birds, weather, post
   app/      Svelte 5 UI: dock, cards, glyphs, hand-cut paper
+    learn/    the Learn page: lessons, and the ink-on-paper drawing board
   lib/      rng, baked noise texture
 ```
 
