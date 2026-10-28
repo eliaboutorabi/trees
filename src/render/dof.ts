@@ -47,13 +47,21 @@ export function stableDepthOfField(color: N, viewZ: N, focus: N, range: N, amoun
   // A floor on the weights keeps every texel defined where nothing in a
   // neighbourhood belongs to the field; the composite never uses those.
   const floor = 0.002;
+  // Written straight out at half resolution. Profiling found these two passes
+  // at full resolution were most of the effect's cost — over a quarter of the
+  // whole frame — for an image that is immediately blurred down to half and a
+  // quarter anyway. At half size each texel's centre falls between four of
+  // the frame's pixels, so its bilinear read of the colour averages them all:
+  // the downsample is still a proper one, and nothing small is skipped.
   const farIn = convertToTexture(vec4(color.rgb, max(far, floor)));
   const nearIn = convertToTexture(vec4(color.rgb, max(near, floor)));
+  farIn.setResolutionScale(0.5);
+  nearIn.setResolutionScale(0.5);
 
   const opts = (scale: number) => ({ premultipliedAlpha: true, resolutionScale: scale });
-  const far1 = gaussianBlur(farIn, null, 2, opts(0.5));
+  const far1 = gaussianBlur(farIn, null, 2, opts(1));
   const far2 = gaussianBlur(far1.getTextureNode(), null, 3, opts(0.5));
-  const near1 = gaussianBlur(nearIn, null, 2, opts(0.5));
+  const near1 = gaussianBlur(nearIn, null, 2, opts(1));
   const near2 = gaussianBlur(near1.getTextureNode(), null, 3, opts(0.5));
 
   const f1 = far1.getTextureNode() as N;
