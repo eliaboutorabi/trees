@@ -252,6 +252,8 @@ export class TreeStudio {
   private frameGap = 0.016;
   /** No frames are judged before this — loading, a rebuild, a change of size. */
   private settleUntil = 0;
+  /** When the shadow map was last redrawn, on the frame clock. */
+  private shadowDrawnAt = -Infinity;
   /** Bad and good spells running, since one alone is as often another app's moment. */
   private badSpells = 0;
   private goodSpells = 0;
@@ -334,6 +336,8 @@ export class TreeStudio {
     this.sun.shadow.normalBias = 0.03;
     this.sun.shadow.camera.near = 0.5;
     this.sun.shadow.camera.far = 90;
+    // Redrawn when the frame asks for it (see `frame`), not every frame.
+    this.sun.shadow.autoUpdate = false;
     this.scene.add(this.sun, this.sun.target, this.fill);
   }
 
@@ -1164,6 +1168,16 @@ export class TreeStudio {
     // Re-render the environment cube before the frame that needs it, and only
     // when the sun has actually moved.
     this.sky.refresh(this.renderer);
+    // The shadow map is redrawn at most thirty times a second. It does not
+    // depend on the view — it is fitted to the tree and the sun — so turning
+    // the camera never needs a new one; only the swaying crown does, and at
+    // thirty a second that is smooth. At sixty frames a second it halves the
+    // work of drawing the whole tree a second time, which is battery.
+    if (timeMs - this.shadowDrawnAt >= 1000 / 30 - 3) {
+      this.sun.shadow.needsUpdate = true;
+      this.shadowDrawnAt = timeMs;
+    }
+
     // The aurora's small picture is drawn for this frame's view first, and
     // not at all while there is none to see.
     const aurora = this.auroraSky;
