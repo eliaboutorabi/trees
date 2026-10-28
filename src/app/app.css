@@ -29,6 +29,13 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.14),
     inset 0 0 18px rgba(255, 255, 255, 0.12);
   --lift: 0 16px 36px rgba(20, 14, 6, 0.22), 0 2px 6px rgba(20, 14, 6, 0.12);
+  /*
+   * Paper, laid over the glass of the cards: a fine tooth, and a much broader
+   * mottle where the fibres lie thicker, both faint and warm.
+   */
+  --paper-grain:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.36  0 0 0 0 0.29  0 0 0 0 0.2  0 0 0 0.1 0'/></filter><rect width='100%25' height='100%25' filter='url(%23f)'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='420'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='0.018' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.98  0 0 0 0 0.93  0 0 0 0.16 0'/></filter><rect width='100%25' height='100%25' filter='url(%23m)'/></svg>");
 
   /* A garden's colours, each with a deeper ink of itself. */
   --moss: #a4bb8c;

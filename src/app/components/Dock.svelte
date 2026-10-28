@@ -39,6 +39,7 @@
   import { cubicIn } from 'svelte/easing';
   import Glyph from './Glyph.svelte';
   import { MORE, type MoreHost } from './more';
+  import { paperImage, paperPath, seedOf } from './paper';
 
   /*
    * Each button is a pebble: its own slightly irregular outline and its own
@@ -209,6 +210,24 @@
     };
   }
 
+  /*
+   * Each card is a sheet cut by hand (see `paper.ts`): its own outline, kept
+   * for that card, used to mask the frosted sheet, to cast its shadow, and to
+   * draw the faint light along its cut edge.
+   */
+  const cuts = new Map<string, { d: string; mask: string; shadow: string }>();
+  function cutFor(id: string) {
+    let cut = cuts.get(id);
+    if (!cut) {
+      const d = paperPath(seedOf(id));
+      cut = { d, mask: paperImage(d), shadow: paperImage(d, 'rgb(20,14,6)') };
+      cuts.set(id, cut);
+    }
+    return cut;
+  }
+  const cardCut = $derived(open ? cutFor(open.id) : null);
+  const moreCut = $derived(open ? cutFor(`${open.id}:more`) : null);
+
   let enterTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
   /** A pointer is down inside the card — a slider mid-drag. */
@@ -314,7 +333,7 @@
       class:pinned={pinned === open.id}
       class:covered={moreOpen && moreOver && moreReady}
       bind:this={card}
-      style="left: {cardLeft}px; bottom: {cardBottom}px; scale: {cardScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}"
+      style="left: {cardLeft}px; bottom: {cardBottom}px; scale: {cardScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}; --cut: {cardCut?.mask}; --cut-shadow: {cardCut?.shadow}"
       role="dialog"
       aria-label={open.label}
       tabindex="-1"
@@ -322,6 +341,8 @@
       onpointerleave={leave}
       onpointerdown={grab}
     >
+      <span class="sheet" aria-hidden="true"></span>
+      <svg class="edge" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={cardCut?.d} /></svg>
       <div class="card__head">
         <span class="badge"><Glyph name={open.icon} size={21} weight={1.85} /></span>
         <span class="title">
@@ -358,7 +379,7 @@
     class:ready={moreReady}
     class:left={!moreOver && moreLeft < cardLeft}
     bind:this={morePanel}
-    style="left: {moreLeft}px; bottom: {cardBottom}px; scale: {moreScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}"
+    style="left: {moreLeft}px; bottom: {cardBottom}px; scale: {moreScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}; --cut: {moreCut?.mask}; --cut-shadow: {moreCut?.shadow}"
     role="dialog"
     aria-label="{open.label}: {more.label}"
     tabindex="-1"
@@ -366,6 +387,8 @@
     onpointerleave={leave}
     onpointerdown={grab}
   >
+    <span class="sheet" aria-hidden="true"></span>
+    <svg class="edge" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={moreCut?.d} /></svg>
     <div class="more__head">
       <span class="more__badge"><Glyph name="tune" size={17} weight={1.7} /></span>
       <span class="more__title">{more.label}<small>{open.label}</small></span>
@@ -538,15 +561,9 @@
     width: 20.5rem;
     display: flex;
     flex-direction: column;
-    border-radius: 30px 22px 28px 24px / 24px 30px 22px 28px;
-    background:
-      var(--sheen),
-      linear-gradient(175deg, color-mix(in srgb, var(--tone) 46%, transparent), transparent 30%),
-      var(--glass);
-    backdrop-filter: var(--frost);
-    -webkit-backdrop-filter: var(--frost);
-    border: none;
-    box-shadow: var(--rim), var(--lift);
+    /* The sheet, its edge and its shadow are drawn by the layers below. */
+    isolation: isolate;
+    --tint: 46%;
     color: var(--ink);
     animation: rise 0.34s cubic-bezier(0.2, 0.85, 0.3, 1.15);
     transform-origin: 50% 100%;
@@ -554,6 +571,56 @@
 
   .card.wide {
     width: 28rem;
+  }
+
+  /*
+   * A hand-cut sheet of frosted paper. Not a rounded rectangle: its outline
+   * (see `paper.ts`) masks the frost, so the sheet has soft uneven corners
+   * and edges that wander a little; paper grain lies over the glass; a light
+   * line follows the cut; and the shadow under it is the same shape, blurred.
+   */
+  .sheet {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      var(--paper-grain),
+      var(--sheen),
+      linear-gradient(175deg, color-mix(in srgb, var(--tone) var(--tint), transparent), transparent 30%),
+      var(--glass);
+    backdrop-filter: var(--frost);
+    -webkit-backdrop-filter: var(--frost);
+    mask: var(--cut) 0 0 / 100% 100% no-repeat;
+    -webkit-mask: var(--cut) 0 0 / 100% 100% no-repeat;
+  }
+
+  .edge {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .edge path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.62);
+    stroke-width: 1.2;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .card::before,
+  .more::before {
+    content: '';
+    position: absolute;
+    inset: 10px -2px -12px 4px;
+    z-index: -2;
+    background: var(--cut-shadow) 0 0 / 100% 100% no-repeat;
+    opacity: 0.32;
+    filter: blur(16px);
+    pointer-events: none;
   }
 
   @keyframes rise {
@@ -671,14 +738,8 @@
     z-index: 7;
     display: flex;
     flex-direction: column;
-    border-radius: 24px 28px 22px 26px / 26px 22px 28px 24px;
-    background:
-      var(--sheen),
-      linear-gradient(175deg, color-mix(in srgb, var(--tone) 30%, transparent), transparent 26%),
-      var(--glass);
-    backdrop-filter: var(--frost);
-    -webkit-backdrop-filter: var(--frost);
-    box-shadow: var(--rim), var(--lift);
+    isolation: isolate;
+    --tint: 30%;
     color: var(--ink);
     transform-origin: 0 100%;
     visibility: hidden;
