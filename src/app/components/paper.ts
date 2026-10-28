@@ -1,44 +1,56 @@
 /**
- * The outline of a sheet cut by hand, for the cards.
+ * The outline of a card: a sheet cut by hand, but cut carefully.
  *
- * A rounded rectangle is what every settings panel is. This is a superellipse
- * — mostly straight sides, rounded corners — whose corners are each rounded a
- * little differently and whose edges wander in and out by a percent or two,
- * on a few slow ripples, then smoothed (Catmull–Rom, as cubic Béziers). It is
- * drawn in a 100 × 100 box and stretched to whatever size the card is, which
- * only makes the corners more uneven, as a torn or scissored sheet's are.
+ * A rounded rectangle, drawn at the card's real size in pixels (not stretched
+ * from a unit box, which squeezed some corners to points), whose four corners
+ * are each rounded a little differently and whose sides bow very slightly,
+ * a pixel or two, as a sheet cut by hand along a ruler does. It never comes
+ * in more than a couple of pixels from the card's edge, so nothing the card
+ * holds can end up outside it.
  */
-export function paperPath(seed: number, n = 64): string {
-  const pts: [number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    const t = (i / n) * Math.PI * 2;
-    // How square each corner is, varying round the sheet: some soft, some tight.
-    // (Never so round that a corner eats into what the card holds.)
-    const square = 7.6 + 1.8 * Math.sin(2 * t + seed * 1.3) + 0.8 * Math.sin(3 * t + seed * 0.7);
-    const e = 2 / square;
-    const c = Math.cos(t);
-    const s = Math.sin(t);
-    const x = Math.sign(c) * Math.pow(Math.abs(c), e);
-    const y = Math.sign(s) * Math.pow(Math.abs(s), e);
-    // The edge wandering in and out.
-    const k = 1 + 0.011 * Math.sin(3 * t + seed) + 0.007 * Math.sin(5 * t + seed * 1.7) + 0.004 * Math.sin(9 * t + seed * 2.9);
-    pts.push([50 + x * 48.6 * k, 50 + y * 48.6 * k]);
-  }
-  const f = (v: number) => v.toFixed(2);
-  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
-  for (let i = 0; i < n; i++) {
-    const p0 = pts[(i - 1 + n) % n];
-    const p1 = pts[i];
-    const p2 = pts[(i + 1) % n];
-    const p3 = pts[(i + 2) % n];
-    d += ` C${f(p1[0] + (p2[0] - p0[0]) / 6)} ${f(p1[1] + (p2[1] - p0[1]) / 6)} ${f(p2[0] - (p3[0] - p1[0]) / 6)} ${f(p2[1] - (p3[1] - p1[1]) / 6)} ${f(p2[0])} ${f(p2[1])}`;
-  }
-  return d + 'Z';
+export function paperPath(w: number, h: number, seed: number): string {
+  const rnd = (i: number) => {
+    const x = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  const m = 2.5; // inset, so an outward bow stays within the box
+  const x0 = m;
+  const y0 = m;
+  const x1 = w - m;
+  const y1 = h - m;
+  const maxR = Math.max(4, Math.min(w, h) / 2 - m - 2);
+  // Top-left, top-right, bottom-right, bottom-left.
+  const r = [0, 1, 2, 3].map((i) => Math.min(maxR, 18 + 10 * rnd(i)));
+  // How far a corner's curve reaches along each side: a hand never quite matches.
+  const k = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => 0.52 + 0.1 * rnd(10 + i));
+  // A side's bow at a third and two-thirds along, outward positive: −0.6 to 1.8 px.
+  const b = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => -0.6 + 2.4 * rnd(20 + i));
+
+  const f = (v: number) => v.toFixed(1);
+  const p: string[] = [];
+  // Top side, left to right.
+  p.push(`M${f(x0 + r[0])} ${f(y0)}`);
+  p.push(`C${f(x0 + r[0] + (x1 - r[1] - x0 - r[0]) / 3)} ${f(y0 - b[0])} ${f(x1 - r[1] - (x1 - r[1] - x0 - r[0]) / 3)} ${f(y0 - b[1])} ${f(x1 - r[1])} ${f(y0)}`);
+  // Top-right corner.
+  p.push(`C${f(x1 - r[1] + k[0] * r[1])} ${f(y0)} ${f(x1)} ${f(y0 + r[1] - k[1] * r[1])} ${f(x1)} ${f(y0 + r[1])}`);
+  // Right side, top to bottom.
+  p.push(`C${f(x1 + b[2])} ${f(y0 + r[1] + (y1 - r[2] - y0 - r[1]) / 3)} ${f(x1 + b[3])} ${f(y1 - r[2] - (y1 - r[2] - y0 - r[1]) / 3)} ${f(x1)} ${f(y1 - r[2])}`);
+  // Bottom-right corner.
+  p.push(`C${f(x1)} ${f(y1 - r[2] + k[2] * r[2])} ${f(x1 - r[2] + k[3] * r[2])} ${f(y1)} ${f(x1 - r[2])} ${f(y1)}`);
+  // Bottom side, right to left.
+  p.push(`C${f(x1 - r[2] - (x1 - r[2] - x0 - r[3]) / 3)} ${f(y1 + b[4])} ${f(x0 + r[3] + (x1 - r[2] - x0 - r[3]) / 3)} ${f(y1 + b[5])} ${f(x0 + r[3])} ${f(y1)}`);
+  // Bottom-left corner.
+  p.push(`C${f(x0 + r[3] - k[4] * r[3])} ${f(y1)} ${f(x0)} ${f(y1 - r[3] + k[5] * r[3])} ${f(x0)} ${f(y1 - r[3])}`);
+  // Left side, bottom to top.
+  p.push(`C${f(x0 - b[6])} ${f(y1 - r[3] - (y1 - r[3] - y0 - r[0]) / 3)} ${f(x0 - b[7])} ${f(y0 + r[0] + (y1 - r[3] - y0 - r[0]) / 3)} ${f(x0)} ${f(y0 + r[0])}`);
+  // Top-left corner.
+  p.push(`C${f(x0)} ${f(y0 + r[0] - k[6] * r[0])} ${f(x0 + r[0] - k[7] * r[0])} ${f(y0)} ${f(x0 + r[0])} ${f(y0)}Z`);
+  return p.join(' ');
 }
 
-/** The same outline as a CSS image, filled — for a mask, or a shadow. */
-export function paperImage(path: string, fill = 'black'): string {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='${path}' fill='${fill}'/></svg>`;
+/** The same outline as a CSS image of the given size, filled — for a mask, or a shadow. */
+export function paperImage(path: string, w: number, h: number, fill = 'black'): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}' preserveAspectRatio='none'><path d='${path}' fill='${fill}'/></svg>`;
   return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
 }
 

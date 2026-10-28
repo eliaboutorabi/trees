@@ -215,18 +215,29 @@
    * for that card, used to mask the frosted sheet, to cast its shadow, and to
    * draw the faint light along its cut edge.
    */
-  const cuts = new Map<string, { d: string; mask: string; shadow: string }>();
-  function cutFor(id: string) {
-    let cut = cuts.get(id);
+  const cuts = new Map<string, { d: string; w: number; h: number; mask: string; shadow: string }>();
+  function cutFor(id: string, w: number, h: number) {
+    w = Math.round(w);
+    h = Math.round(h);
+    if (w < 8 || h < 8) return null;
+    const key = `${id}@${w}x${h}`;
+    let cut = cuts.get(key);
     if (!cut) {
-      const d = paperPath(seedOf(id));
-      cut = { d, mask: paperImage(d), shadow: paperImage(d, 'rgb(20,14,6)') };
-      cuts.set(id, cut);
+      const d = paperPath(w, h, seedOf(id));
+      cut = { d, w, h, mask: paperImage(d, w, h), shadow: paperImage(d, w, h, 'rgb(20,14,6)') };
+      if (cuts.size > 64) cuts.clear();
+      cuts.set(key, cut);
     }
     return cut;
   }
-  const cardCut = $derived(open ? cutFor(open.id) : null);
-  const moreCut = $derived(open ? cutFor(`${open.id}:more`) : null);
+  // Measured at layout size (unaffected by the fit-to-window `scale`), so the
+  // outline is drawn at the card's real size, never stretched.
+  let cardW = $state(0);
+  let cardH = $state(0);
+  let moreW = $state(0);
+  let moreH = $state(0);
+  const cardCut = $derived(open ? cutFor(open.id, cardW, cardH) : null);
+  const moreCut = $derived(open ? cutFor(`${open.id}:more`, moreW, moreH) : null);
 
   let enterTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -333,6 +344,8 @@
       class:pinned={pinned === open.id}
       class:covered={moreOpen && moreOver && moreReady}
       bind:this={card}
+      bind:clientWidth={cardW}
+      bind:clientHeight={cardH}
       style="left: {cardLeft}px; bottom: {cardBottom}px; scale: {cardScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}; --cut: {cardCut?.mask}; --cut-shadow: {cardCut?.shadow}"
       role="dialog"
       aria-label={open.label}
@@ -342,7 +355,9 @@
       onpointerdown={grab}
     >
       <span class="sheet" aria-hidden="true"></span>
-      <svg class="edge" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={cardCut?.d} /></svg>
+      {#if cardCut}
+        <svg class="edge" viewBox="0 0 {cardCut.w} {cardCut.h}" preserveAspectRatio="none" aria-hidden="true"><path d={cardCut.d} /></svg>
+      {/if}
       <div class="card__head">
         <span class="badge"><Glyph name={open.icon} size={21} weight={1.85} /></span>
         <span class="title">
@@ -379,6 +394,8 @@
     class:ready={moreReady}
     class:left={!moreOver && moreLeft < cardLeft}
     bind:this={morePanel}
+    bind:clientWidth={moreW}
+    bind:clientHeight={moreH}
     style="left: {moreLeft}px; bottom: {cardBottom}px; scale: {moreScale}; --tone: {open.tone}; --tone-ink: {open.toneInk}; --cut: {moreCut?.mask}; --cut-shadow: {moreCut?.shadow}"
     role="dialog"
     aria-label="{open.label}: {more.label}"
@@ -388,7 +405,9 @@
     onpointerdown={grab}
   >
     <span class="sheet" aria-hidden="true"></span>
-    <svg class="edge" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={moreCut?.d} /></svg>
+    {#if moreCut}
+      <svg class="edge" viewBox="0 0 {moreCut.w} {moreCut.h}" preserveAspectRatio="none" aria-hidden="true"><path d={moreCut.d} /></svg>
+    {/if}
     <div class="more__head">
       <span class="more__badge"><Glyph name="tune" size={17} weight={1.7} /></span>
       <span class="more__title">{more.label}<small>{open.label}</small></span>
@@ -606,20 +625,19 @@
 
   .edge path {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.62);
-    stroke-width: 1.2;
-    vector-effect: non-scaling-stroke;
+    stroke: rgba(255, 255, 255, 0.5);
+    stroke-width: 1;
   }
 
   .card::before,
   .more::before {
     content: '';
     position: absolute;
-    inset: 10px -2px -12px 4px;
+    inset: 8px 0 -10px 0;
     z-index: -2;
     background: var(--cut-shadow) 0 0 / 100% 100% no-repeat;
-    opacity: 0.32;
-    filter: blur(16px);
+    opacity: 0.28;
+    filter: blur(14px);
     pointer-events: none;
   }
 
