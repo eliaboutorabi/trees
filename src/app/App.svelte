@@ -23,6 +23,7 @@
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
+  import Learn from './learn/Learn.svelte';
 
   let canvas = $state<HTMLCanvasElement>();
   let stage = $state<HTMLDivElement>();
@@ -89,6 +90,8 @@
     adaptive: true,
   });
 
+  /** The Learn page: a short course in writing grammars, over the scene. */
+  let learnOpen = $state(false);
   let axiomDraft = $state(params.axiom);
   let rulesDraft = $state(params.rules);
   const grammarDirty = $derived(axiomDraft !== params.axiom || rulesDraft !== params.rules);
@@ -612,6 +615,10 @@
   </div>
 </div>
 
+{#if learnOpen}
+  <Learn onclose={() => (learnOpen = false)} />
+{/if}
+
 {#snippet speciesPanel()}
   <div class="tiles three">
     {#each presets as preset (preset.id)}
@@ -773,6 +780,11 @@
 {/snippet}
 
 {#snippet grammarPanel()}
+  <button class="learn" onclick={() => (learnOpen = true)} use:cut={{ seed: 'learn-button', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
+    <span class="illustrated"><Glyph name="learn" size={26} weight={1.5} /></span>
+    <span class="learn__text"><b>Learn to write a tree</b>From a turtle drawing a square to the oak, one idea at a time</span>
+    <span class="learn__go" aria-hidden="true">→</span>
+  </button>
   <label class="field">
     <span>Axiom</span>
     <CodeEditor bind:value={axiomDraft} rows={1} label="Axiom" onsubmit={applyGrammar} />
@@ -1010,6 +1022,54 @@
 
   .another:active :global(svg) {
     transform: rotate(40deg);
+  }
+
+  .learn {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    margin-bottom: 0.85rem;
+    padding: 0.6rem 0.85rem 0.6rem 0.7rem;
+    border: none;
+    background: rgba(201, 207, 152, 0.42);
+    text-align: left;
+    color: var(--ink-dim);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .learn:hover {
+    background: rgba(201, 207, 152, 0.62);
+  }
+
+  .learn .illustrated {
+    --tone: #c9cf98;
+    display: grid;
+  }
+
+  .learn__text {
+    flex: 1;
+    font-size: 0.74rem;
+    line-height: 1.35;
+  }
+
+  .learn__text b {
+    display: block;
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .learn__go {
+    font-size: 1.1rem;
+    color: #4b6a2c;
+    transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.3, 1.4);
+  }
+
+  .learn:hover .learn__go {
+    transform: translateX(3px);
   }
 
   .legend {
