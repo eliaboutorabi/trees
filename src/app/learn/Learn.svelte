@@ -32,6 +32,9 @@
   const draft = $derived(drafts[active]);
 
   let canvas = $state<HTMLCanvasElement>();
+  let sheet = $state<HTMLElement>();
+  /** Where focus was before, to hand it back on the way out. */
+  const returnFocus = document.activeElement as HTMLElement | null;
   let scroller = $state<HTMLElement>();
   const sections: HTMLElement[] = [];
   let sketch = $state.raw<Sketch | null>(null);
@@ -101,6 +104,7 @@
 
   onMount(() => {
     if (canvas) sketch = new Sketch(canvas);
+    sheet?.focus({ preventScroll: true });
     // The lesson being read is the one crossing a line a third of the way down.
     const watcher = new IntersectionObserver(
       (entries) => {
@@ -115,6 +119,7 @@
   onDestroy(() => {
     clearTimeout(typing);
     sketch?.dispose();
+    returnFocus?.focus?.({ preventScroll: true });
   });
 
   function onkey(e: KeyboardEvent) {
@@ -135,7 +140,7 @@
   }}
 >
   <div class="wrap">
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="learn-title" use:cut={{ seed: 'learn', inset: 6, radius: [22, 44], bulge: [-1, 5] }}>
+    <div class="sheet" bind:this={sheet} tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="learn-title" use:cut={{ seed: 'learn', inset: 6, radius: [22, 44], bulge: [-1, 5] }}>
       <header>
         <span class="mark illustrated"><Glyph name="learn" size={30} weight={1.5} /></span>
         <div class="heading">
@@ -309,6 +314,7 @@
   }
 
   .sheet {
+    outline: none;
     width: 100%;
     height: 100%;
     display: grid;
@@ -728,6 +734,53 @@
 
   .warn {
     color: #a6602f;
+  }
+
+  /*
+   * A phone: the board on top, a little over a third of the screen, and the
+   * lessons scrolling under it — so the drawing is always in view of the
+   * lesson it belongs to.
+   */
+  @media (max-width: 760px) {
+    .scrim {
+      padding: 0.4rem;
+    }
+    .wrap {
+      width: calc(100vw - 0.8rem);
+      height: calc(100dvh - 0.8rem);
+    }
+    header {
+      padding: 0.9rem 1rem 0.5rem;
+      gap: 0.6rem;
+    }
+    h2 {
+      font-size: 1.15rem;
+    }
+    .heading p,
+    .progress {
+      display: none;
+    }
+    .body {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .stage {
+      order: -1;
+      gap: 0.4rem;
+      padding: 0 1rem 0.5rem;
+    }
+    .board {
+      flex: none;
+      height: 34dvh;
+      min-height: 0;
+    }
+    .word {
+      max-height: 3.4rem;
+    }
+    .lessons {
+      padding: 0 1rem;
+      border-top: 1px dashed rgba(60, 44, 28, 0.18);
+    }
   }
 
   /* The editor's token colours, for code set into the prose and the word. */

@@ -93,6 +93,14 @@
 
   /** The Learn page: a short course in writing grammars, over the scene. */
   let learnOpen = $state(false);
+  // It covers the scene completely, so the scene need not be drawn meanwhile:
+  // the board has the GPU, and a laptop its battery, to itself.
+  $effect(() => {
+    // Read first: were it read only after `studio?.`, a first run before the
+    // studio exists would never subscribe to it.
+    const covered = learnOpen;
+    studio?.setPaused(covered);
+  });
   let axiomDraft = $state(params.axiom);
   let rulesDraft = $state(params.rules);
   const grammarDirty = $derived(axiomDraft !== params.axiom || rulesDraft !== params.rules);

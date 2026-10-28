@@ -308,11 +308,16 @@ export class Sketch {
     this.paint();
   }
 
-  /** Where the drawing should sit: filling the board, with a margin. */
+  /** The strip along the top that the board's caption sits in, in canvas pixels. */
+  private captionStrip(): number {
+    return 34 * Math.min(window.devicePixelRatio || 1, 2);
+  }
+
+  /** Where the drawing should sit: filling the board below its caption, with a margin. */
   private frame(snap: boolean): void {
     const d = this.drawing;
     const W = this.canvas.width;
-    const H = this.canvas.height;
+    const H = this.canvas.height - this.captionStrip();
     const margin = 0.82;
     let k: number;
     let x: number;
@@ -379,8 +384,9 @@ export class Sketch {
     const { k, x: fx, y: fy } = this.fit;
     const cos = Math.cos(d.solid ? this.yaw : 0);
     const sin = Math.sin(d.solid ? this.yaw : 0);
+    const top = this.captionStrip();
     const cx = W / 2;
-    const cy = H / 2;
+    const cy = top + (H - top) / 2;
     const sx = (x: number, z: number) => cx + (x * cos + z * sin - fx) * k;
     const sy = (y: number) => cy - (y - fy) * k;
     // Depth, -1 far to 1 near, for drawing the far side fainter.

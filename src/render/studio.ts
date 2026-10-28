@@ -254,6 +254,8 @@ export class TreeStudio {
   private settleUntil = 0;
   /** When the shadow map was last redrawn, on the frame clock. */
   private shadowDrawnAt = -Infinity;
+  /** Not drawing at all: something covers the whole scene. */
+  private paused = false;
   /** Bad and good spells running, since one alone is as often another app's moment. */
   private badSpells = 0;
   private goodSpells = 0;
@@ -1074,7 +1076,7 @@ export class TreeStudio {
   }
 
   private frame(timeMs: number): void {
-    if (this.disposed) return;
+    if (this.disposed || this.paused) return;
     // Clamped at both ends. The ceiling keeps a tab that was backgrounded for a
     // minute from teleporting the growth and the falling fruit on its first
     // frame back; the floor matters because a negative dt runs `1 - exp(-dt*k)`
@@ -1419,6 +1421,18 @@ export class TreeStudio {
     }
     const last = Math.max(...frames.keys());
     return (frames.get(last) ?? []).sort((a, b) => a.call - b.call);
+  }
+
+  /**
+   * Stop drawing while something covers the whole scene — the Learn page —
+   * and carry on after. Nothing is lost: the first frame back is taken as an
+   * ordinary step, as after a backgrounded tab, and the resolution governor
+   * does not judge the frames that follow.
+   */
+  setPaused(paused: boolean): void {
+    if (this.paused === paused) return;
+    this.paused = paused;
+    if (!paused) this.settle(1500);
   }
 
   /** Judge no frames for a while: the next few are not representative. */
