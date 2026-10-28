@@ -213,6 +213,15 @@ export const GLYPHS = {
     { d: ring(20.6, 10.6, 0.7), k: 'dot' },
   ],
 
+  // The aurora: three curtains of light hanging over a line of hills, and a star.
+  aurora: [
+    { d: 'M3.6 17.4c.5-3.6 2.3-6.4 1.7-11 1.9 3.1 2.8 7 2.3 11z', k: 'both', c: 'leaf' },
+    { d: 'M9.7 17.4c.4-4.4 2.5-7.8 1.8-13 2.3 3.6 3.2 8.2 2.5 13z', k: 'both', c: 'leaf' },
+    { d: 'M16.1 17.4c.5-3.8 2.4-6.6 2-11.4 2 3.2 2.7 7.2 2.2 11.4z', k: 'both', c: 'water' },
+    { d: 'M2.4 19.6c3.4-1.4 6.4-1.6 9.4-.6 3.1 1 6.2.9 9.8-.4', k: 'ink' },
+    { d: ring(14.6, 3.6, 0.7), k: 'dot' },
+  ],
+
   // A rainbow: three bands, coloured in where the page allows.
   rainbow: [
     { d: 'M3 18a9 9 0 0 1 18 0h-2.7a6.3 6.3 0 0 0-12.6 0z', k: 'wash', c: 'fruit' },

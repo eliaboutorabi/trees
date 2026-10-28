@@ -4,6 +4,7 @@
  */
 import {
   Group,
+  Mesh,
   Color,
   DirectionalLight,
   HemisphereLight,
@@ -22,7 +23,7 @@ import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from
 import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
 import { createMeadow } from './meadow';
 import { createPostPipeline } from './post';
-import { ProceduralSky, sunDirection, type SkySettings } from './sky';
+import { createAuroraDome, ProceduralSky, sunDirection, type SkySettings } from './sky';
 import { getSeason, snowTintFor, type Season, type Weather } from './season';
 import { createRainfall, createSnowfall } from './weather';
 import { Flock } from './birds';
@@ -135,6 +136,7 @@ const MOONLIGHT = new Color(0.62, 0.72, 1.0);
 const NIGHT_FILL = new Color(0.32, 0.42, 0.72);
 const NIGHT_NEAR = new Color(0.035, 0.045, 0.075);
 const NIGHT_FAR = new Color(0.02, 0.028, 0.05);
+const AURORA_GLOW = new Color(0.35, 0.95, 0.6);
 /** How fast Orbit circles, in OrbitControls' units. */
 const ORBIT_SPEED = 0.35;
 /** How close to the ground the camera may come. */
@@ -185,8 +187,11 @@ export class TreeStudio {
   private nightTarget = 0;
   private nightness = 0;
   private readonly moonDir = new Vector3(0, 0.5, -1);
+  private readonly auroraDir = new Vector3(0, 0, -1);
   private orbitTarget = 0;
   private lookShown = false;
+  private auroraTarget = 0;
+  private aurora = 0;
   /** The rainbow fades in and out rather than switching. */
   private rainbowTarget = 0;
   private rainbow = 0;
@@ -645,20 +650,62 @@ export class TreeStudio {
     // Turning it off goes back to the view from before it was shown: the
     // rainbow view looks up at the sky from the grass, and leaving you there
     // with nothing to look at was a dead end.
-    if (!on && this.beforeRainbow) {
-      const back = this.beforeRainbow;
-      this.beforeRainbow = null;
-      this.cameraGlide = {
-        fromTarget: this.controls.target.clone(),
-        fromPosition: this.camera.position.clone(),
-        target: back.target,
-        position: back.position,
-        t: 0,
-      };
-    }
+    if (!on) this.returnView('rainbow');
   }
 
-  private beforeRainbow: { target: Vector3; position: Vector3 } | null = null;
+  /** The view before a rainbow or an aurora turned the camera to the sky, and which did. */
+  private beforeSkyView: { by: string; target: Vector3; position: Vector3 } | null = null;
+
+  private rememberView(by: string): void {
+    if (this.beforeSkyView) {
+      this.beforeSkyView.by = by;
+      return;
+    }
+    this.beforeSkyView = { by, target: this.controls.target.clone(), position: this.camera.position.clone() };
+  }
+
+  private returnView(by: string): void {
+    const back = this.beforeSkyView;
+    if (!back || back.by !== by) return;
+    this.beforeSkyView = null;
+    this.cameraGlide = {
+      fromTarget: this.controls.target.clone(),
+      fromPosition: this.camera.position.clone(),
+      target: back.target,
+      position: back.position,
+      t: 0,
+    };
+  }
+
+  /** Show or hide the aurora (it only shows at night); it fades either way. */
+  setAurora(on: boolean): void {
+    this.auroraTarget = on ? 1 : 0;
+    if (on && !this.auroraDome && this.renderer) {
+      // Built and compiled the first time it is wanted, off to one side, and
+      // only put in the scene once its shader is ready — so asking for it
+      // never stalls the picture. It fades in from there.
+      const dome = createAuroraDome(this.sky.uniforms);
+      this.auroraDome = dome;
+      const ready = () => {
+        this.scene.add(dome);
+        this.auroraReady = true;
+      };
+      this.renderer.compileAsync(dome, this.camera, this.scene).then(ready, ready);
+    }
+    if (!on) this.returnView('aurora');
+  }
+
+  private auroraDome: Mesh | null = null;
+  private auroraReady = false;
+
+  /**
+   * Turn to see the aurora: low down, looking up into the dark half of the
+   * sky, away from the moon, whose light would wash the curtains out.
+   */
+  showAurora(): void {
+    this.rememberView('aurora');
+    this.skyView(this.auroraDir);
+  }
 
   /**
    * Turn round to see the rainbow: it is always in the sky opposite the sun,
@@ -667,17 +714,26 @@ export class TreeStudio {
    * slightly-downward view only its feet would be in the picture.
    */
   showRainbow(): void {
-    const toSun = new Vector3(this.sunDir.x, 0, this.sunDir.z);
-    if (toSun.lengthSq() < 1e-6) return;
-    toSun.normalize();
-    // Remember the view it came from, to go back to when the rainbow goes.
-    this.beforeRainbow ??= { target: this.controls.target.clone(), position: this.camera.position.clone() };
+    const away = new Vector3(-this.sunDir.x, 0, -this.sunDir.z);
+    if (away.lengthSq() < 1e-6) return;
+    this.rememberView('rainbow');
+    this.skyView(away.normalize());
+  }
+
+  /**
+   * A view for something in the sky: looking toward `toward` (horizontal),
+   * from far enough back to have the whole tree in the picture, roots to
+   * crown, standing low and tilted a little up, so the sky above it fills
+   * the rest. (Closer in and steeper, the tree's lower half fell out of the
+   * frame.) The camera still turns about the tree's own axis.
+   */
+  private skyView(toward: Vector3): void {
     const h = Math.max(2, this.treeHeight);
-    const flat = Math.max(9, Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z));
-    // Up into the crown and a little past it, so the camera still turns about
-    // the tree rather than about a point in the air.
-    const target = new Vector3(0, h * 0.9, 0).addScaledVector(toSun, -h * 0.3);
-    const position = new Vector3(toSun.x * flat, CAMERA_FLOOR + 0.9, toSun.z * flat);
+    const eye = 0.9;
+    const tilt = MathUtils.degToRad(12);
+    const distance = Math.max(13, 2 * h, 2.6 * this.treeRadius);
+    const position = new Vector3(-toward.x * distance, eye, -toward.z * distance);
+    const target = new Vector3(0, eye + distance * Math.tan(tilt), 0);
     this.cameraGlide = {
       fromTarget: this.controls.target.clone(),
       fromPosition: this.camera.position.clone(),
@@ -759,6 +815,10 @@ export class TreeStudio {
     // from the moon, cool, and dim. In between, every part of it is a blend.
     const n = this.nightness;
     sunDirection({ ...settings, elevation: MathUtils.clamp(params.sunElevation, 20, 65) }, this.moonDir);
+    // The aurora hangs in the dark half of the sky, away from the moon.
+    this.auroraDir.set(-this.moonDir.x, 0, -this.moonDir.z);
+    if (this.auroraDir.lengthSq() < 1e-6) this.auroraDir.set(0, 0, -1);
+    this.auroraDir.normalize();
     this.sky.setNight(n, this.moonDir);
     if (n > 0) {
       this.sunDir.lerp(this.moonDir, n).normalize();
@@ -815,6 +875,12 @@ export class TreeStudio {
       this.scene.environmentIntensity = MathUtils.lerp(this.scene.environmentIntensity, 1.3 * params.skyLight, n);
       this.fill.color.lerp(NIGHT_FILL, n);
       this.fill.intensity = MathUtils.lerp(this.fill.intensity, 0.32 * params.skyLight, n);
+      // An aurora overhead lays a faint green over everything.
+      const glow = this.aurora * n;
+      if (glow > 0) {
+        this.fill.color.lerp(AURORA_GLOW, 0.55 * glow);
+        this.fill.intensity += 0.18 * glow * params.skyLight;
+      }
       this.groundUniforms.horizon.value.lerp(NIGHT_NEAR, n);
       this.groundUniforms.aerialFar.value.lerp(NIGHT_FAR, n);
       this.groundUniforms.snow.value.lerp(MOONLIGHT, n);
@@ -1067,6 +1133,14 @@ export class TreeStudio {
     this.post.tick(dt);
     this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
     this.sky.setRainbow(this.rainbow);
+    // The aurora comes up slowly, the way it does.
+    const lastAurora = this.aurora;
+    if (this.auroraDome) this.auroraDome.position.copy(this.camera.position);
+    const auroraGoal = this.auroraReady ? this.auroraTarget : 0;
+    this.aurora += (auroraGoal - this.aurora) * (1 - Math.exp(-dt / 1.8));
+    if (Math.abs(this.aurora - auroraGoal) < 1e-3) this.aurora = auroraGoal;
+    this.sky.setAurora(this.aurora, this.auroraDir);
+    if (this.aurora !== lastAurora && this.skyNow) this.applySkyNow(this.skyNow);
 
     // Things get wet in seconds and take a good while to dry.
     const rate = this.wetTarget > this.wetness ? 1 / 6 : 1 / 45;

@@ -26,6 +26,7 @@
  * numbers.
  */
 import {
+  AdditiveBlending,
   BackSide,
   BoxGeometry,
   Color,
@@ -34,23 +35,35 @@ import {
   Mesh,
   NoBlending,
   Scene,
+  SphereGeometry,
   Vector3,
   type CubeTexture,
 } from 'three';
-import { CubeRenderTarget, NodeMaterial, type WebGPURenderer } from 'three/webgpu';
+import { CubeRenderTarget, MeshBasicNodeMaterial, NodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
   abs,
   acos,
+  clamp,
+  cos,
+  exp2,
+  mat2,
+  pow,
   dot,
   exp,
   float,
+  Fn,
   fract,
+  If,
+  Loop,
   mix,
+  vec2,
   mx_fractal_noise_float,
   mx_noise_float,
   sin,
   step,
+  cameraPosition,
   normalWorldGeometry,
+  positionWorld,
   positionWorldDirection,
   smoothstep,
   time,
@@ -196,6 +209,10 @@ export function createSkyUniforms() {
     moonDir: uniform(new Vector3(0, 0.5, -1).normalize()),
     /** 1 for the sky you see; 0 for the environment bake, which wants no stars or moon disc. */
     detail: uniform(1),
+    /** How much aurora is showing, 0–1; it only ever shows at night. */
+    aurora: uniform(0),
+    /** The direction (horizontal) the curtains hang in. */
+    auroraDir: uniform(new Vector3(0, 0, -1)),
   };
 }
 
@@ -207,6 +224,130 @@ function spectrum(hue: Node<'float'>): Vec3Node {
 export type SkyUniforms = ReturnType<typeof createSkyUniforms>;
 
 type Vec3Node = Node<'vec3'>;
+
+/*
+ * The aurora.
+ *
+ * Curtains of light hanging in the upper air, drawn the way they usually are
+ * in real time: the sky above is sliced into a stack of thin layers, each a
+ * plane a little higher than the last, and where the view ray crosses each
+ * one it looks up a cheap warped "triangle" noise that folds into long,
+ * rippling filaments. Accumulating the layers gives the curtains their height.
+ *
+ * Colour follows height, as it does in the real thing: a magenta fringe at the
+ * very bottom (nitrogen), the green of oxygen through the body of the
+ * curtains, shading through violet to the red that oxygen gives off highest
+ * up; and some stretches of the display run pinker than others. It moves:
+ * the folds twist, the whole display drifts slowly across the sky, waves run
+ * along the curtains, and patches brighten and dim.
+ */
+// TSL nodes are proxied at runtime and their typings do not follow these
+// chains through swizzles and matrices; loosely typed here, as in dof.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type N = any;
+
+const tri = (x: N) => fract(x).sub(0.5).abs();
+const tri2 = (p: N) => vec2(tri(p.x.add(tri(p.y.mul(2)))), tri(p.y.add(tri(p.x.mul(2)))));
+const turn = (a: N) => mat2(cos(a), sin(a), sin(a).negate(), cos(a));
+const FOLD = mat2(0.95534, 0.29552, -0.29552, 0.95534);
+
+const curtainNoise = Fn(([start]: [N]) => {
+  const p = vec2(start).toVar();
+  const z = float(1.8).toVar();
+  const z2 = float(2.5).toVar();
+  const rz = float(0).toVar();
+  p.assign(turn(p.x.mul(0.06)).mul(p));
+  const bp = vec2(p).toVar();
+  Loop(4, () => {
+    const dg = tri2(bp.mul(1.85)).mul(0.75).toVar();
+    // The folds twist at a pace you can see.
+    dg.assign(turn(time.mul(0.19)).mul(dg));
+    p.subAssign(dg.div(z2));
+    bp.mulAssign(1.3);
+    z2.mulAssign(0.45);
+    z.mulAssign(0.42);
+    p.mulAssign(float(1.21).add(rz.sub(1).mul(0.02)));
+    rz.addAssign(tri(p.x.add(tri(p.y))).mul(z));
+    p.assign(FOLD.mul(p).negate());
+  });
+  return clamp(float(1).div(pow(rz.mul(29), 1.3)), 0, 0.55);
+});
+
+const AURORA_LAYERS = 22;
+/** The layers spread over the height a fifty-layer stack would cover, so the curtains keep their length. */
+const STRETCH = 50 / AURORA_LAYERS;
+const FRINGE = vec3(0.92, 0.22, 0.78);
+const GREEN = vec3(0.12, 1.0, 0.45);
+const VIOLET = vec3(0.62, 0.22, 0.95);
+const RED = vec3(0.95, 0.22, 0.32);
+const PINK = vec3(1.0, 0.42, 0.72);
+
+const auroraLight = Fn(([direction, amount]: [N, N]) => {
+  const d = vec3(direction).toVar();
+  const out = vec3(0).toVar();
+  If(amount.greaterThan(0.001).and(d.y.greaterThan(0.02)), () => {
+    // Some stretches of the display run pinker than others, and the regions drift.
+    const region = mx_noise_float(vec3(d.x.div(d.y).mul(0.55), d.z.div(d.y).mul(0.55), time.mul(0.03)))
+      .mul(0.5)
+      .add(0.5)
+      .toVar();
+    const acc = vec3(0).toVar();
+    Loop(AURORA_LAYERS, ({ i }: { i: N }) => {
+      const fs = float(i).mul(STRETCH).toVar();
+      const h = fs.div(50).toVar();
+      const height = float(0.8).add(fs.pow(1.4).mul(0.002));
+      const along = height.div(d.y.mul(2).add(0.4));
+      const ground = vec2(d.z, d.x).mul(along).add(vec2(2.3, -1.1)).toVar();
+      // The display drifting across the sky, and waves running along the curtains.
+      ground.addAssign(vec2(time.mul(0.045), time.mul(0.012)));
+      ground.assign(vec2(ground.x.add(sin(ground.y.mul(0.8).add(time.mul(0.35))).mul(0.22)), ground.y));
+      const strength = curtainNoise(ground);
+      // Colour by height: magenta fringe, green body, violet, red at the top.
+      const body = mix(GREEN, VIOLET, smoothstep(0.32, 0.72, h));
+      const high = mix(body, RED, smoothstep(0.7, 1, h));
+      const coloured = mix(FRINGE, high, smoothstep(0, 0.1, h));
+      const tint = mix(coloured, PINK, smoothstep(0.55, 0.85, region).mul(0.55).mul(smoothstep(0.08, 0.4, h)));
+      // Patches brightening and dimming.
+      const pulse = sin(time.mul(0.4).add(ground.x.mul(0.6)).add(ground.y.mul(0.3))).mul(0.25).add(0.75);
+      acc.assign(mix(acc, tint.mul(strength).mul(pulse), 0.5));
+      out.addAssign(acc.mul(exp2(fs.mul(-0.05).sub(2.5))).mul(smoothstep(0, 5, fs)).mul(STRETCH));
+    });
+    out.mulAssign(smoothstep(0.02, 0.18, d.y));
+    // Dark sky between the curtains: the faintest light is let go, so they
+    // stand out against the night instead of hazing the whole sky.
+    const lum = dot(out, vec3(0.2, 0.7, 0.1));
+    out.mulAssign(smoothstep(0.035, 0.14, lum));
+  });
+  return out.mul(amount).mul(0.62);
+});
+
+/**
+ * The aurora as a dome of its own, drawn over the sky.
+ *
+ * Not part of the sky shader: its loops make a large shader, and the first
+ * time a browser meets a new one it can take many seconds to compile, during
+ * which everything crawls — which every visitor paid on arrival, by day, for
+ * something seen only at night and only when asked for. As a separate dome it
+ * is built, and compiled in the background, the first time it is wanted.
+ * Added over the sky (it is light), behind everything solid, following the
+ * camera so it is always at the sky's distance.
+ */
+export function createAuroraDome(u: SkyUniforms): Mesh {
+  const material = new MeshBasicNodeMaterial();
+  material.side = BackSide;
+  material.transparent = true;
+  material.depthWrite = false;
+  material.blending = AdditiveBlending;
+  material.fog = false;
+  const dir = positionWorld.sub(cameraPosition).normalize();
+  // Cloud draws over it, as it does over the stars.
+  const clear = u.overcast.mul(0.85).oneMinus();
+  material.colorNode = auroraLight(dir, u.aurora.mul(u.night).mul(clear)).mul(u.intensity);
+  const dome = new Mesh(new SphereGeometry(1200, 32, 16), material);
+  dome.frustumCulled = false;
+  dome.renderOrder = -1;
+  return dome;
+}
 
 /**
  * The sky in a given direction.
@@ -447,6 +588,12 @@ export class ProceduralSky {
 
     this.envDirty = true;
     return this.light;
+  }
+
+  /** How much aurora is showing, 0–1 (at night only; the day sky ignores it). */
+  setAurora(amount: number, toward?: Vector3): void {
+    this.uniforms.aurora.value = amount;
+    if (toward) this.uniforms.auroraDir.value.copy(toward);
   }
 
   /** Day to night, 0–1, and where the moon is. */

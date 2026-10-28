@@ -479,6 +479,18 @@
     studio?.setNight(on);
   });
 
+  $effect(() => {
+    const on = params.aurora;
+    if (!ready) return;
+    studio?.setAurora(on);
+  });
+
+  /** At night the rainbow's place goes to the aurora, which turns the camera to it the same way. */
+  function toggleAurora() {
+    params.aurora = !params.aurora;
+    if (params.aurora) studio?.showAurora();
+  }
+
   /**
    * A rainbow wants a low sun — above 42° there is none at all — and the sky
    * opposite it. So asking for one brings the sun down if it is high, and the
@@ -575,7 +587,9 @@
         items={[
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
           { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
-          { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow },
+          params.night
+            ? { id: 'aurora', label: 'Aurora', icon: 'aurora', on: params.aurora, tone: '#9fd8bf', toneInk: '#1d5a45', toggle: toggleAurora }
+            : { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow },
           { id: 'night', label: params.night ? 'Day' : 'Night', icon: params.night ? 'season-summer' : 'moon', on: params.night, tone: '#9aa6d6', toneInk: '#2c3566', toggle: () => (params.night = !params.night) },
         ]}
       />
