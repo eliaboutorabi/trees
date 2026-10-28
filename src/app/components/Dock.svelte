@@ -484,11 +484,16 @@
     display: grid;
     place-items: center;
     border: none;
+    /*
+     * No frost behind these. A backdrop blur is redone by the browser for
+     * every frame the scene moves, element by element, and these ten were
+     * most of that work — about 14ms a frame on a throttled GPU, more than
+     * the focus blur and all the grass — for a frost that their own colour
+     * almost entirely covers. Their rims are a shade more solid instead.
+     */
     background:
       var(--sheen),
-      radial-gradient(130% 120% at 30% 20%, color-mix(in srgb, var(--tone) 82%, white 18%), color-mix(in srgb, var(--tone) 58%, transparent));
-    backdrop-filter: var(--frost);
-    -webkit-backdrop-filter: var(--frost);
+      radial-gradient(130% 120% at 30% 20%, color-mix(in srgb, var(--tone) 82%, white 18%), color-mix(in srgb, var(--tone) 64%, transparent));
     /* Drawn in a deep ink of the tool's colour and coloured in with light. */
     color: color-mix(in srgb, var(--tone-ink) 82%, #000 18%);
     --glyph-wash: #fffaf0;
@@ -561,8 +566,6 @@
     white-space: nowrap;
     color: var(--ink);
     background: var(--sheen), var(--glass);
-    backdrop-filter: var(--frost);
-    -webkit-backdrop-filter: var(--frost);
     box-shadow: var(--rim), 0 6px 14px rgba(28, 20, 10, 0.18);
     opacity: 0;
     pointer-events: none;
@@ -896,9 +899,12 @@
   }
 
   @media (hover: hover) {
+    /* Frosted only while it shows: an invisible frost still costs a blur a frame. */
     .tool:hover:not(.active) .tip {
       opacity: 1;
       transform: translate(-50%, 0) rotate(calc(var(--tilt) * -1));
+      backdrop-filter: var(--frost);
+      -webkit-backdrop-filter: var(--frost);
     }
   }
 

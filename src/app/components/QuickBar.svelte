@@ -138,8 +138,6 @@
     white-space: nowrap;
     color: var(--ink);
     background: var(--sheen), var(--glass);
-    backdrop-filter: var(--frost);
-    -webkit-backdrop-filter: var(--frost);
     box-shadow: var(--rim), 0 6px 14px rgba(20, 14, 6, 0.16);
     opacity: 0;
     pointer-events: none;
@@ -149,9 +147,12 @@
   }
 
   @media (hover: hover) {
+    /* Frosted only while it shows: an invisible frost still costs a blur a frame. */
     .pebble:hover .tip {
       opacity: 1;
       transform: translate(0, -50%) rotate(calc(var(--tilt) * -1));
+      backdrop-filter: var(--frost);
+      -webkit-backdrop-filter: var(--frost);
     }
   }
 
