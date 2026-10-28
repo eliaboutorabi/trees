@@ -65,6 +65,8 @@
     onsubmit?: () => void;
   }
 
+  import { cut } from './paper';
+
   let { value = $bindable(), rows = 12, errorLines = [], label, onsubmit }: Props = $props();
 
   const lines = $derived(value.split('\n'));
@@ -87,7 +89,7 @@
   }
 </script>
 
-<div class="editor" style:--rows={rows}>
+<div class="editor" style:--rows={rows} use:cut={{ seed: label, inset: 2, radius: [10, 20], bulge: [-0.5, 2] }}>
   <pre bind:this={under} aria-hidden="true">{#each lines as line, i (i)}<span class="line" class:bad={bad.has(i + 1)}
         >{@html highlight(line)}{'\n'}</span
       >{/each}</pre>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { paperPath, seedOf } from './paper';
   /**
    * A pad with a little tree in it, and a handle to drag.
    *
@@ -33,6 +34,8 @@
 
   const W = 220;
   const H = 150;
+  // Its bed is cut by hand like everything else in the card.
+  const bed = paperPath(W, H, seedOf('shape-pad'), { inset: 1.5, radius: [10, 20], bulge: [-0.5, 2] });
   const PAD = 12;
 
   const nx = $derived((angle - angleRange[0]) / (angleRange[1] - angleRange[0]));
@@ -119,8 +122,8 @@
     onpointerup={up}
     onkeydown={key}
   >
-    <defs><clipPath id="shape-bed"><rect x="0.5" y="0.5" width={W - 1} height={H - 1} rx="12" /></clipPath></defs>
-    <rect x="0.5" y="0.5" width={W - 1} height={H - 1} rx="12" class="bed" />
+    <defs><clipPath id="shape-bed"><path d={bed} /></clipPath></defs>
+    <path d={bed} class="bed" />
     <!-- the axes, as words at the edges -->
     <text x={PAD} y={H - 4} class="axis">narrow</text>
     <text x={W - PAD} y={H - 4} class="axis" text-anchor="end">spreading</text>

@@ -8,6 +8,7 @@
   import Glyph from './components/Glyph.svelte';
   import GrowthStem from './components/GrowthStem.svelte';
   import QuickBar from './components/QuickBar.svelte';
+  import { cut } from './components/paper';
   import Dock from './components/Dock.svelte';
   import Tile from './components/Tile.svelte';
   import PicSlider from './components/PicSlider.svelte';
@@ -647,7 +648,7 @@
   <PicSlider label="Droop or reach" bind:value={params.tropism} min={-0.6} max={0.6} from="droop" to="reach" hint="Branches that hang like a willow's, or that reach for the sky" />
   <PicSlider label="Branchiness" bind:value={params.iterations} min={1} max={30} step={1} from="branch-few" to="branch-many" hint="How many times the branches divide" />
   <PicSlider label="Trunk" bind:value={params.trunkRadius} min={0.05} max={1.4} from="trunk-thin" to="trunk-stout" hint="Slender or stout" />
-  <button class="another" onclick={shuffleSeed} title="The same kind of tree, grown differently">
+  <button class="another" onclick={shuffleSeed} title="The same kind of tree, grown differently" use:cut={{ seed: 'another', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
     <Glyph name="seeds" size={20} />
     Try another
   </button>
@@ -747,7 +748,7 @@
   <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from="snail" to="swift" />
   <Fold>
     <p class="help">Sharpness. <b>Auto</b> draws at your screen's full density, and gives a little up only if the frame rate stays low — currently {stats.renderScale.toFixed(2)}×.</p>
-    <div class="segmented">
+    <div class="segmented" use:cut={{ seed: 'sharpness', inset: 1.5, radius: [10, 16], bulge: [-0.3, 1.2] }}>
       {#each [{ v: 'auto', l: 'Auto' }, { v: 'low', l: '1×' }, { v: 'medium', l: '1.5×' }, { v: 'high', l: '2×' }] as opt (opt.v)}
         <button class:active={params.quality === opt.v} onclick={() => (params.quality = opt.v as typeof params.quality)}>
           {opt.l}
@@ -773,7 +774,7 @@
     <span><b class="k-global">ANG LEN SHRINK</b> sliders</span>
     <span><b class="k-num">n N</b> step · steps</span>
   </div>
-  <button class="apply" class:dirty={grammarDirty} onclick={applyGrammar} disabled={!grammarDirty}>
+  <button class="apply" class:dirty={grammarDirty} onclick={applyGrammar} disabled={!grammarDirty} use:cut={{ seed: 'apply', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
     {grammarDirty ? 'Apply grammar  ⌘↵' : 'Grammar applied'}
   </button>
   {#if issues.length}

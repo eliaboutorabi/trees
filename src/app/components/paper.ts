@@ -8,24 +8,34 @@
  * ever dipping in by one. It never comes in more than a few pixels from the
  * card's edge, so nothing the card holds can end up outside it.
  */
-export function paperPath(w: number, h: number, seed: number): string {
+export interface CutOptions {
+  /** How far in from the box the outline sits, so outward bulges stay inside it. */
+  inset?: number;
+  /** The range of corner radii, in pixels. */
+  radius?: [number, number];
+  /** How far a side may dip in and bulge out, in pixels. */
+  bulge?: [number, number];
+}
+
+export function paperPath(w: number, h: number, seed: number, opts: CutOptions = {}): string {
+  const { inset = 5, radius = [16, 38], bulge: [bIn, bOut] = [-1.2, 4.2] } = opts;
   const rnd = (i: number) => {
     const x = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
     return x - Math.floor(x);
   };
   // Inset far enough that a side bulging outward stays inside the box.
-  const m = 5;
+  const m = inset;
   const x0 = m;
   const y0 = m;
   const x1 = w - m;
   const y1 = h - m;
   const maxR = Math.max(4, Math.min(w, h) / 2 - m - 2);
   // Top-left, top-right, bottom-right, bottom-left: visibly not the same.
-  const r = [0, 1, 2, 3].map((i) => Math.min(maxR, 16 + 22 * rnd(i)));
+  const r = [0, 1, 2, 3].map((i) => Math.min(maxR, radius[0] + (radius[1] - radius[0]) * rnd(i)));
   // How far each corner's curve reaches along either side — lopsided.
   const k = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => 0.42 + 0.3 * rnd(10 + i));
   // Outward bulges, in pixels: mostly out (up to ~4), only ever a touch in.
-  const bulge = (i: number) => -1.2 + 5.4 * rnd(20 + i);
+  const bulge = (i: number) => bIn + (bOut - bIn) * rnd(20 + i);
   const f = (v: number) => v.toFixed(1);
 
   /*
@@ -69,4 +79,32 @@ export function seedOf(name: string): number {
   let h = 7;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 9973;
   return (h / 9973) * 20;
+}
+
+/**
+ * Cut an element to a hand-cut outline of its own, at whatever size it is —
+ * a Svelte action, for the tiles, buttons and panels inside the cards. The
+ * outline is a mask, redrawn when the element changes size; a string seed
+ * keeps the same element the same shape every time it appears.
+ */
+export function cut(node: HTMLElement, opts: CutOptions & { seed?: string | number } = {}) {
+  const seed = typeof opts.seed === 'string' ? seedOf(opts.seed) : (opts.seed ?? seedOf(node.className));
+  let size = '';
+  const apply = () => {
+    const w = Math.round(node.offsetWidth);
+    const h = Math.round(node.offsetHeight);
+    if (w < 8 || h < 8 || `${w}x${h}` === size) return;
+    size = `${w}x${h}`;
+    const mask = `${paperImage(paperPath(w, h, seed, opts), w, h)} 0 0 / 100% 100% no-repeat`;
+    node.style.setProperty('mask', mask);
+    node.style.setProperty('-webkit-mask', mask);
+  };
+  const observer = new ResizeObserver(apply);
+  observer.observe(node);
+  apply();
+  return {
+    destroy() {
+      observer.disconnect();
+    },
+  };
 }

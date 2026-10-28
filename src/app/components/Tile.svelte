@@ -4,6 +4,7 @@
    * recognise than to read — a species, a season, the weather.
    */
   import type { Snippet } from 'svelte';
+  import { cut } from './paper';
 
   interface Props {
     label: string;
@@ -18,7 +19,7 @@
   let { label, active = false, title, backdrop, onclick, children }: Props = $props();
 </script>
 
-<button class="tile" class:active {title} {onclick} style:--backdrop={backdrop}>
+<button class="tile" class:active {title} {onclick} style:--backdrop={backdrop} use:cut={{ seed: label, inset: 1.5, radius: [9, 18], bulge: [-0.4, 1.4] }}>
   <span class="art">{@render children()}</span>
   <span class="name">{label}</span>
 </button>
