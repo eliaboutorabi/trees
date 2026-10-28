@@ -32,14 +32,19 @@ import {
   Color,
   CubeCamera,
   HalfFloatType,
+  Matrix4,
   Mesh,
   NoBlending,
+  RenderTarget,
   Scene,
   SphereGeometry,
+  Vector2,
   Vector3,
+  type Camera,
   type CubeTexture,
 } from 'three';
-import { CubeRenderTarget, MeshBasicNodeMaterial, NodeMaterial, type WebGPURenderer } from 'three/webgpu';
+import { CubeRenderTarget, MeshBasicNodeMaterial, NodeMaterial, QuadMesh, type WebGPURenderer } from 'three/webgpu';
+import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import {
   abs,
   acos,
@@ -61,14 +66,15 @@ import {
   mx_noise_float,
   sin,
   step,
-  cameraPosition,
   normalWorldGeometry,
-  positionWorld,
   positionWorldDirection,
+  screenUV,
   smoothstep,
+  texture,
   time,
   uniform,
   vec3,
+  vec4,
 } from 'three/tsl';
 import type Node from 'three/src/nodes/core/Node.js';
 
@@ -260,8 +266,8 @@ const curtainNoise = Fn(([start]: [N]) => {
   const bp = vec2(p).toVar();
   Loop(4, () => {
     const dg = tri2(bp.mul(1.85)).mul(0.75).toVar();
-    // The folds twist at a pace you can see.
-    dg.assign(turn(time.mul(0.19)).mul(dg));
+    // The folds twist, slowly: you notice they have changed more than see them move.
+    dg.assign(turn(time.mul(0.085)).mul(dg));
     p.subAssign(dg.div(z2));
     bp.mulAssign(1.3);
     z2.mulAssign(0.45);
@@ -287,7 +293,7 @@ const auroraLight = Fn(([direction, amount]: [N, N]) => {
   const out = vec3(0).toVar();
   If(amount.greaterThan(0.001).and(d.y.greaterThan(0.02)), () => {
     // Some stretches of the display run pinker than others, and the regions drift.
-    const region = mx_noise_float(vec3(d.x.div(d.y).mul(0.55), d.z.div(d.y).mul(0.55), time.mul(0.03)))
+    const region = mx_noise_float(vec3(d.x.div(d.y).mul(0.55), d.z.div(d.y).mul(0.55), time.mul(0.012)))
       .mul(0.5)
       .add(0.5)
       .toVar();
@@ -299,8 +305,8 @@ const auroraLight = Fn(([direction, amount]: [N, N]) => {
       const along = height.div(d.y.mul(2).add(0.4));
       const ground = vec2(d.z, d.x).mul(along).add(vec2(2.3, -1.1)).toVar();
       // The display drifting across the sky, and waves running along the curtains.
-      ground.addAssign(vec2(time.mul(0.045), time.mul(0.012)));
-      ground.assign(vec2(ground.x.add(sin(ground.y.mul(0.8).add(time.mul(0.35))).mul(0.22)), ground.y));
+      ground.addAssign(vec2(time.mul(0.02), time.mul(0.005)));
+      ground.assign(vec2(ground.x.add(sin(ground.y.mul(0.8).add(time.mul(0.15))).mul(0.16)), ground.y));
       const strength = curtainNoise(ground);
       // Colour by height: magenta fringe, green body, violet, red at the top.
       const body = mix(GREEN, VIOLET, smoothstep(0.32, 0.72, h));
@@ -308,7 +314,7 @@ const auroraLight = Fn(([direction, amount]: [N, N]) => {
       const coloured = mix(FRINGE, high, smoothstep(0, 0.1, h));
       const tint = mix(coloured, PINK, smoothstep(0.55, 0.85, region).mul(0.55).mul(smoothstep(0.08, 0.4, h)));
       // Patches brightening and dimming.
-      const pulse = sin(time.mul(0.4).add(ground.x.mul(0.6)).add(ground.y.mul(0.3))).mul(0.25).add(0.75);
+      const pulse = sin(time.mul(0.15).add(ground.x.mul(0.6)).add(ground.y.mul(0.3))).mul(0.2).add(0.8);
       acc.assign(mix(acc, tint.mul(strength).mul(pulse), 0.5));
       out.addAssign(acc.mul(exp2(fs.mul(-0.05).sub(2.5))).mul(smoothstep(0, 5, fs)).mul(STRETCH));
     });
@@ -318,35 +324,97 @@ const auroraLight = Fn(([direction, amount]: [N, N]) => {
     const lum = dot(out, vec3(0.2, 0.7, 0.1));
     out.mulAssign(smoothstep(0.035, 0.14, lum));
   });
-  return out.mul(amount).mul(0.62);
+  // A little brighter than it would be drawn sharp: the blur spreads the folds' light out.
+  return out.mul(amount).mul(0.75);
 });
 
+/** The aurora: a dome for the scene, and the soft picture of the display it shows. */
+export interface Aurora {
+  /** Drawn over the sky, behind everything solid; follows the camera. */
+  dome: Mesh;
+  /** Build its shaders in the background, for the scene it will join; resolves when they are ready. */
+  compile(scene: Scene, camera: Camera): Promise<void>;
+  /** Draw this frame's display, for the camera about to render. */
+  update(camera: Camera): void;
+  dispose(): void;
+}
+
 /**
- * The aurora as a dome of its own, drawn over the sky.
+ * The aurora, drawn small and soft.
+ *
+ * The display is worked out at half the screen's resolution, into a texture
+ * of its own, blurred a little, and the dome over the sky shows that texture.
+ * An aurora has no hard edges — it is light in thin air, and its curtains are
+ * soft at the hems — and drawn at full resolution every fold of the noise
+ * came out sharp and busy, which is what made it look like a pattern rather
+ * than a glow. The same blur that the focus effect gives the sky is what made
+ * it look natural. It is also far cheaper: the stack of layers is the most
+ * expensive shader in the scene, and this runs it for a quarter of the
+ * pixels, or fewer.
  *
  * Not part of the sky shader: its loops make a large shader, and the first
  * time a browser meets a new one it can take many seconds to compile, during
  * which everything crawls — which every visitor paid on arrival, by day, for
- * something seen only at night and only when asked for. As a separate dome it
- * is built, and compiled in the background, the first time it is wanted.
- * Added over the sky (it is light), behind everything solid, following the
- * camera so it is always at the sky's distance.
+ * something seen only at night and only when asked for. So it is built, and
+ * compiled in the background, the first time it is wanted.
  */
-export function createAuroraDome(u: SkyUniforms): Mesh {
+export function createAurora(u: SkyUniforms, renderer: WebGPURenderer): Aurora {
+  // Each texel of the small picture looks along its own ray of the camera's view.
+  const unproject = uniform(new Matrix4());
+  const orient = uniform(new Matrix4());
+  const ndc = vec2(screenUV.x.mul(2).sub(1), screenUV.y.mul(-2).add(1));
+  const ray = unproject.mul(vec4(ndc, 1, 1));
+  const dir = orient.mul(vec4(ray.xyz.div(ray.w), 0)).xyz.normalize();
+  // Cloud draws over it, as it does over the stars.
+  const clear = u.overcast.mul(0.85).oneMinus();
+  const light = auroraLight(dir, u.aurora.mul(u.night).mul(clear)).mul(u.intensity);
+
+  const target = new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false });
+  const display = new NodeMaterial();
+  display.fragmentNode = vec4(light, 1);
+  const quad = new QuadMesh(display);
+  const soft = gaussianBlur(texture(target.texture), null, 1);
+
   const material = new MeshBasicNodeMaterial();
   material.side = BackSide;
   material.transparent = true;
   material.depthWrite = false;
   material.blending = AdditiveBlending;
   material.fog = false;
-  const dir = positionWorld.sub(cameraPosition).normalize();
-  // Cloud draws over it, as it does over the stars.
-  const clear = u.overcast.mul(0.85).oneMinus();
-  material.colorNode = auroraLight(dir, u.aurora.mul(u.night).mul(clear)).mul(u.intensity);
+  material.colorNode = (soft.getTextureNode() as N).sample(screenUV).rgb;
   const dome = new Mesh(new SphereGeometry(1200, 32, 16), material);
   dome.frustumCulled = false;
   dome.renderOrder = -1;
-  return dome;
+
+  const size = new Vector2();
+
+  return {
+    dome,
+    compile(scene: Scene, camera: Camera): Promise<void> {
+      const done = () => undefined;
+      return Promise.all([renderer.compileAsync(quad, quad.camera), renderer.compileAsync(dome, camera, scene)]).then(done, done);
+    },
+    update(camera: Camera): void {
+      renderer.getSize(size);
+      const w = Math.max(1, Math.round(size.x * 0.5));
+      const h = Math.max(1, Math.round(size.y * 0.5));
+      if (target.width !== w || target.height !== h) target.setSize(w, h);
+      camera.updateMatrixWorld();
+      unproject.value.copy(camera.projectionMatrixInverse);
+      orient.value.copy(camera.matrixWorld);
+      const previous = renderer.getRenderTarget();
+      renderer.setRenderTarget(target);
+      quad.render(renderer);
+      renderer.setRenderTarget(previous);
+    },
+    dispose(): void {
+      target.dispose();
+      display.dispose();
+      soft.dispose();
+      material.dispose();
+      dome.geometry.dispose();
+    },
+  };
 }
 
 /**

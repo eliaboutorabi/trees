@@ -4,7 +4,6 @@
  */
 import {
   Group,
-  Mesh,
   Color,
   DirectionalLight,
   HemisphereLight,
@@ -23,7 +22,7 @@ import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from
 import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
 import { createMeadow } from './meadow';
 import { createPostPipeline } from './post';
-import { createAuroraDome, ProceduralSky, sunDirection, type SkySettings } from './sky';
+import { createAurora, ProceduralSky, sunDirection, type Aurora, type SkySettings } from './sky';
 import { getSeason, snowTintFor, type Season, type Weather } from './season';
 import { createRainfall, createSnowfall } from './weather';
 import { Flock } from './birds';
@@ -683,22 +682,22 @@ export class TreeStudio {
   /** Show or hide the aurora (it only shows at night); it fades either way. */
   setAurora(on: boolean): void {
     this.auroraTarget = on ? 1 : 0;
-    if (on && !this.auroraDome && this.renderer) {
+    if (on && !this.auroraSky && this.renderer) {
       // Built and compiled the first time it is wanted, off to one side, and
-      // only put in the scene once its shader is ready — so asking for it
+      // only put in the scene once its shaders are ready — so asking for it
       // never stalls the picture. It fades in from there.
-      const dome = createAuroraDome(this.sky.uniforms);
-      this.auroraDome = dome;
-      const ready = () => {
-        this.scene.add(dome);
+      const aurora = createAurora(this.sky.uniforms, this.renderer);
+      this.auroraSky = aurora;
+      aurora.compile(this.scene, this.camera).then(() => {
+        if (this.disposed) return;
+        this.scene.add(aurora.dome);
         this.auroraReady = true;
-      };
-      this.renderer.compileAsync(dome, this.camera, this.scene).then(ready, ready);
+      });
     }
     if (!on) this.returnView('aurora');
   }
 
-  private auroraDome: Mesh | null = null;
+  private auroraSky: Aurora | null = null;
   private auroraReady = false;
 
   /**
@@ -1138,7 +1137,6 @@ export class TreeStudio {
     this.sky.setRainbow(this.rainbow);
     // The aurora comes up slowly, the way it does.
     const lastAurora = this.aurora;
-    if (this.auroraDome) this.auroraDome.position.copy(this.camera.position);
     const auroraGoal = this.auroraReady ? this.auroraTarget : 0;
     this.aurora += (auroraGoal - this.aurora) * (1 - Math.exp(-dt / 1.8));
     if (Math.abs(this.aurora - auroraGoal) < 1e-3) this.aurora = auroraGoal;
@@ -1166,6 +1164,16 @@ export class TreeStudio {
     // Re-render the environment cube before the frame that needs it, and only
     // when the sun has actually moved.
     this.sky.refresh(this.renderer);
+    // The aurora's small picture is drawn for this frame's view first, and
+    // not at all while there is none to see.
+    const aurora = this.auroraSky;
+    if (aurora && this.auroraReady) {
+      aurora.dome.visible = this.aurora > 0.002;
+      if (aurora.dome.visible) {
+        aurora.dome.position.copy(this.camera.position);
+        aurora.update(this.camera);
+      }
+    }
     this.post.render();
 
     if (this.pendingCapture) {
@@ -1552,6 +1560,7 @@ export class TreeStudio {
       (m.material as { dispose(): void }).dispose();
     }
     this.sky.dispose();
+    this.auroraSky?.dispose();
     this.post?.dispose();
     this.controls?.dispose();
     this.renderer?.dispose();
