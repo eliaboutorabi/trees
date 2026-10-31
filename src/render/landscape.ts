@@ -29,6 +29,7 @@ import {
 } from 'three';
 import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
+import { pondField, pondGround } from './pond';
 import { createGroundMaterial } from './materials/ground';
 import { createGroundCoverMaterial } from './materials/groundCover';
 import type { TreeUniforms } from '../engine/materials/shared';
@@ -153,7 +154,7 @@ export function terrainHeight(x: number, z: number, opts: LandscapeOptions): num
   // very low frequency mass term lets whole massifs rise and others sink to
   // foothills, so the skyline has somewhere for the eye to rest.
   const rise = smootherstep((dist - opts.radius * 1.05) / (opts.horizonRadius * 0.42));
-  if (rise <= 0) return meadow * opts.relief;
+  if (rise <= 0) return meadow * opts.relief + pondGround(x, z);
 
   const mass = Math.pow(fbm(x * 0.0026, z * 0.0026, opts.seed + 1777, 3), 1.5);
   const crest = ridged(x * 0.0043, z * 0.0043, opts.seed + 313, 6);
@@ -164,10 +165,15 @@ export function terrainHeight(x: number, z: number, opts: LandscapeOptions): num
   return (meadow + (peaks + skirt) * rise) * opts.relief;
 }
 
+
+
 // -------------------------------------------------------------- terrain
 
 function buildTerrainGeometry(opts: LandscapeOptions): BufferGeometry {
-  const rings = 220;
+  // Cubic rather than quadratic ring spacing, and more rings: the same detail
+  // at the horizon, but rings under a third of a metre apart around the pond,
+  // where the bank has to slope down to the water smoothly.
+  const rings = 320;
   const sectors = 224;
 
   const vertexCount = (rings + 1) * (sectors + 1);
@@ -177,8 +183,8 @@ function buildTerrainGeometry(opts: LandscapeOptions): BufferGeometry {
   let p = 0;
   let t = 0;
   for (let i = 0; i <= rings; i++) {
-    // Quadratic spacing: dense where the camera is, sparse at the horizon.
-    const radius = opts.horizonRadius * Math.pow(i / rings, 2);
+    // Dense where the camera is, sparse at the horizon.
+    const radius = opts.horizonRadius * Math.pow(i / rings, 3);
     for (let j = 0; j <= sectors; j++) {
       const a = (j / sectors) * Math.PI * 2;
       const x = Math.cos(a) * radius;
@@ -448,6 +454,8 @@ export interface ScatterOptions {
   /** Per-instance tint. Hue and value variation is what stops a field of
    *  identical instances from reading as wallpaper. */
   tint?: { base: number; vary: number };
+  /** Stay out of the pond: nothing where `pondField` is below this (1 is the water's edge). */
+  keepOut?: number;
 }
 
 function scatter(
@@ -487,7 +495,8 @@ function scatter(
       x = Math.cos(a) * r;
       z = Math.sin(a) * r;
       const edgeOk = !s.rim || rng() < rimKeep(x, z, s.maxRadius, s.rim, opts.seed + s.seedOffset);
-      if (edgeOk && (!s.clump || fbm(x * s.clump.scale, z * s.clump.scale, opts.seed + 401, 3) >= s.clump.threshold)) break;
+      const dry = !s.keepOut || pondField(x, z) >= s.keepOut;
+      if (edgeOk && dry && (!s.clump || fbm(x * s.clump.scale, z * s.clump.scale, opts.seed + 401, 3) >= s.clump.threshold)) break;
       if (attempt === 11) x = NaN;
     }
     if (Number.isNaN(x)) continue;
@@ -577,6 +586,8 @@ export function createLandscape(
       seedOffset: 29,
       yaw: 0.7,
       tint: { base: 0x5c6b2b, vary: 0.4 },
+      // Down the bank to just above the water, where turf gives way to mud.
+      keepOut: 1.14,
     }),
   );
 
@@ -595,6 +606,7 @@ export function createLandscape(
       seedOffset: 71,
       yaw: 1.2,
       tint: { base: 0x4e5f26, vary: 0.5 },
+      keepOut: 1.32,
     }),
   );
 
@@ -612,6 +624,7 @@ export function createLandscape(
       scale: [0.1, 0.34],
       seedOffset: 11,
       sink: 0.62,
+      keepOut: 1.5,
       castShadow: true,
       tint: { base: 0xffffff, vary: 0.35 },
     }),

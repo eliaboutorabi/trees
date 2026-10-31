@@ -44,6 +44,7 @@ import {
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
 import { rimKeep, terrainHeight, type LandscapeOptions } from './landscape';
+import { pondField } from './pond';
 import type { TreeUniforms } from '../engine/materials/shared';
 
 export interface MeadowOptions {
@@ -221,6 +222,8 @@ function scatterFlowers(
     if (rng() > drift * 0.85 + 0.15) continue;
     // And they give out raggedly at the meadow's edge, not in a circle.
     if (rng() > rimKeep(x, z, o.maxRadius, 0.55, o.seed)) continue;
+    // Nor in the pond, nor on the mud of its bank.
+    if (pondField(x, z) < 1.22) continue;
 
     // Smaller towards the rim, as well as fewer: settled here, once.
     const k = Math.min(1, Math.max(0, (o.maxRadius - r) / (o.maxRadius * 0.35)));

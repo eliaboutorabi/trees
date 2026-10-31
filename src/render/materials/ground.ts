@@ -44,6 +44,7 @@ import {
   vec3,
 } from 'three/tsl';
 import { createNoiseTexture } from '../../lib/noiseTexture';
+import { pondFieldNode } from '../pond';
 
 export type GroundUniforms = ReturnType<typeof createGroundMaterial>['uniforms'];
 
@@ -253,7 +254,18 @@ export function createGroundMaterial() {
   // in rain while turf only deepens. Snow does not get wet in the same way.
   const soak = uniforms.wetness.mul(snowMask.oneMinus());
   const darken = soak.mul(mix(float(0.28), float(0.5), kDirt.div(kGrass.add(kDirt).max(0.0001))));
-  material.colorNode = surface
+
+  // The pond: turf gives way to mud down its bank, ragged at the top where
+  // the grass holds on in tufts, and the mud is wet — dark and glossy — from
+  // a little above the water's edge on down to the bed. Snow lies on the
+  // upper bank as on any other ground.
+  const field = pondFieldNode(p.xz);
+  const mudLine = smoothstep(1.22, 1.05, field.add(patch.sub(0.5).mul(0.3)).add(detail.sub(0.5).mul(0.08)));
+  const wetBank = smoothstep(1.12, 1.0, field);
+  const mud = mix(vec3(0.15, 0.125, 0.09), vec3(0.06, 0.05, 0.038), wetBank);
+  const ground = mix(surface, mud, mudLine.mul(snowMask.mul(smoothstep(1.0, 1.12, field)).oneMinus()));
+
+  material.colorNode = ground
     .mul(mix(shade, float(1), snowMask))
     .mul(mix(tint, vec3(1, 1, 1), snowMask))
     .mul(darken.oneMinus());
@@ -263,7 +275,8 @@ export function createGroundMaterial() {
     .sub(detail.mul(0.06).mul(nearness))
     .add(rockMask.mul(0.02))
     .sub(snowMask.mul(0.2))
-    .sub(soak.mul(0.5));
+    .sub(soak.mul(0.5))
+    .sub(wetBank.mul(0.5));
   material.metalnessNode = float(0);
 
   return { material, uniforms };

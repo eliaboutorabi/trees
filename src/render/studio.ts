@@ -21,6 +21,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from '../engine';
 import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
 import { createMeadow } from './meadow';
+import { createPond } from './pond';
 import { createPostPipeline } from './post';
 import { createAurora, ProceduralSky, sunDirection, type Aurora, type SkySettings } from './sky';
 import { getSeason, snowTintFor, type Season, type Weather } from './season';
@@ -178,6 +179,7 @@ export class TreeStudio {
   private readonly groundUniforms = this.landscape.uniforms;
   // Wildflowers, and butterflies that perch on the ones actually placed.
   private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
+  private readonly pond = createPond(this.tree.uniforms);
   /** Only out at night. */
   private readonly fireflies = createFireflies(this.tree.uniforms);
   private readonly snowfall = createSnowfall(this.tree.uniforms);
@@ -332,6 +334,7 @@ export class TreeStudio {
 
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
+    this.scene.add(this.pond.water);
     this.scene.add(this.fireflies);
     this.scene.add(this.snowfall);
     this.scene.add(this.rainfall);
@@ -1597,6 +1600,7 @@ export class TreeStudio {
     this.tree.dispose();
     this.landscape.dispose();
     this.meadow.dispose();
+    this.pond.dispose();
     this.flock.dispose();
     for (const m of [this.snowfall, this.rainfall]) {
       m.geometry.dispose();

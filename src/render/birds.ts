@@ -36,6 +36,7 @@ import { attribute, mix, positionLocal, step, uniformArray, vec3 } from 'three/t
 import type Node from 'three/src/nodes/core/Node.js';
 import type { Perch, Tree } from '../engine';
 import { mulberry32 } from '../lib/rng';
+import { pondField } from './pond';
 
 /** The most the flock can hold; `setPopulation` decides how many come. */
 export const MAX_BIRDS = 24;
@@ -684,9 +685,14 @@ export class Flock {
 
   private groundSpot(out: Vector3, avoidTree = false): Vector3 {
     const reach = Math.max(2.4, this.tree.radius * 0.9);
-    const r = avoidTree ? reach + 1.5 + this.rng() * 3 : 2 + this.rng() * (reach + 3);
-    const a = this.rng() * Math.PI * 2;
-    return out.set(Math.cos(a) * Math.min(r, 6.5), 0, Math.sin(a) * Math.min(r, 6.5));
+    // Anywhere in the grass, but not in the pond or down its muddy bank.
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const r = avoidTree ? reach + 1.5 + this.rng() * 3 : 2 + this.rng() * (reach + 3);
+      const a = this.rng() * Math.PI * 2;
+      out.set(Math.cos(a) * Math.min(r, 6.5), 0, Math.sin(a) * Math.min(r, 6.5));
+      if (pondField(out.x, out.z) > 1.4) break;
+    }
+    return out;
   }
 
   /**
