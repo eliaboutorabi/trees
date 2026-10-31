@@ -36,7 +36,7 @@ import { attribute, mix, positionLocal, step, uniformArray, vec3 } from 'three/t
 import type Node from 'three/src/nodes/core/Node.js';
 import type { Perch, Tree } from '../engine';
 import { mulberry32 } from '../lib/rng';
-import { pondField } from './pond';
+import { pondField } from './pondShape';
 
 /** The most the flock can hold; `setPopulation` decides how many come. */
 export const MAX_BIRDS = 24;

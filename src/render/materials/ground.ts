@@ -44,7 +44,7 @@ import {
   vec3,
 } from 'three/tsl';
 import { createNoiseTexture } from '../../lib/noiseTexture';
-import { pondFieldNode } from '../pond';
+import { pondFieldNode } from '../pondShape';
 
 export type GroundUniforms = ReturnType<typeof createGroundMaterial>['uniforms'];
 

@@ -211,6 +211,9 @@ export class TreeStudio {
   private readonly seasonTarget = {
     leafDry: 0,
     meadowBloom: 1,
+    pondIce: 0,
+    lilyPads: 1,
+    lilyFlowers: 1,
     snowfall: 0,
     rainfall: 0,
     snowColor: new Color(),
@@ -615,6 +618,9 @@ export class TreeStudio {
     const t = this.seasonTarget;
     t.leafDry = season.leafDry;
     t.meadowBloom = season.meadowBloom;
+    t.pondIce = season.pondIce;
+    t.lilyPads = season.lilyPads;
+    t.lilyFlowers = season.lilyFlowers;
     t.snowColor.copy(snowTintFor(id));
     t.grassDeep.setHex(season.grassDeep);
     t.grassMid.setHex(season.grassMid);
@@ -643,6 +649,12 @@ export class TreeStudio {
     const g = this.groundUniforms;
     u.leafDry.value += (t.leafDry - u.leafDry.value) * k;
     u.meadowBloom.value += (t.meadowBloom - u.meadowBloom.value) * k;
+    // The pond freezes and thaws slowly, and its lilies come and go with the season.
+    const pu = this.pond.uniforms;
+    pu.ice.value += (t.pondIce - pu.ice.value) * (1 - Math.exp(-dt / 2.2));
+    pu.pads.value += (t.lilyPads - pu.pads.value) * k;
+    pu.flowers.value += (t.lilyFlowers - pu.flowers.value) * k;
+    if (Number.isFinite(dt)) pu.flow.value += dt * (1 - pu.ice.value);
     u.snowfall.value += (t.snowfall - u.snowfall.value) * k;
     u.rainfall.value += (t.rainfall - u.rainfall.value) * k;
     u.snowColor.value.lerp(t.snowColor, k);

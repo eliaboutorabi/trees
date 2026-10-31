@@ -11,12 +11,12 @@
  * Both are single merged meshes, so the whole bank costs two draws.
  */
 import { BufferAttribute, BufferGeometry, DoubleSide, IcosahedronGeometry, Mesh, Vector3 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, float, mix, normalWorld, positionLocal, positionWorld, sin, smoothstep, uv, vec3 } from 'three/tsl';
 import { mulberry32 } from '../lib/rng';
 import type { TreeUniforms } from '../engine/materials/shared';
-import { POND, shorePoint } from './pond';
+import { POND, shorePoint } from './pondShape';
 
 // --------------------------------------------------------------- stones
 
@@ -37,7 +37,13 @@ const STONES: [number, number, number][] = [
 /** A boulder: an icosphere pushed in and out by a few lumps, flattened, and set into the bank. */
 function boulder(seed: number, size: number): BufferGeometry {
   const rng = mulberry32(seed);
-  const g = new IcosahedronGeometry(1, 2);
+  // three's polyhedra come with every corner repeated per face; merged, each
+  // corner is pushed out once (no cracks) and the normals come out smooth.
+  const raw = new IcosahedronGeometry(1, 2);
+  raw.deleteAttribute('normal');
+  raw.deleteAttribute('uv');
+  const g = mergeVertices(raw);
+  raw.dispose();
   const pos = g.getAttribute('position');
   const lumps = Array.from({ length: 5 }, () => new Vector3(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize());
   const v = new Vector3();
@@ -66,9 +72,12 @@ function stonesMesh(u: TreeUniforms): Mesh {
     // Sunk about a third of its height into the bank or the shallows.
     g.translate(at.x, at.y + size * 0.12, at.z);
     const shade = 0.82 + rng() * 0.3;
-    const count = g.getAttribute('position').count;
+    const part = g.toNonIndexed();
+    g.dispose();
+    // Counted after unindexing: one tint per drawn vertex.
+    const count = part.getAttribute('position').count;
     for (let k = 0; k < count; k++) tint.push(shade, shade * (0.97 + rng() * 0.04), shade * 0.95);
-    parts.push(g.toNonIndexed());
+    parts.push(part);
   });
   const geometry = mergeGeometries(parts)!;
   geometry.setAttribute('aTint', new BufferAttribute(new Float32Array(tint), 3));
@@ -87,7 +96,8 @@ function stonesMesh(u: TreeUniforms): Mesh {
   const mossy = smoothstep(0.25, 0.75, up).mul(patches);
   const wet = smoothstep(POND.level + 0.1, POND.level, positionWorld.y);
   const dry = mix(rock, vec3(0.13, 0.19, 0.06), mossy.mul(0.9).mul(u.snow.oneMinus()));
-  const snow = smoothstep(0.35, 0.8, up).mul(u.snow).mul(wet.oneMinus());
+  // A cap of snow on top, the sides left dark.
+  const snow = smoothstep(0.62, 0.86, up).mul(u.snow).mul(wet.oneMinus());
   material.colorNode = mix(dry.mul(wet.mul(0.45).oneMinus()), u.snowColor, snow);
   material.roughnessNode = mix(float(0.9), float(0.35), wet).sub(u.wetness.mul(0.35)).clamp(0.2, 1);
   material.metalnessNode = float(0);

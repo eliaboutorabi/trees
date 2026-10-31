@@ -44,7 +44,7 @@ import {
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
 import { rimKeep, terrainHeight, type LandscapeOptions } from './landscape';
-import { pondField } from './pond';
+import { pondField } from './pondShape';
 import type { TreeUniforms } from '../engine/materials/shared';
 
 export interface MeadowOptions {

@@ -52,6 +52,10 @@ export interface SeasonLook {
   weather: Weather;
   /** Fraction of the meadow still in flower, and carrying butterflies. */
   meadowBloom: number;
+  /** The pond: frozen over, 0–1; how many lily pads; how many of them in flower. */
+  pondIce: number;
+  lilyPads: number;
+  lilyFlowers: number;
   /** Multiplies the species' own windiness. */
   wind: number;
 
@@ -84,6 +88,9 @@ export const SEASONS: readonly SeasonLook[] = [
     snow: 0,
     weather: 'clear',
     meadowBloom: 1,
+    pondIce: 0,
+    lilyPads: 0.75,
+    lilyFlowers: 0.4,
     wind: 1,
     sunElevation: 26,
     sunIntensity: 5,
@@ -109,6 +116,9 @@ export const SEASONS: readonly SeasonLook[] = [
     snow: 0,
     weather: 'clear',
     meadowBloom: 1,
+    pondIce: 0,
+    lilyPads: 1,
+    lilyFlowers: 1,
     wind: 1,
     sunElevation: 17,
     sunIntensity: 5,
@@ -134,6 +144,9 @@ export const SEASONS: readonly SeasonLook[] = [
     snow: 0,
     weather: 'clear',
     meadowBloom: 0.3,
+    pondIce: 0,
+    lilyPads: 0.6,
+    lilyFlowers: 0,
     wind: 1.25,
     sunElevation: 11,
     sunIntensity: 4.6,
@@ -159,6 +172,9 @@ export const SEASONS: readonly SeasonLook[] = [
     snow: 1,
     weather: 'snow',
     meadowBloom: 0,
+    pondIce: 1,
+    lilyPads: 0,
+    lilyFlowers: 0,
     wind: 1.15,
     /*
      * Winter has to read *cold*, and the first attempt at it did not: a sun at

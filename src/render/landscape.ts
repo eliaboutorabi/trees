@@ -30,7 +30,7 @@ import {
 } from 'three';
 import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
-import { pondField, pondGround } from './pond';
+import { pondField, pondGround } from './pondShape';
 import { createGroundMaterial } from './materials/ground';
 import { createGroundCoverMaterial } from './materials/groundCover';
 import type { TreeUniforms } from '../engine/materials/shared';

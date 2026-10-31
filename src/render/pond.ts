@@ -2,19 +2,15 @@
  * The pond beside the tree.
  *
  * A small one, a few strides across, in a hollow of its own to the right of
- * the tree and a little behind it as the camera first finds it. Everything
- * about where it is comes from one outline: an ellipse whose edge wanders in
- * and out on a few slow harmonics, so it is kidney-shaped rather than a
- * puddle-shaped circle. The same outline, as a function, carves the hollow in
- * the terrain, keeps the grass and the flowers out of the water, sends the
- * doves round it rather than through it, and tells the water how deep it is
- * at every point — so the shore, where the water thins to nothing over the
- * bank, is smooth however coarse the ground mesh is under it.
+ * the tree and a little behind it as the camera first finds it. Where it is
+ * and how deep comes from one outline (see `pondShape.ts`); this is the
+ * water, its mirror, and what lives on and around it: stones and reeds on the
+ * bank (`pondShore.ts`), lilies and fallen leaves on the surface
+ * (`pondSurface.ts`).
  */
 import { BufferAttribute, BufferGeometry, Group, Mesh, Sphere, Vector3, type Object3D, type PerspectiveCamera, type Scene, type Texture } from 'three';
 import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
-  atan,
   cameraPosition,
   cameraViewMatrix,
   float,
@@ -22,116 +18,20 @@ import {
   output,
   positionWorld,
   screenUV,
-  sin,
   smoothstep,
   texture,
   time,
+  uniform,
   vec2,
   vec3,
   vec4,
 } from 'three/tsl';
 import { PlanarReflection } from './reflection';
 import { createPondShore } from './pondShore';
+import { createPondSurface } from './pondSurface';
 import { createNoiseTexture } from '../lib/noiseTexture';
+import { COS, groundNode, POND, pondFieldNode, SIN, wander } from './pondShape';
 import type { TreeUniforms } from '../engine/materials/shared';
-
-// TSL nodes are proxied at runtime and their typings do not follow chains
-// through swizzles; loosely typed here, as in dof.ts.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type N = any;
-
-export const POND = {
-  /**
-   * Centre, in metres from the trunk: as the camera first finds the tree,
-   * about four metres to its right and four behind it, so the near end of
-   * the pond tucks in behind the trunk.
-   */
-  x: 0.55,
-  z: -5.6,
-  /** Its long axis runs across the first view: a bearing about +Y, radians. */
-  angle: -0.6435,
-  /** Half-length and half-width, before the edge wanders. */
-  rx: 3.8,
-  rz: 2.5,
-  /** The water's surface, a hand's breadth below the meadow. */
-  level: -0.06,
-  /** How far the bed falls below that in the middle. */
-  depth: 0.55,
-};
-
-const COS = Math.cos(POND.angle);
-const SIN = Math.sin(POND.angle);
-
-/** The edge's wander, as a multiple of the ellipse, by angle round it. */
-function wander(theta: number): number {
-  return 1 + 0.11 * Math.sin(2 * theta + 0.6) + 0.07 * Math.sin(3 * theta + 2.2) + 0.035 * Math.sin(5 * theta + 4.1);
-}
-
-/**
- * Where (x, z) is relative to the shore: below 1 inside the outline, 1 on it,
- * above 1 outside — a stretched distance, so 1.3 is a little way up the bank
- * wherever you are round it.
- */
-export function pondField(x: number, z: number): number {
-  const dx = x - POND.x;
-  const dz = z - POND.z;
-  const u = (dx * COS + dz * SIN) / POND.rx;
-  const v = (-dx * SIN + dz * COS) / POND.rz;
-  return Math.hypot(u, v) / wander(Math.atan2(v, u));
-}
-
-const ss = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
-
-/**
- * The ground's height in and around the pond, as an offset to add to the
- * meadow's: nothing past the top of the bank; a gentle slope down to just
- * under the water at the outline; and on down to the bed in the middle.
- */
-export function pondGround(x: number, z: number): number {
-  if (Math.abs(x - POND.x) > POND.rx * 2 || Math.abs(z - POND.z) > POND.rx * 2) return 0;
-  return groundAt(pondField(x, z));
-}
-
-/**
- * A point round the pond: `theta` the angle about its centre in its own
- * frame (0 down the long axis to the right as the camera first sees it,
- * π/2 the near shore), `f` how far out (1 the water's edge). With the
- * ground's height there.
- */
-export function shorePoint(theta: number, f: number): { x: number; z: number; y: number } {
-  const r = f * wander(theta);
-  const u = Math.cos(theta) * r * POND.rx;
-  const v = Math.sin(theta) * r * POND.rz;
-  return { x: POND.x + u * COS - v * SIN, z: POND.z + u * SIN + v * COS, y: groundAt(f) };
-}
-
-function groundAt(f: number): number {
-  const under = POND.level - 0.02 - POND.depth * ss(1, 0.45, f);
-  return under * (1 - ss(1, 1.38, f));
-}
-
-/** The same outline, in a shader: `pondField` for a world-space xz node. */
-export function pondFieldNode(xz: N): N {
-  const d = xz.sub(vec2(POND.x, POND.z));
-  const u = d.x.mul(COS).add(d.y.mul(SIN)).div(POND.rx);
-  const v = d.x.mul(-SIN).add(d.y.mul(COS)).div(POND.rz);
-  const theta = atan(v, u);
-  const w = sin(theta.mul(2).add(0.6))
-    .mul(0.11)
-    .add(sin(theta.mul(3).add(2.2)).mul(0.07))
-    .add(sin(theta.mul(5).add(4.1)).mul(0.035))
-    .add(1);
-  return vec2(u, v).length().div(w);
-}
-
-/** The bed's height under the water, from the field: `groundAt` in a shader. */
-function groundNode(f: N): N {
-  const under = float(POND.level - 0.02).sub(smoothstep(1, 0.45, f).mul(POND.depth));
-  return under.mul(smoothstep(1, 1.38, f).oneMinus());
-}
 
 /**
  * The water's mesh: a disc over the whole hollow out to a little past the
@@ -193,7 +93,7 @@ function waterGeometry(): BufferGeometry {
  *   the stones on the bank, the hills, a passing bird — sampled where the
  *   ripples push it, and stronger the more glancing the view, as water is.
  */
-function waterMaterial(u: TreeUniforms, mirror: Texture): MeshStandardNodeMaterial {
+function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   material.transparent = true;
   material.depthWrite = false;
@@ -202,23 +102,72 @@ function waterMaterial(u: TreeUniforms, mirror: Texture): MeshStandardNodeMateri
   const p = positionWorld;
   const field = pondFieldNode(p.xz);
   const depth = float(POND.level).sub(groundNode(field)).max(0);
+  const ice = pond.ice;
+  const open = ice.oneMinus();
 
   // Ripples: two layers of the noise at different scales, drifting different
-  // ways, read as slopes. Calm water still moves a little.
+  // ways, read as slopes. Calm water still moves a little; ice does not.
   const drift = time.mul(0.035);
   const a = texture(noise, p.xz.mul(0.55).add(vec2(drift, drift.mul(0.6))));
   const b = texture(noise, p.xz.mul(1.3).add(vec2(drift.mul(-0.7), drift.mul(0.9))));
-  const ripple = u.wind.mul(0.07).add(0.035);
-  const slope = vec2(a.g.add(b.b).sub(1), a.b.add(b.g).sub(1)).mul(ripple);
+  const ripple = u.wind.mul(0.07).add(0.035).add(u.rainfall.mul(0.05));
+  const slope = vec2(a.g.add(b.b).sub(1), a.b.add(b.g).sub(1)).mul(ripple).mul(open).toVar();
+
+  /*
+   * Rain. Every drop that lands throws a ring: the surface is cut into cells
+   * a third of a metre across, two grids of them offset from each other, and
+   * in each a ring grows from a point of its own and fades as it goes, each
+   * on its own clock, so the pond is pocked with rings that never fall in
+   * step. A ring is a slope pointing out from its middle, which is all a
+   * ripple is to the light.
+   */
+  const rings = (scale: number, rate: number, seed: number) => {
+    const q = p.xz.mul(scale).add(seed);
+    const cell = q.floor();
+    const h = cell.dot(vec2(127.1, 311.7)).sin().mul(43758.5453).fract();
+    const h2 = cell.dot(vec2(269.5, 183.3)).sin().mul(43758.5453).fract();
+    const t = time.mul(rate).add(h).fract();
+    const centre = vec2(h, h2).mul(0.6).add(0.2);
+    const off = q.fract().sub(centre);
+    const d = off.length();
+    const ring = d.sub(t.mul(0.42)).div(0.05);
+    const wave = ring.mul(ring).negate().exp().mul(t.oneMinus()).mul(ring.mul(3.1).sin());
+    return off.div(d.max(0.001)).mul(wave);
+  };
+  slope.addAssign(rings(3.1, 0.9, 0).add(rings(2.3, 0.7, 17.3)).mul(u.rainfall).mul(0.6).mul(open));
+
   const normal = vec3(slope.x, 1, slope.y).normalize();
   material.normalNode = cameraViewMatrix.mul(vec4(normal, 0)).xyz.normalize();
 
   const shallow = vec3(0.12, 0.115, 0.075);
   const mid = vec3(0.07, 0.13, 0.1);
   const deep = vec3(0.03, 0.105, 0.11);
-  const body = mix(mix(shallow, mid, smoothstep(0.0, 0.14, depth)), deep, smoothstep(0.12, 0.5, depth));
-  material.colorNode = body;
-  material.roughnessNode = float(0.05).add(u.wind.mul(0.04));
+  // Rain stirs up the silt and darkens the water a little.
+  const water = mix(mix(shallow, mid, smoothstep(0.0, 0.14, depth)), deep, smoothstep(0.12, 0.5, depth)).mul(
+    u.rainfall.mul(0.18).oneMinus(),
+  );
+
+  /*
+   * Ice. It forms from the bank inward, so it is white and frosted round the
+   * rim and clearer toward the middle, where it is dark with the water under
+   * it; a few long cracks run through it; and snow drifts onto it in patches,
+   * thickest by the shore.
+   */
+  const grain = texture(noise, p.xz.mul(0.9).add(0.31));
+  const frost = smoothstep(0.55, 1.0, field.add(grain.r.sub(0.5).mul(0.35)));
+  const crackField = texture(noise, p.xz.mul(0.32).add(0.77)).g;
+  const crack = smoothstep(0.012, 0.0, crackField.sub(0.5).abs()).mul(frost.oneMinus().mul(0.6).add(0.4));
+  const clear = vec3(0.16, 0.24, 0.28);
+  const rime = vec3(0.78, 0.84, 0.88);
+  const iceColour = mix(clear, rime, frost.mul(0.85)).add(crack.mul(0.18));
+  const drifts = smoothstep(0.35, 0.75, grain.g.add(frost.mul(0.4))).mul(u.snow);
+  const iceTop = mix(iceColour, u.snowColor, drifts);
+  material.colorNode = mix(water, iceTop, ice);
+
+  // Smooth water; ice glossy where it is clear and matte where it is frosted.
+  const waterRough = float(0.05).add(u.wind.mul(0.04)).add(u.rainfall.mul(0.08));
+  const iceRough = mix(float(0.12), float(0.7), frost.max(drifts));
+  material.roughnessNode = mix(waterRough, iceRough, ice);
   material.metalnessNode = float(0);
   material.opacityNode = smoothstep(0.0, 0.045, depth);
 
@@ -227,20 +176,37 @@ function waterMaterial(u: TreeUniforms, mirror: Texture): MeshStandardNodeMateri
   // Water reflects little looking straight down and nearly everything at a
   // glance; a pond seen from a few metres up sits between, and reads most
   // like a pond when the reflection is clear, so it is weighted toward the
-  // glancing end.
+  // glancing end. Ice reflects far less, and frost and snow not at all.
   const reflected = texture(mirror, vec2(screenUV.x.oneMinus(), screenUV.y).add(slope.mul(0.32)));
   const view = cameraPosition.sub(p).normalize();
   const glance = normal.dot(view).clamp(0, 1).oneMinus();
-  const strength = mix(float(0.5), float(0.92), glance.mul(glance)).mul(reflected.a);
+  const iceMirror = frost.max(drifts).oneMinus().mul(0.45);
+  const strength = mix(float(0.5), float(0.92), glance.mul(glance)).mul(reflected.a).mul(mix(float(1), iceMirror, ice));
   material.outputNode = vec4(mix(output.rgb, reflected.rgb, strength), output.a);
 
   return material;
 }
 
+/** What the season says about the pond, eased by the studio. */
+function pondUniforms() {
+  return {
+    /** Frozen over, 0–1. */
+    ice: uniform(0),
+    /** How many lily pads are out, 0–1. */
+    pads: uniform(1),
+    /** How many of them are in flower, 0–1. */
+    flowers: uniform(1),
+    /** Seconds of open water: the clock what floats on the pond drifts by, stopped while it is frozen. */
+    flow: uniform(0),
+  };
+}
+export type PondUniforms = ReturnType<typeof pondUniforms>;
+
 export interface Pond {
   /** Add to the scene: the water, and the stones and reeds round it. */
   group: Group;
   water: Mesh;
+  uniforms: PondUniforms;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
   /** Draw the reflection for this frame's view, before the frame itself. */
@@ -252,13 +218,17 @@ export function createPond(u: TreeUniforms): Pond {
   const geometry = waterGeometry();
   const bounds = new Sphere(new Vector3(POND.x, POND.level, POND.z), POND.rx * 1.5);
   const mirror = new PlanarReflection(POND.level, bounds);
-  const material = waterMaterial(u, mirror.texture);
+  const uniforms = pondUniforms();
+  const material = waterMaterial(u, mirror.texture, uniforms);
   const water = new Mesh(geometry, material);
   // The water is not in its own reflection.
   mirror.hidden.push(water);
   const shore = createPondShore(u);
+  const surface = createPondSurface(u, uniforms);
+  // Lying flat on the water, they have no reflection worth drawing.
+  mirror.hidden.push(surface.lilies, surface.leaves);
   const group = new Group();
-  group.add(shore.stones, shore.reeds, water);
+  group.add(shore.stones, shore.reeds, surface.lilies, surface.leaves, water);
   water.receiveShadow = true;
   water.castShadow = false;
   // After the ground and everything standing in the water, so its soft edge
@@ -267,6 +237,7 @@ export function createPond(u: TreeUniforms): Pond {
   return {
     group,
     water,
+    uniforms,
     hideFromReflection(...objects: Object3D[]) {
       for (const o of objects) if (!mirror.hidden.includes(o)) mirror.hidden.push(o);
     },
@@ -278,6 +249,7 @@ export function createPond(u: TreeUniforms): Pond {
       material.dispose();
       mirror.dispose();
       shore.dispose();
+      surface.dispose();
     },
   };
 }
