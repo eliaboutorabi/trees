@@ -11,7 +11,7 @@
  * at every point — so the shore, where the water thins to nothing over the
  * bank, is smooth however coarse the ground mesh is under it.
  */
-import { BufferAttribute, BufferGeometry, Mesh, Sphere, Vector3, type Object3D, type PerspectiveCamera, type Scene, type Texture } from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh, Sphere, Vector3, type Object3D, type PerspectiveCamera, type Scene, type Texture } from 'three';
 import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
   atan,
@@ -31,6 +31,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { PlanarReflection } from './reflection';
+import { createPondShore } from './pondShore';
 import { createNoiseTexture } from '../lib/noiseTexture';
 import type { TreeUniforms } from '../engine/materials/shared';
 
@@ -92,6 +93,19 @@ const ss = (a: number, b: number, x: number) => {
 export function pondGround(x: number, z: number): number {
   if (Math.abs(x - POND.x) > POND.rx * 2 || Math.abs(z - POND.z) > POND.rx * 2) return 0;
   return groundAt(pondField(x, z));
+}
+
+/**
+ * A point round the pond: `theta` the angle about its centre in its own
+ * frame (0 down the long axis to the right as the camera first sees it,
+ * π/2 the near shore), `f` how far out (1 the water's edge). With the
+ * ground's height there.
+ */
+export function shorePoint(theta: number, f: number): { x: number; z: number; y: number } {
+  const r = f * wander(theta);
+  const u = Math.cos(theta) * r * POND.rx;
+  const v = Math.sin(theta) * r * POND.rz;
+  return { x: POND.x + u * COS - v * SIN, z: POND.z + u * SIN + v * COS, y: groundAt(f) };
 }
 
 function groundAt(f: number): number {
@@ -224,7 +238,8 @@ function waterMaterial(u: TreeUniforms, mirror: Texture): MeshStandardNodeMateri
 }
 
 export interface Pond {
-  /** Add to the scene. */
+  /** Add to the scene: the water, and the stones and reeds round it. */
+  group: Group;
   water: Mesh;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
@@ -241,12 +256,16 @@ export function createPond(u: TreeUniforms): Pond {
   const water = new Mesh(geometry, material);
   // The water is not in its own reflection.
   mirror.hidden.push(water);
+  const shore = createPondShore(u);
+  const group = new Group();
+  group.add(shore.stones, shore.reeds, water);
   water.receiveShadow = true;
   water.castShadow = false;
   // After the ground and everything standing in the water, so its soft edge
   // resolves against the bank under it.
   water.renderOrder = 1;
   return {
+    group,
     water,
     hideFromReflection(...objects: Object3D[]) {
       for (const o of objects) if (!mirror.hidden.includes(o)) mirror.hidden.push(o);
@@ -258,6 +277,7 @@ export function createPond(u: TreeUniforms): Pond {
       geometry.dispose();
       material.dispose();
       mirror.dispose();
+      shore.dispose();
     },
   };
 }
