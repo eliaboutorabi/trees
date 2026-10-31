@@ -181,5 +181,6 @@ export function applyWeather(weather: Weather): void {
  * each time you cycle through them.
  */
 export function applySeason(season: Season): void {
-  Object.assign(params, paramsFromPreset(params.presetId, season));
+  const kept = Object.fromEntries(SCENE_KEYS.map((k) => [k, params[k]]));
+  Object.assign(params, paramsFromPreset(params.presetId, season), kept);
 }

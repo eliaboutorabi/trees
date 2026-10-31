@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
-  import { applyPreset, params, paramsFromPreset, presets, weatherFields, type AppParams } from './params.svelte';
+  import { applyPreset, params, paramsFromPreset, presets, SCENE_KEYS, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
   import Glyph from './components/Glyph.svelte';
@@ -294,10 +294,14 @@
    */
   function chooseSeason(id: Season) {
     const from = params.season;
-    const target = paramsFromPreset(params.presetId, id);
+    // Everything the season owns — but not the scene's own switches: picking
+    // winter at night stays night, and the doves you asked for stay.
+    const season = paramsFromPreset(params.presetId, id);
+    const target: Partial<AppParams> = { ...season };
+    for (const key of SCENE_KEYS) delete target[key];
     if (studio) {
       const thinning = id === 'winter' || (id === 'autumn' && from !== 'winter');
-      if (thinning) studio.dropLeaves(params.leafDensity, target.leafDensity);
+      if (thinning) studio.dropLeaves(params.leafDensity, season.leafDensity);
       else studio.regrowLeaves();
     }
     glideTo(target);
