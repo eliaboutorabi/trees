@@ -187,7 +187,8 @@ doves go up.
 
 ## Making room for doves
 
-A dozen doves of four kinds live on the tree:
+Doves of four kinds live on the tree, a dozen unless you say otherwise (see
+[The Wildlife card](#the-wildlife-card)):
 
 - sitting on real perches and swaying with the twig under them;
 - walking and pecking in the meadow;
@@ -209,6 +210,38 @@ pushing into the leaves, and these do too. Each perched bird is a **guest**: a
 capsule from its seat out toward open air, inside which leaves fold back toward
 their stems. The loop runs only over the guests actually there, because it
 executes for every leaf vertex in the shadow pass as well as the picture.
+
+## The Wildlife card
+
+The dock's Wildlife card is the garden's field guide. Each creature has:
+
+- **a portrait** whose wings move while the card is open: the dove's beats from
+  the shoulder, the butterfly's close toward its body and open again;
+- **a line saying what it's up to**, so a slider set to twelve with nothing in
+  sight explains itself ("Gone to roost — back at first light", "Not in winter
+  — they come back with the flowers");
+- **how many and how big**, as picture sliders: up to 24 doves and 60
+  butterflies.
+
+The doves also get a **Shoo** button, which puts them up to wheel round the tree.
+
+None of it rebuilds anything.
+
+- **Doves.** The whole flock of 24 is built once, and a population says how
+  many come. One no longer wanted flies off from wherever it is; new ones
+  arrive over the next few seconds, one after another, rather than landing in a
+  block. A bigger bird opens a bigger window in the leaves, but not in
+  proportion: its body grows, the twig it sits on doesn't.
+- **Butterflies.** All sixty are baked into the meadow, each with its place in
+  the line, and a count uniform walks along it on the GPU. One past the count
+  shrinks away about its own middle. The count moves about eight a second, so a
+  big change has them come out, or go, one after another. Species are dealt out
+  in turn along the same line, so any number is as varied as it can be. The
+  place in the line rides in the spare lane of an attribute that was a `vec3`,
+  because the mesh already uses seven of WebGPU's eight buffers.
+
+The wildlife settings belong to the garden, not the tree: they stay put when
+you change species or season, and they travel in a shared link.
 
 ## The world around the tree
 
