@@ -68,7 +68,7 @@ function dove(x: number, y: number, s: number, alive = false, at = 0): Part[] {
  * A butterfly from above, wings open: orange fore, redder hind, a dark body
  * and two clubbed antennae. If `alive`, the wings open and close.
  */
-function butterfly(x: number, y: number, s: number, alive = false, at = 0): Part[] {
+function butterfly(x: number, y: number, s: number, alive = false, at = 0, feelers = true): Part[] {
   const fore: Part = {
     d: 'M11.6 11.6C9.6 7.4 6.4 5.4 4.4 6.4 3.2 7.2 3.6 9.8 5.6 11.2 7.2 12.2 9.6 12.4 11.6 12.2ZM12.4 11.6C14.4 7.4 17.6 5.4 19.6 6.4 20.8 7.2 20.4 9.8 18.4 11.2 16.8 12.2 14.4 12.4 12.4 12.2Z',
     k: 'both',
@@ -84,8 +84,12 @@ function butterfly(x: number, y: number, s: number, alive = false, at = 0): Part
   return [
     ...(alive ? wings.map((w) => moving(w, 'flutter', at)) : wings),
     placed({ d: 'M12 9.8v8.4', k: 'ink', w: 1.15 }, x, y, s),
-    placed({ d: 'M11.8 9.9c-.4-1.4-1.1-2.5-2-3.2M12.2 9.9c.4-1.4 1.1-2.5 2-3.2', k: 'ink', w: 0.7 }, x, y, s),
-    placed({ d: `${ring(9.7, 6.6, 0.5)}${ring(14.3, 6.6, 0.5)}`, k: 'dot' }, x, y, s),
+    ...(feelers
+      ? [
+          placed({ d: 'M11.8 9.9c-.4-1.4-1.1-2.5-2-3.2M12.2 9.9c.4-1.4 1.1-2.5 2-3.2', k: 'ink', w: 0.7 }, x, y, s),
+          placed({ d: `${ring(9.7, 6.6, 0.5)}${ring(14.3, 6.6, 0.5)}`, k: 'dot' }, x, y, s),
+        ]
+      : []),
   ];
 }
 
@@ -274,7 +278,11 @@ export const GLYPHS = {
   ],
 
   // Wildlife: the card's icon, its two portraits, and the ends of its sliders.
-  wildlife: [...dove(9.2, 9.6, 0.64, true), ...butterfly(16.4, 16.6, 0.5, true, 0.3)],
+  // A dove across the top, a butterfly below it to the right: each as large as
+  // the grid allows with a clear gap between them, so the pair still reads at
+  // the size of a dock pebble. The butterfly goes without its feelers here:
+  // at this size they only crowd the dove.
+  wildlife: [...dove(8.8, 7.2, 0.8, true), ...butterfly(16.4, 17.8, 0.72, true, 0.3, false)],
   dove: dove(12, 12, 1, true),
   'dove-few': dove(12, 12.4, 0.66),
   'dove-many': [...dove(7, 8.2, 0.44), ...dove(17, 7, 0.44), ...dove(12.2, 16.6, 0.44)],
