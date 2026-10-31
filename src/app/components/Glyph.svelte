@@ -188,6 +188,47 @@
     }
   }
 
+  /*
+   * Wings. A dove's beats down from where it is drawn, raised, and back —
+   * hinged at the shoulder, the bottom of the wing; a butterfly's pair close
+   * toward the body and open again. Both start from the drawn pose.
+   */
+  .beat {
+    --motion: glyph-beat;
+    --cycle: 0.62s;
+    animation-timing-function: ease-in-out;
+    transform-box: fill-box;
+    transform-origin: 45% 100%;
+  }
+
+  .flutter {
+    --motion: glyph-flutter;
+    --cycle: 0.48s;
+    animation-timing-function: ease-in-out;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+
+  @keyframes -global-glyph-beat {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(-0.45);
+    }
+  }
+
+  @keyframes -global-glyph-flutter {
+    0%,
+    100% {
+      transform: scaleX(1);
+    }
+    50% {
+      transform: scaleX(0.2);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .move {
       animation: none;

@@ -22,11 +22,72 @@
  * parts are listed *before* their cloud, so they come out from behind it.
  */
 export type Hue = 'leaf' | 'sun' | 'water' | 'sky' | 'storm' | 'snow' | 'bark' | 'petal' | 'fruit' | 'earth' | 'mist';
-export type Motion = 'streak' | 'drop' | 'snow' | 'flake';
+export type Motion = 'streak' | 'drop' | 'snow' | 'flake' | 'beat' | 'flutter';
 export type Part = { d: string; k: 'wash' | 'ink' | 'both' | 'dot'; t?: string; c?: Hue; o?: number; w?: number; m?: Motion; md?: number };
 
 /** The same part, moving, from `at` (0–1) into its cycle. */
 const moving = (part: Part, m: Motion, at: number): Part => ({ ...part, m, md: at });
+
+/** Place a part drawn about the grid's middle at (x, y), `s` times the size. */
+const placed = (part: Part, x: number, y: number, s: number): Part => ({
+  ...part,
+  t: `translate(${x} ${y}) scale(${s}) translate(-12 -12)`,
+  // Lines keep (nearly) their weight however small the drawing.
+  w: (part.w ?? 1) * Math.min(1.7, 1 / s),
+});
+
+/**
+ * A dove on the wing, side on, flying right: pale grey, its wing raised —
+ * and, if `alive`, beating — over a fanned tail. Centred on (x, y).
+ */
+function dove(x: number, y: number, s: number, alive = false, at = 0): Part[] {
+  // Raised, with a curved leading edge and the trailing edge in three feathers.
+  const wing: Part = {
+    d: 'M10.3 13.3C9.5 10.3 9.9 7.3 11.6 4.8 12.6 6.2 13.2 7.4 13.6 8.3 13.4 8.9 14.4 9.4 14.5 10.3 14.1 10.8 15 11.5 15 13.1Z',
+    k: 'both',
+    c: 'snow',
+  };
+  return [
+    placed({ d: 'M6.2 13.9L2.7 12.3C2.7 13.7 3 14.9 3.7 15.9L7 14.9Z', k: 'both', c: 'mist' }, x, y, s),
+    placed(
+      {
+        d: 'M5.2 13.4C7.5 12.4 10.5 12.3 13.3 12.9 14.5 11.4 16.1 10.5 17.8 10.7 19.2 10.9 19.9 11.7 20 12.4L21.4 12.9 20 13.3C19.7 15.3 17.6 16.7 14.6 16.9 11.4 17.1 8.1 16 5.2 13.4Z',
+        k: 'both',
+        c: 'mist',
+      },
+      x,
+      y,
+      s,
+    ),
+    alive ? moving(placed(wing, x, y, s), 'beat', at) : placed(wing, x, y, s),
+    placed({ d: ring(18.3, 12.1, 0.55), k: 'dot' }, x, y, s),
+  ];
+}
+
+/**
+ * A butterfly from above, wings open: orange fore, redder hind, a dark body
+ * and two clubbed antennae. If `alive`, the wings open and close.
+ */
+function butterfly(x: number, y: number, s: number, alive = false, at = 0): Part[] {
+  const fore: Part = {
+    d: 'M11.6 11.6C9.6 7.4 6.4 5.4 4.4 6.4 3.2 7.2 3.6 9.8 5.6 11.2 7.2 12.2 9.6 12.4 11.6 12.2ZM12.4 11.6C14.4 7.4 17.6 5.4 19.6 6.4 20.8 7.2 20.4 9.8 18.4 11.2 16.8 12.2 14.4 12.4 12.4 12.2Z',
+    k: 'both',
+    c: 'sun',
+  };
+  const hind: Part = {
+    d: 'M11.6 12.8C9.4 12.8 7 13.6 6.4 15.6 5.9 17.4 7.4 18.8 9 18.2 10.6 17.6 11.4 15.2 11.8 13.6ZM12.4 12.8C14.6 12.8 17 13.6 17.6 15.6 18.1 17.4 16.6 18.8 15 18.2 13.4 17.6 12.6 15.2 12.2 13.6Z',
+    k: 'both',
+    c: 'fruit',
+    o: 0.75,
+  };
+  const wings = [fore, hind].map((w) => placed(w, x, y, s));
+  return [
+    ...(alive ? wings.map((w) => moving(w, 'flutter', at)) : wings),
+    placed({ d: 'M12 9.8v8.4', k: 'ink', w: 1.15 }, x, y, s),
+    placed({ d: 'M11.8 9.9c-.4-1.4-1.1-2.5-2-3.2M12.2 9.9c.4-1.4 1.1-2.5 2-3.2', k: 'ink', w: 0.7 }, x, y, s),
+    placed({ d: `${ring(9.7, 6.6, 0.5)}${ring(14.3, 6.6, 0.5)}`, k: 'dot' }, x, y, s),
+  ];
+}
 
 /** A circle as a path, so it can sit in the same lists as everything else. */
 const ring = (cx: number, cy: number, r: number) =>
@@ -211,6 +272,25 @@ export const GLYPHS = {
     { d: 'M16.4 15.6c-.1-1.9.1-3.6.6-5.2', k: 'ink', w: 0.85 },
     { d: 'M16.8 11.5c-1.2-.2-2-1-2.1-2.3 1.3 0 2.1.9 2.1 2.3zM17.1 10.4c.3-1.2 1.2-1.9 2.4-1.8-.2 1.2-1.1 1.9-2.4 1.8z', k: 'both', c: 'leaf', w: 0.85 },
   ],
+
+  // Wildlife: the card's icon, its two portraits, and the ends of its sliders.
+  wildlife: [...dove(9.2, 9.6, 0.64, true), ...butterfly(16.4, 16.6, 0.5, true, 0.3)],
+  dove: dove(12, 12, 1, true),
+  'dove-few': dove(12, 12.4, 0.66),
+  'dove-many': [...dove(7, 8.2, 0.44), ...dove(17, 7, 0.44), ...dove(12.2, 16.6, 0.44)],
+  'dove-small': dove(12.6, 13.4, 0.48),
+  'dove-big': dove(12, 12, 1.04),
+  butterfly: butterfly(12, 12, 1, true),
+  'butterfly-few': butterfly(12, 12, 0.62),
+  'butterfly-many': [
+    ...butterfly(7, 7.2, 0.4),
+    ...butterfly(17.2, 7.8, 0.4),
+    ...butterfly(7.6, 16.8, 0.4),
+    ...butterfly(16.8, 17, 0.4),
+    ...butterfly(12.2, 12, 0.34),
+  ],
+  'butterfly-small': butterfly(12, 12.6, 0.46),
+  'butterfly-big': butterfly(12, 12, 1.02),
 
   // Actions.
   reframe: [
