@@ -31,17 +31,25 @@
   aria-hidden="true"
 >
   {#each parts as p, i (i)}
-    {#if p.k === 'wash' || p.k === 'both'}
-      <path d={p.d} transform={p.t} class="wash" style={washStyle(p)} />
-    {/if}
-    {#if p.k === 'ink' || p.k === 'both'}
-      <path d={p.d} transform={p.t} stroke-width={p.w ? weight * p.w : undefined} stroke-opacity={p.o} />
-    {/if}
-    {#if p.k === 'dot'}
-      <path d={p.d} transform={p.t} class="dot" />
+    {#if p.m}
+      <g class="move {p.m}" style="--at: {p.md ?? 0}">{@render part(p)}</g>
+    {:else}
+      {@render part(p)}
     {/if}
   {/each}
 </svg>
+
+{#snippet part(p: Part)}
+  {#if p.k === 'wash' || p.k === 'both'}
+    <path d={p.d} transform={p.t} class="wash" style={washStyle(p)} />
+  {/if}
+  {#if p.k === 'ink' || p.k === 'both'}
+    <path d={p.d} transform={p.t} stroke-width={p.w ? weight * p.w : undefined} stroke-opacity={p.o} />
+  {/if}
+  {#if p.k === 'dot'}
+    <path d={p.d} transform={p.t} class="dot" />
+  {/if}
+{/snippet}
 
 <style>
   svg {
@@ -61,5 +69,128 @@
   .dot {
     fill: currentColor;
     stroke: none;
+  }
+
+  /*
+   * Weather that moves. Each part runs its own loop, started `--at` of the way
+   * through so a cloud's drops never fall in step, fading in as it leaves the
+   * cloud and out before it reaches the ground. At the middle of its fall a
+   * part is where it is drawn, so a still icon and a moving one agree.
+   * (Lengths are in the icon's 24-unit grid.) The keyframes are global: their
+   * names travel through `--motion`, where Svelte's scoping cannot follow.
+   */
+  .move {
+    --cycle: 1s;
+    animation: var(--motion) var(--cycle) linear infinite;
+    animation-delay: calc(var(--at) * var(--cycle) * -1);
+  }
+
+  /* Rain streaks, slanting the way they are drawn. */
+  .streak {
+    --motion: glyph-streak;
+    --cycle: 0.95s;
+  }
+
+  /* Rounder drops fall straight, a little slower. */
+  .drop {
+    --motion: glyph-drop;
+    --cycle: 1.25s;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.8, 0.6);
+  }
+
+  /* Snow drifts, swaying as it goes. */
+  .snow {
+    --motion: glyph-snow;
+    --cycle: 3.2s;
+  }
+
+  /* And a flake turns slowly about its own middle while it drifts. */
+  .flake {
+    --motion: glyph-flake;
+    --cycle: 3.8s;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  @keyframes -global-glyph-streak {
+    0% {
+      transform: translate(1px, -2.9px);
+      opacity: 0;
+    }
+    22%,
+    72% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-0.85px, 2.4px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes -global-glyph-drop {
+    0% {
+      transform: translateY(-3px);
+      opacity: 0;
+    }
+    25%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(2.6px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes -global-glyph-snow {
+    0% {
+      transform: translate(0, -2.6px);
+      opacity: 0;
+    }
+    18% {
+      opacity: 1;
+    }
+    35% {
+      transform: translate(0.75px, -0.7px);
+    }
+    65% {
+      transform: translate(-0.65px, 1px);
+    }
+    82% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(0.15px, 2.7px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes -global-glyph-flake {
+    0% {
+      transform: translate(0, -2.6px) rotate(-40deg);
+      opacity: 0;
+    }
+    18% {
+      opacity: 1;
+    }
+    35% {
+      transform: translate(0.8px, -0.8px) rotate(-12deg);
+    }
+    65% {
+      transform: translate(-0.7px, 1px) rotate(18deg);
+    }
+    82% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(0.15px, 2.7px) rotate(45deg);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .move {
+      animation: none;
+    }
   }
 </style>

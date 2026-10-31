@@ -15,9 +15,18 @@
  * glyph works as a one-colour mark on a tinted button and as a small coloured
  * picture on a card. `o` scales a part's opacity, and `w` its line weight (for
  * parts drawn scaled down, so their lines stay as heavy as the rest).
+ *
+ * A part can also move (`m`), round and round: rain streaks and drops falling
+ * out of their cloud, snow drifting down with a sway. `md` is where in the
+ * cycle it starts, 0–1, so a cloud's drops do not all fall in step. Moving
+ * parts are listed *before* their cloud, so they come out from behind it.
  */
 export type Hue = 'leaf' | 'sun' | 'water' | 'sky' | 'storm' | 'snow' | 'bark' | 'petal' | 'fruit' | 'earth' | 'mist';
-export type Part = { d: string; k: 'wash' | 'ink' | 'both' | 'dot'; t?: string; c?: Hue; o?: number; w?: number };
+export type Motion = 'streak' | 'drop' | 'snow' | 'flake';
+export type Part = { d: string; k: 'wash' | 'ink' | 'both' | 'dot'; t?: string; c?: Hue; o?: number; w?: number; m?: Motion; md?: number };
+
+/** The same part, moving, from `at` (0–1) into its cycle. */
+const moving = (part: Part, m: Motion, at: number): Part => ({ ...part, m, md: at });
 
 /** A circle as a path, so it can sit in the same lists as everything else. */
 const ring = (cx: number, cy: number, r: number) =>
@@ -124,14 +133,16 @@ export const GLYPHS = {
     { d: CLOUD, k: 'both', c: 'sky' },
   ],
   'weather-rain': [
+    moving({ d: 'M8.3 17.3l-.9 2.6', k: 'ink' }, 'streak', 0),
+    moving({ d: 'M12.3 17.4l-.9 2.8', k: 'ink' }, 'streak', 0.42),
+    moving({ d: 'M16.2 17.3l-.8 2.5', k: 'ink' }, 'streak', 0.74),
     { d: CLOUD_HIGH, k: 'both', c: 'storm' },
-    { d: 'M8.3 17.3l-.9 2.6M12.3 17.4l-.9 2.8M16.2 17.3l-.8 2.5', k: 'ink' },
   ],
   'weather-snow': [
+    moving({ d: ring(8, 18.6, 0.9), k: 'dot' }, 'snow', 0),
+    moving({ d: ring(12.2, 20.2, 0.9), k: 'dot' }, 'snow', 0.38),
+    moving({ d: ring(16.3, 18.4, 0.9), k: 'dot' }, 'snow', 0.7),
     { d: CLOUD_HIGH, k: 'both', c: 'sky' },
-    { d: ring(8, 18.6, 0.9), k: 'dot' },
-    { d: ring(12.2, 20.2, 0.9), k: 'dot' },
-    { d: ring(16.3, 18.4, 0.9), k: 'dot' },
   ],
 
   // A forking twig, with buds.
@@ -275,22 +286,22 @@ export const GLYPHS = {
 
   // ---- Pairs for the ends of the picture sliders: the low end and the high.
 
-  'rain-light': [{ d: CLOUD_HIGH, k: 'both', c: 'sky' }, drop(12, 16.4, 1.05)],
+  'rain-light': [moving(drop(12, 16.4, 1.05), 'drop', 0.2), { d: CLOUD_HIGH, k: 'both', c: 'sky' }],
   'rain-heavy': [
+    moving(drop(6.6, 16, 0.85), 'drop', 0),
+    moving(drop(10.9, 17.6, 0.85), 'drop', 0.55),
+    moving(drop(15.1, 16, 0.85), 'drop', 0.25),
+    moving(drop(19, 17.4, 0.85), 'drop', 0.8),
     { d: CLOUD_HIGH, k: 'both', c: 'storm' },
-    drop(6.6, 16, 0.85),
-    drop(10.9, 17.6, 0.85),
-    drop(15.1, 16, 0.85),
-    drop(19, 17.4, 0.85),
   ],
-  'snow-light': [{ d: CLOUD_HIGH, k: 'both', c: 'sky' }, flake(12, 19, 2.3)],
+  'snow-light': [moving(flake(12, 19, 2.3), 'flake', 0.15), { d: CLOUD_HIGH, k: 'both', c: 'sky' }],
   'snow-heavy': [
+    moving(flake(6.8, 18.2, 1.9), 'flake', 0),
+    moving(flake(12.2, 20.4, 1.9), 'flake', 0.45),
+    moving(flake(17.6, 18.2, 1.9), 'flake', 0.75),
+    moving({ d: ring(9.6, 21.3, 0.7), k: 'dot' }, 'snow', 0.3),
+    moving({ d: ring(15, 16.8, 0.7), k: 'dot' }, 'snow', 0.6),
     { d: CLOUD_HIGH, k: 'both', c: 'storm' },
-    flake(6.8, 18.2, 1.9),
-    flake(12.2, 20.4, 1.9),
-    flake(17.6, 18.2, 1.9),
-    { d: ring(9.6, 21.3, 0.7), k: 'dot' },
-    { d: ring(15, 16.8, 0.7), k: 'dot' },
   ],
 
   'sky-clear': [

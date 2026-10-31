@@ -518,6 +518,12 @@
       0 14px 24px rgba(20, 14, 6, 0.26);
   }
 
+  /* The weather pebble's rain falls only while you look at it — under the
+     scene, a pebble that drizzles all the time would pull the eye. */
+  .tool:not(:hover):not(.active):not(.pinned) :global(.move) {
+    animation: none;
+  }
+
   .tool.pinned {
     transform: translateY(-7px) rotate(0deg) scale(1.08);
     background:
