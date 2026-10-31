@@ -214,6 +214,7 @@ export class TreeStudio {
     pondIce: 0,
     lilyPads: 1,
     lilyFlowers: 1,
+    ducks: { drake: 0, ducklings: 1, grown: 1 },
     snowfall: 0,
     rainfall: 0,
     snowColor: new Color(),
@@ -621,6 +622,7 @@ export class TreeStudio {
     t.pondIce = season.pondIce;
     t.lilyPads = season.lilyPads;
     t.lilyFlowers = season.lilyFlowers;
+    t.ducks = { drake: season.duckDrake, ducklings: season.ducklings, grown: season.ducklingsGrown };
     t.snowColor.copy(snowTintFor(id));
     t.grassDeep.setHex(season.grassDeep);
     t.grassMid.setHex(season.grassMid);
@@ -1165,6 +1167,7 @@ export class TreeStudio {
     this.updateHover(dt);
     this.flock.update(dt);
     this.meadow.update(dt);
+    this.pond.update(dt, this.seasonTarget.ducks);
 
     this.easeSeason(dt);
 

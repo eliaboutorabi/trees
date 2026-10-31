@@ -56,6 +56,10 @@ export interface SeasonLook {
   pondIce: number;
   lilyPads: number;
   lilyFlowers: number;
+  /** On the pond: the drake, the ducklings, and how grown they are. */
+  duckDrake: number;
+  ducklings: number;
+  ducklingsGrown: number;
   /** Multiplies the species' own windiness. */
   wind: number;
 
@@ -91,6 +95,9 @@ export const SEASONS: readonly SeasonLook[] = [
     pondIce: 0,
     lilyPads: 0.75,
     lilyFlowers: 0.4,
+    duckDrake: 1,
+    ducklings: 1,
+    ducklingsGrown: 0,
     wind: 1,
     sunElevation: 26,
     sunIntensity: 5,
@@ -119,6 +126,9 @@ export const SEASONS: readonly SeasonLook[] = [
     pondIce: 0,
     lilyPads: 1,
     lilyFlowers: 1,
+    duckDrake: 0,
+    ducklings: 1,
+    ducklingsGrown: 1,
     wind: 1,
     sunElevation: 17,
     sunIntensity: 5,
@@ -147,6 +157,9 @@ export const SEASONS: readonly SeasonLook[] = [
     pondIce: 0,
     lilyPads: 0.6,
     lilyFlowers: 0,
+    duckDrake: 1,
+    ducklings: 0,
+    ducklingsGrown: 1,
     wind: 1.25,
     sunElevation: 11,
     sunIntensity: 4.6,
@@ -175,6 +188,9 @@ export const SEASONS: readonly SeasonLook[] = [
     pondIce: 1,
     lilyPads: 0,
     lilyFlowers: 0,
+    duckDrake: 0,
+    ducklings: 0,
+    ducklingsGrown: 1,
     wind: 1.15,
     /*
      * Winter has to read *cold*, and the first attempt at it did not: a sun at

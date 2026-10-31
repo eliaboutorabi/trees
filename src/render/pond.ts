@@ -22,6 +22,7 @@ import {
   texture,
   time,
   uniform,
+  uniformArray,
   vec2,
   vec3,
   vec4,
@@ -29,8 +30,15 @@ import {
 import { PlanarReflection } from './reflection';
 import { createPondShore } from './pondShore';
 import { createPondSurface } from './pondSurface';
+import { MAX_DUCKS, PondLife, type DuckSeason } from './pondLife';
+import { stoneTops } from './pondShore';
 import { createNoiseTexture } from '../lib/noiseTexture';
 import { COS, groundNode, POND, pondFieldNode, SIN, wander } from './pondShape';
+
+// TSL nodes are proxied at runtime and their typings do not follow chains
+// through swizzles; loosely typed here, as in dof.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type N = any;
 import type { TreeUniforms } from '../engine/materials/shared';
 
 /**
@@ -93,7 +101,7 @@ function waterGeometry(): BufferGeometry {
  *   the stones on the bank, the hills, a passing bird — sampled where the
  *   ripples push it, and stronger the more glancing the view, as water is.
  */
-function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms): MeshStandardNodeMaterial {
+function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wakes: N): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   material.transparent = true;
   material.depthWrite = false;
@@ -135,6 +143,30 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms): Me
     return off.div(d.max(0.001)).mul(wave);
   };
   slope.addAssign(rings(3.1, 0.9, 0).add(rings(2.3, 0.7, 17.3)).mul(u.rainfall).mul(0.6).mul(open));
+
+  /*
+   * Wakes. Every duck trails a V behind it — two arms opening at the angle
+   * a wake does on any water, nineteen and a half degrees either side, with
+   * crests running back along them — and pushes a few small rings out round
+   * its breast. All of it scales with how fast the bird is going, so a duck
+   * that stops to dabble leaves the water to settle.
+   */
+  for (let i = 0; i < MAX_DUCKS; i++) {
+    const w = wakes.element(i);
+    const rel = p.xz.sub(w.xy);
+    const v = vec2(w.z, w.w);
+    const sp = v.length();
+    const dir = v.div(sp.max(1e-4));
+    const behind = rel.dot(dir).negate();
+    const side = rel.x.mul(dir.y).sub(rel.y.mul(dir.x));
+    const arm = side.abs().sub(behind.mul(0.354)).abs();
+    const reach = behind.mul(-1.4).exp().mul(smoothstep(0, 0.06, behind));
+    const crest = behind.mul(34).sub(time.mul(6)).sin().mul(arm.mul(arm).div(-0.0022).exp());
+    slope.addAssign(vec2(dir.y.negate(), dir.x).mul(side.sign()).mul(crest).mul(reach).mul(sp).mul(1.6));
+    const r = rel.length();
+    const bow = r.mul(46).sub(time.mul(5)).sin().mul(r.mul(-9).exp()).mul(sp).mul(0.9);
+    slope.addAssign(rel.div(r.max(0.01)).mul(bow));
+  }
 
   const normal = vec3(slope.x, 1, slope.y).normalize();
   material.normalNode = cameraViewMatrix.mul(vec4(normal, 0)).xyz.normalize();
@@ -207,6 +239,8 @@ export interface Pond {
   group: Group;
   water: Mesh;
   uniforms: PondUniforms;
+  /** The creatures: who is about this season. */
+  update(dt: number, season: DuckSeason): void;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
   /** Draw the reflection for this frame's view, before the frame itself. */
@@ -219,7 +253,10 @@ export function createPond(u: TreeUniforms): Pond {
   const bounds = new Sphere(new Vector3(POND.x, POND.level, POND.z), POND.rx * 1.5);
   const mirror = new PlanarReflection(POND.level, bounds);
   const uniforms = pondUniforms();
-  const material = waterMaterial(u, mirror.texture, uniforms);
+  const life = new PondLife();
+  const wakes = uniformArray(life.wakes, 'vec4');
+  const material = waterMaterial(u, mirror.texture, uniforms, wakes);
+  const perches = stoneTops();
   const water = new Mesh(geometry, material);
   // The water is not in its own reflection.
   mirror.hidden.push(water);
@@ -228,7 +265,7 @@ export function createPond(u: TreeUniforms): Pond {
   // Lying flat on the water, they have no reflection worth drawing.
   mirror.hidden.push(surface.lilies, surface.leaves);
   const group = new Group();
-  group.add(shore.stones, shore.reeds, surface.lilies, surface.leaves, water);
+  group.add(shore.stones, shore.reeds, surface.lilies, surface.leaves, life.group, water);
   water.receiveShadow = true;
   water.castShadow = false;
   // After the ground and everything standing in the water, so its soft edge
@@ -238,6 +275,13 @@ export function createPond(u: TreeUniforms): Pond {
     group,
     water,
     uniforms,
+    update(dt, season) {
+      life.update(dt, season, uniforms.ice.value, perches);
+      // The wakes' array is not watched for changes; it is pushed each frame,
+      // once the water's shader has been built and the array has storage.
+      const node = wakes as unknown as { value: unknown; update(): void };
+      if (node.value !== null) node.update();
+    },
     hideFromReflection(...objects: Object3D[]) {
       for (const o of objects) if (!mirror.hidden.includes(o)) mirror.hidden.push(o);
     },
@@ -250,6 +294,7 @@ export function createPond(u: TreeUniforms): Pond {
       mirror.dispose();
       shore.dispose();
       surface.dispose();
+      life.dispose();
     },
   };
 }

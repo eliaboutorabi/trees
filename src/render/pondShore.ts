@@ -61,16 +61,40 @@ function boulder(seed: number, size: number): BufferGeometry {
   return g;
 }
 
-function stonesMesh(u: TreeUniforms): Mesh {
-  const parts: BufferGeometry[] = [];
-  const tint: number[] = [];
+/** Each stone, built and set in place: the same every time it is asked for. */
+function placedStones(): { geometry: BufferGeometry; size: number }[] {
   const rng = mulberry32(9311);
-  STONES.forEach(([theta, f, size], i) => {
+  return STONES.map(([theta, f, size], i) => {
     const g = boulder(4001 + i * 17, size);
     g.rotateY(rng() * Math.PI * 2);
     const at = shorePoint(theta, f);
     // Sunk about a third of its height into the bank or the shallows.
     g.translate(at.x, at.y + size * 0.12, at.z);
+    return { geometry: g, size };
+  });
+}
+
+/** The tops of the bigger stones, where a small bird could stand: the highest point of each. */
+export function stoneTops(): Vector3[] {
+  const tops: Vector3[] = [];
+  for (const { geometry, size } of placedStones()) {
+    if (size >= 0.4) {
+      const pos = geometry.getAttribute('position');
+      const top = new Vector3(0, -Infinity, 0);
+      const v = new Vector3();
+      for (let i = 0; i < pos.count; i++) if (v.fromBufferAttribute(pos, i).y > top.y) top.copy(v);
+      tops.push(top);
+    }
+    geometry.dispose();
+  }
+  return tops;
+}
+
+function stonesMesh(u: TreeUniforms): Mesh {
+  const parts: BufferGeometry[] = [];
+  const tint: number[] = [];
+  const rng = mulberry32(9312);
+  placedStones().forEach(({ geometry: g }) => {
     const shade = 0.82 + rng() * 0.3;
     const part = g.toNonIndexed();
     g.dispose();
