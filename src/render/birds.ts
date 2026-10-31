@@ -37,7 +37,10 @@ import type Node from 'three/src/nodes/core/Node.js';
 import type { Perch, Tree } from '../engine';
 import { mulberry32 } from '../lib/rng';
 
-const MAX_BIRDS = 16;
+/** The most the flock can hold; `setPopulation` decides how many come. */
+export const MAX_BIRDS = 24;
+/** How many come when nobody has said. */
+export const DEFAULT_BIRDS = 12;
 
 type Vec3Node = Node<'vec3'>;
 type Vec4Node = Node<'vec4'>;
@@ -449,12 +452,20 @@ export class Flock {
   private startledAt = -100;
   private wheelTurn = 1;
   private readonly guests: { x: number; y: number; z: number; radius: number }[] = [];
+  /** How many of the flock are about; the rest stay wherever doves go. */
+  private population = DEFAULT_BIRDS;
+  /** Every bird's size multiplied by this, eased toward `sizeTarget`. */
+  private sizeShown = 1;
+  private sizeTarget = 1;
 
   constructor(
     private readonly tree: Tree,
     options: Partial<FlockOptions> = {},
   ) {
-    const { count = 12, seed = 7 } = options;
+    // The whole flock is built, and `population` says how many come: a bird
+    // that is not wanted is simply away, so the number can change at any
+    // moment without rebuilding the mesh — they fly in, or off.
+    const { count = MAX_BIRDS, seed = 7 } = options;
     const n = Math.min(MAX_BIRDS, count);
     this.rng = mulberry32(seed + 4243);
 
@@ -528,19 +539,44 @@ export class Flock {
   roost(on: boolean): void {
     this.roosting = on;
     if (!on) return;
-    for (const d of this.doves) {
-      if (d.mode === 'away' || d.landing === 'away') continue;
-      if (d.mode === 'perched' && d.perch >= 0) this.taken.delete(d.perch);
-      d.flushIn = -1;
-      d.landing = 'away';
-      this.offstage(d.spot);
-      if (d.mode === 'flying' && d.curve) d.pos.copy(d.curve.getPointAt(along(d.t, d.ramp)));
-      d.mode = 'flying';
-      this.launch(d, []);
-    }
+    for (const d of this.doves) this.leave(d);
   }
 
   private roosting = false;
+
+  /**
+   * How many doves are about, up to `MAX_BIRDS`. Fewer, and the ones no
+   * longer wanted fly off; more, and the new ones arrive over the next few
+   * seconds, one after another, rather than all landing at once.
+   */
+  setPopulation(count: number): void {
+    const next = Math.max(0, Math.min(MAX_BIRDS, Math.round(count)));
+    if (next === this.population) return;
+    const before = this.population;
+    this.population = next;
+    for (let i = 0; i < this.doves.length; i++) {
+      const d = this.doves[i];
+      if (i >= next) this.leave(d);
+      else if (i >= before && d.mode === 'away') d.rest = 0.4 + (i - before) * 0.7 + this.rng() * 1.2;
+    }
+  }
+
+  /** Every dove's size, as a multiple of its own: 1 is a dove, 2 a pigeon of some ambition. */
+  setSize(scale: number): void {
+    this.sizeTarget = Math.max(0.2, scale);
+  }
+
+  /** Off to wherever doves go, from wherever it is: a twig, the grass, mid-flight. */
+  private leave(d: Dove): void {
+    if (d.mode === 'away' || d.landing === 'away') return;
+    if (d.mode === 'perched' && d.perch >= 0) this.taken.delete(d.perch);
+    d.flushIn = -1;
+    d.landing = 'away';
+    this.offstage(d.spot);
+    if (d.mode === 'flying' && d.curve) d.pos.copy(d.curve.getPointAt(along(d.t, d.ramp)));
+    d.mode = 'flying';
+    this.launch(d, []);
+  }
 
   startle(point: Vector3): void {
     if (this.clock - this.startledAt > 6) this.wheelTurn = this.rng() < 0.5 ? -1 : 1;
@@ -556,6 +592,8 @@ export class Flock {
   update(dt: number): void {
     this.clock += dt;
     const grown = this.tree.uniforms.growth.value >= 0.97;
+    // A change of size grows or shrinks them over a moment, never in a jump.
+    this.sizeShown = ease(this.sizeShown, this.sizeTarget, 4, dt);
 
     // A rebuilt tree has different perches; anyone on the old ones is put up.
     if (this.tree.perches !== this.perches) {
@@ -581,7 +619,7 @@ export class Flock {
       switch (d.mode) {
         case 'away':
           d.rest -= dt;
-          if (d.rest <= 0 && grown && !this.roosting) this.arrive(d);
+          if (d.rest <= 0 && grown && !this.roosting && i < this.population) this.arrive(d);
           break;
         case 'perched':
           // No tree to sit in, or the twig it was on went with the old tree:
@@ -613,7 +651,10 @@ export class Flock {
     this.guests.length = 0;
     for (const d of this.doves) {
       if (d.presence < 0.01) continue;
-      this.guests.push({ x: d.pos.x, y: d.pos.y + d.size * 0.25, z: d.pos.z, radius: 0.55 * d.presence });
+      const size = d.size * this.sizeShown;
+      // A bigger bird needs a bigger window in the leaves, but not in
+      // proportion: its body grows, its perch does not.
+      this.guests.push({ x: d.pos.x, y: d.pos.y + size * 0.25, z: d.pos.z, radius: 0.55 * d.presence * Math.sqrt(this.sizeShown) });
     }
     this.tree.setGuests(this.guests);
 
@@ -980,7 +1021,7 @@ export class Flock {
   private pose(i: number, d: Dove): void {
     const r = this.rig;
     const visible = d.mode !== 'away';
-    r.pose[i].set(d.pos.x, d.pos.y, d.pos.z, visible ? d.size : 0);
+    r.pose[i].set(d.pos.x, d.pos.y, d.pos.z, visible ? d.size * this.sizeShown : 0);
 
     _e.set(d.pitch, d.yaw, d.roll, 'YXZ');
     _q.setFromEuler(_e);

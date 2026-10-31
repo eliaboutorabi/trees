@@ -59,7 +59,7 @@ export const MAX_LEAF_IDS = LEAF_SLOTS * 4 * 2;
  * Things sitting in the crown that the foliage makes room for — a perched
  * bird, a lantern. Each is a point and a radius; see `Tree.setGuests`.
  */
-export const MAX_GUESTS = 16;
+export const MAX_GUESTS = 24;
 
 // `attribute()` infers its node type from the argument, which widens to
 // `string` and loses every operator. Pinning the type parameter keeps the
