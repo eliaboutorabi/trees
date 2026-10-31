@@ -1133,6 +1133,7 @@ export class TreeStudio {
     this.tree.tick(dt);
     this.updateHover(dt);
     this.flock.update(dt);
+    this.meadow.update(dt);
 
     this.easeSeason(dt);
 

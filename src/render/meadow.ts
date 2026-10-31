@@ -37,6 +37,7 @@ import {
   smoothstep,
   step,
   time,
+  uniform,
   uv,
   vec3,
 } from 'three/tsl';
@@ -55,9 +56,14 @@ export interface MeadowOptions {
   seed: number;
 }
 
+/** Butterflies baked into the meadow; `setButterflies` decides how many are out. */
+export const MAX_BUTTERFLIES = 60;
+/** How many are out when nobody has said. */
+export const DEFAULT_BUTTERFLIES = 16;
+
 const DEFAULTS: MeadowOptions = {
   flowerCount: 9000,
-  butterflyCount: 16,
+  butterflyCount: MAX_BUTTERFLIES,
   minRadius: 1.6,
   maxRadius: 16,
   seed: 20260831,
@@ -383,7 +389,8 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
         position.push(p[i * 3] * scale, p[i * 3 + 1] * scale, p[i * 3 + 2] * scale);
         uvs.push(uvArr[i * 2], uvArr[i * 2 + 1]);
         params.push(s, side, span[i], period);
-        perchA.push(A.x, A.y, A.z);
+        // Its place in the line, for the population to count against.
+        perchA.push(A.x, A.y, A.z, b);
         perchB.push(B.x, B.y, B.z);
         wingInner.push(inner[0], inner[1], inner[2], flap);
         wingOuter.push(outer[0], outer[1], outer[2], sp.edge);
@@ -405,7 +412,7 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
   g.setAttribute('position', new BufferAttribute(new Float32Array(position), 3));
   g.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
   g.setAttribute('aParams', new BufferAttribute(new Float32Array(params), 4));
-  g.setAttribute('aPerchA', new BufferAttribute(new Float32Array(perchA), 3));
+  g.setAttribute('aPerchA', new BufferAttribute(new Float32Array(perchA), 4));
   g.setAttribute('aPerchB', new BufferAttribute(new Float32Array(perchB), 3));
   // Seven vertex buffers with position and uv; WebGPU guarantees eight, so the
   // two colours ride as vec4s with their spare lane carrying a scalar rather
@@ -419,7 +426,11 @@ function butterflyGeometry(perches: Vector3[], count: number, seed: number): Buf
   return g;
 }
 
-function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
+/** How many butterflies are out, and how big; eased by the meadow. */
+const butterflyControls = () => ({ count: uniform(DEFAULT_BUTTERFLIES), size: uniform(1) });
+type ButterflyControls = ReturnType<typeof butterflyControls>;
+
+function butterflyMaterial(u: TreeUniforms, controls: ButterflyControls): MeshBasicNodeMaterial {
   const material = new MeshBasicNodeMaterial();
   material.side = DoubleSide;
 
@@ -428,13 +439,24 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   const side = p.y;
   const spanT = p.z;
   const period = p.w;
-  const A = vec3Attr('aPerchA');
+  const perchA = vec4Attr('aPerchA');
+  const A = perchA.xyz;
   const B = vec3Attr('aPerchB');
   const inner = vec4Attr('aWingInner');
   const outer = vec4Attr('aWingOuter');
+
+  /*
+   * Every butterfly the meadow can hold is baked in, each with its place in
+   * the line; the population counts along it. One past the count shrinks to
+   * nothing about its own middle, so turning the number up or down has them
+   * appear and go one at a time as the eased count passes them — and since
+   * species are dealt out in turn along the same line, any number of them is
+   * as varied as it can be.
+   */
+  const present = controls.count.sub(perchA.w).clamp(0, 1);
   // `positionLocal`, not `attribute('position')`: the node system binds the
   // former as the vertex stage's local position and only guarantees that one.
-  const local = positionLocal;
+  const local = positionLocal.mul(controls.size.mul(present));
 
   // Which leg of the round trip, and how far through it.
   const cycle = time.div(period).add(seed.mul(11.7));
@@ -512,7 +534,7 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
   // better still, but at this size a fade over a second reads the same and
   // costs one multiply.
   // And they go to roost at night.
-  material.opacityNode = smoothstep(90, 60, dist).mul(smoothstep(0, 0.35, u.meadowBloom)).mul(u.night.oneMinus());
+  material.opacityNode = smoothstep(90, 60, dist).mul(smoothstep(0, 0.35, u.meadowBloom)).mul(u.night.oneMinus()).mul(present);
 
   return material;
 }
@@ -520,7 +542,12 @@ function butterflyMaterial(u: TreeUniforms): MeshBasicNodeMaterial {
 export interface Meadow {
   group: Group;
   flowerCount: number;
+  /** How many butterflies the meadow can hold. */
   butterflyCount: number;
+  /** How many are out, and their size as a multiple of their own. */
+  setButterflies(count: number, size: number): void;
+  /** Ease toward what `setButterflies` last asked for. */
+  update(dt: number): void;
   dispose(): void;
 }
 
@@ -538,7 +565,9 @@ export function createMeadow(
   group.add(flowers);
 
   const bugGeo = butterflyGeometry(positions, o.butterflyCount, o.seed);
-  const bugMat = butterflyMaterial(treeUniforms);
+  const controls = butterflyControls();
+  const target = { count: DEFAULT_BUTTERFLIES, size: 1 };
+  const bugMat = butterflyMaterial(treeUniforms, controls);
   let butterflies: Mesh | null = null;
   if (bugGeo) {
     butterflies = new Mesh(bugGeo, bugMat);
@@ -554,6 +583,18 @@ export function createMeadow(
     group,
     flowerCount: flowers.count,
     butterflyCount: bugGeo ? o.butterflyCount : 0,
+    setButterflies(count: number, size: number) {
+      target.count = Math.max(0, Math.min(o.butterflyCount, count));
+      target.size = Math.max(0.1, size);
+    },
+    update(dt: number) {
+      // The count walks rather than jumps, about eight butterflies a second,
+      // so a big change has them come out (or go) one after another.
+      const step = dt * 8;
+      const c = controls.count.value;
+      controls.count.value = c + Math.max(-step, Math.min(step, target.count - c));
+      controls.size.value += (target.size - controls.size.value) * (1 - Math.exp(-dt * 4));
+    },
     dispose() {
       geo.dispose();
       mat.dispose();
