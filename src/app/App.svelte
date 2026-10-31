@@ -27,6 +27,7 @@
   import type { Planting } from './learn/lessons';
   import { MAX_BIRDS } from '../render/birds';
   import { MAX_BUTTERFLIES } from '../render/meadow';
+  import { MAX_DUCKLINGS } from '../render/pondLife';
 
   let canvas = $state<HTMLCanvasElement>();
   let stage = $state<HTMLDivElement>();
@@ -281,6 +282,18 @@
             : `${params.butterflies} among the flowers`,
   );
 
+  const duckStatus = $derived(
+    params.season === 'winter'
+      ? 'Gone while the pond is frozen — a robin comes instead'
+      : params.season === 'autumn'
+        ? 'A pair, the ducklings grown and flown'
+        : params.ducklings === 0
+          ? params.season === 'spring'
+            ? 'A pair, and no ducklings this year'
+            : 'A hen on her own'
+          : `A hen and ${params.ducklings} duckling${params.ducklings === 1 ? '' : 's'}${params.season === 'spring' ? ', just hatched' : ''}`,
+  );
+
   function chooseWeather(id: Weather) {
     glideTo(weatherFields(params.presetId, params.season, id));
   }
@@ -517,6 +530,8 @@
       birdSize: params.birdSize,
       butterflies: params.butterflies,
       butterflySize: params.butterflySize,
+      ducklings: params.ducklings,
+      duckSize: params.duckSize,
     };
     if (!ready) return;
     studio?.applyLook(look);
@@ -672,7 +687,7 @@
           { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
           { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0, tone: '#9fcbc3', toneInk: '#2b625b' },
-          { id: 'wildlife', label: 'Wildlife', icon: 'wildlife', panel: wildlifePanel, group: 0, tone: '#e6bf94', toneInk: '#74461f' },
+          { id: 'wildlife', label: 'Wildlife', icon: 'wildlife', panel: wildlifePanel, group: 0, tone: '#e6bf94', toneInk: '#74461f', wide: true },
           { id: 'shape', label: 'Shape', icon: 'twig', panel: shapePanel, group: 1, tone: '#a4bb8c', toneInk: '#44592f' },
           { id: 'foliage', label: 'Foliage', icon: 'leaf', panel: foliagePanel, group: 1, tone: '#c4cc8f', toneInk: '#555b22' },
           { id: 'bloom', label: 'Bloom & fruit', icon: 'bloom', panel: bloomPanel, group: 1, tone: '#d99ca6', toneInk: '#7a3a45' },
@@ -745,8 +760,10 @@
       <Glyph name="wind" size={16} weight={1.7} /> Shoo
     </button>
   </div>
-  <PicSlider label="How many" bind:value={params.birds} min={0} max={MAX_BIRDS} step={1} from="dove-few" to="dove-many" format={(v) => `${v}`} />
-  <PicSlider label="How big" bind:value={params.birdSize} min={0.6} max={1.8} from="dove-small" to="dove-big" format={(v) => `${v.toFixed(1)}×`} />
+  <div class="pair">
+    <PicSlider label="How many" bind:value={params.birds} min={0} max={MAX_BIRDS} step={1} from="dove-few" to="dove-many" format={(v) => `${v}`} />
+    <PicSlider label="How big" bind:value={params.birdSize} min={0.6} max={1.8} from="dove-small" to="dove-big" format={(v) => `${v.toFixed(1)}×`} />
+  </div>
 
   <div class="creature" style="--tone: #f3d8a8">
     <span class="portrait illustrated" use:cut={{ seed: 'portrait-butterfly', inset: 1, radius: [12, 18], bulge: [-0.3, 1.2] }}>
@@ -754,8 +771,21 @@
     </span>
     <span class="creature__text"><b>Butterflies</b>{butterflyStatus}</span>
   </div>
-  <PicSlider label="How many" bind:value={params.butterflies} min={0} max={MAX_BUTTERFLIES} step={1} from="butterfly-few" to="butterfly-many" format={(v) => `${v}`} />
-  <PicSlider label="How big" bind:value={params.butterflySize} min={0.5} max={2.2} from="butterfly-small" to="butterfly-big" format={(v) => `${v.toFixed(1)}×`} />
+  <div class="pair">
+    <PicSlider label="How many" bind:value={params.butterflies} min={0} max={MAX_BUTTERFLIES} step={1} from="butterfly-few" to="butterfly-many" format={(v) => `${v}`} />
+    <PicSlider label="How big" bind:value={params.butterflySize} min={0.5} max={2.2} from="butterfly-small" to="butterfly-big" format={(v) => `${v.toFixed(1)}×`} />
+  </div>
+
+  <div class="creature" style="--tone: #bfe0dc">
+    <span class="portrait illustrated" use:cut={{ seed: 'portrait-duck', inset: 1, radius: [12, 18], bulge: [-0.3, 1.2] }}>
+      <Glyph name="duck" size={46} weight={1.35} />
+    </span>
+    <span class="creature__text"><b>Ducks on the pond</b>{duckStatus}</span>
+  </div>
+  <div class="pair">
+    <PicSlider label="How many ducklings" bind:value={params.ducklings} min={0} max={MAX_DUCKLINGS} step={1} from="duckling-few" to="duckling-many" format={(v) => `${v}`} hint="In spring and summer; by autumn they are grown and gone" />
+    <PicSlider label="How big" bind:value={params.duckSize} min={0.7} max={1.5} from="duck-small" to="duck-big" format={(v) => `${v.toFixed(1)}×`} />
+  </div>
 {/snippet}
 
 {#snippet shapePanel()}
@@ -1222,13 +1252,23 @@
     margin: 0.2rem 0 0.35rem;
   }
 
-  .creature + :global(.pic) {
-    margin-top: 0.1rem;
+  /* A creature's two sliders, side by side, so the card never needs scrolling. */
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 1rem;
+    margin-bottom: 0.4rem;
   }
 
-  /* The second creature sits a little apart from the first one's sliders. */
-  :global(.pic) + .creature {
-    margin-top: 1rem;
+  /* Each creature a little apart from the one before. */
+  .pair + .creature {
+    margin-top: 0.7rem;
+  }
+
+  @media (max-width: 640px) {
+    .pair {
+      grid-template-columns: 1fr;
+    }
   }
 
   .portrait {

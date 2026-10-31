@@ -241,6 +241,8 @@ export interface Pond {
   uniforms: PondUniforms;
   /** The creatures: who is about this season. */
   update(dt: number, season: DuckSeason): void;
+  /** How many ducklings the hen has, in their season, and how big the ducks are. */
+  setDucks(ducklings: number, size: number): void;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
   /** Draw the reflection for this frame's view, before the frame itself. */
@@ -275,6 +277,9 @@ export function createPond(u: TreeUniforms): Pond {
     group,
     water,
     uniforms,
+    setDucks(ducklings, size) {
+      life.setDucks(ducklings, size);
+    },
     update(dt, season) {
       life.update(dt, season, uniforms.ice.value, perches);
       // The wakes' array is not watched for changes; it is pushed each frame,

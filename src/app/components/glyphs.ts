@@ -22,7 +22,7 @@
  * parts are listed *before* their cloud, so they come out from behind it.
  */
 export type Hue = 'leaf' | 'sun' | 'water' | 'sky' | 'storm' | 'snow' | 'bark' | 'petal' | 'fruit' | 'earth' | 'mist';
-export type Motion = 'streak' | 'drop' | 'snow' | 'flake' | 'beat' | 'flutter';
+export type Motion = 'streak' | 'drop' | 'snow' | 'flake' | 'beat' | 'flutter' | 'bob';
 export type Part = { d: string; k: 'wash' | 'ink' | 'both' | 'dot'; t?: string; c?: Hue; o?: number; w?: number; m?: Motion; md?: number };
 
 /** The same part, moving, from `at` (0–1) into its cycle. */
@@ -63,6 +63,33 @@ function dove(x: number, y: number, s: number, alive = false, at = 0): Part[] {
     placed({ d: ring(18.3, 12.1, 0.55), k: 'dot' }, x, y, s),
   ];
 }
+
+/**
+ * A duck afloat, side on, facing right: a boat of a body with its tail
+ * cocked, a round head on a short neck, a flat bill. `hue` colours the body;
+ * the head is the drake's green unless it is a duckling. If `alive`, it bobs.
+ */
+function duck(x: number, y: number, s: number, duckling = false, alive = false, at = 0): Part[] {
+  const body: Part = {
+    d: 'M3.4 10.6L6 12.6C8.2 11.8 11 11.7 13.6 12.4 14.9 12.8 15.9 13.8 15.9 15 15.9 16.3 14.6 17.1 12.6 17.1H7.6C5.6 17.1 4.3 16.1 4 14.6Z',
+    k: 'both',
+    c: duckling ? 'sun' : 'earth',
+  };
+  const neck: Part = { d: 'M13.9 12.7C14.3 11.5 14.6 10.6 15 10', k: 'ink' };
+  const head: Part = { d: ring(16.4, 8.6, 2.35), k: 'both', c: duckling ? 'sun' : 'leaf' };
+  const bill: Part = { d: 'M18.5 8.3L21.4 9 18.6 10Z', k: 'both', c: duckling ? 'earth' : 'sun' };
+  const eye: Part = { d: ring(17, 8, 0.45), k: 'dot' };
+  const parts = [body, neck, head, bill, eye].map((p) => placed(p, x, y, s));
+  return alive ? parts.map((p) => moving(p, 'bob', at)) : parts;
+}
+
+/** A line of water under whatever floats on it. */
+const ripple = (y: number, w = 1): Part => ({
+  d: `M2.4 ${y}c1.4-.6 2.6-.6 4 0s2.6.6 4 0 2.6-.6 4 0 2.6.6 4 0 2.6-.6 4.4 0`,
+  k: 'ink',
+  w: 0.75 * w,
+  o: 0.7,
+});
 
 /**
  * A butterfly from above, wings open: orange fore, redder hind, a dark body
@@ -303,6 +330,11 @@ export const GLYPHS = {
   ],
   'butterfly-small': butterfly(12, 12.6, 0.46),
   'butterfly-big': butterfly(12, 12, 1.02),
+  duck: [...duck(12, 11, 1, false, true), ripple(19.4)],
+  'duckling-few': [...duck(12, 12.4, 0.62, true), ripple(17.6)],
+  'duckling-many': [...duck(5.6, 12.6, 0.44, true), ...duck(12, 12.6, 0.44, true), ...duck(18.4, 12.6, 0.44, true), ripple(16.6)],
+  'duck-small': [...duck(12, 13, 0.52), ripple(17.2)],
+  'duck-big': [...duck(12, 11, 1.02), ripple(19.6)],
 
   // Actions.
   reframe: [

@@ -209,6 +209,23 @@
     transform-origin: 50% 50%;
   }
 
+  /* Afloat: riding up and down on a slow swell, with a slight rock. */
+  .bob {
+    --motion: glyph-bob;
+    --cycle: 2.2s;
+    animation-timing-function: ease-in-out;
+  }
+
+  @keyframes -global-glyph-bob {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(0.7px) rotate(-1.5deg);
+    }
+  }
+
   @keyframes -global-glyph-beat {
     0%,
     100% {

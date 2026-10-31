@@ -34,8 +34,11 @@ import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
 import { POND, shorePoint } from './pondShape';
 
-/** The most ducks there can be, for the water's wakes. */
-export const MAX_DUCKS = 6;
+/** The most ducklings a hen can have here, and how many when nobody says. */
+export const MAX_DUCKLINGS = 6;
+export const DEFAULT_DUCKLINGS = 4;
+/** The most ducks there can be — hen, drake and ducklings — for the water's wakes. */
+export const MAX_DUCKS = MAX_DUCKLINGS + 2;
 
 type Plumage = 'hen' | 'drake' | 'duckling';
 
@@ -219,6 +222,11 @@ export class PondLife {
   private robinWait = 2;
   private robinShown = 0;
   private clock = 0;
+  /** How many ducklings the hen has, when it is the season for them. */
+  private brood = DEFAULT_DUCKLINGS;
+  /** Every duck's size as a multiple of its own, eased. */
+  private sizeTarget = 1;
+  private sizeShown = 1;
 
   constructor() {
     this.material.vertexColors = true;
@@ -243,7 +251,7 @@ export class PondLife {
     };
     add('hen', 0, 0);
     add('drake', 0.75, 0.22);
-    for (let i = 0; i < 4; i++) add('duckling', 0.42 + i * 0.27, (i % 2 ? 1 : -1) * 0.05 * (1 + this.rng()));
+    for (let i = 0; i < MAX_DUCKLINGS; i++) add('duckling', 0.42 + i * 0.27, (i % 2 ? 1 : -1) * 0.05 * (1 + this.rng()));
 
     this.robin = new Mesh(robinGeometry(), this.material);
     this.robin.visible = false;
@@ -255,8 +263,15 @@ export class PondLife {
    * is (the ducks leave under it, the robin comes); `perches` where on the
    * stones the robin can stand.
    */
+  /** How many ducklings the hen has (in their season), and how big every duck is. */
+  setDucks(ducklings: number, size: number): void {
+    this.brood = Math.max(0, Math.min(MAX_DUCKLINGS, Math.round(ducklings)));
+    this.sizeTarget = Math.max(0.3, size);
+  }
+
   update(dt: number, season: DuckSeason, ice: number, perches: Vector3[]): void {
     this.clock += dt;
+    this.sizeShown = ease(this.sizeShown, this.sizeTarget, 4, dt);
     const open = 1 - ice;
 
     // The hen: paddle, and every so often stop to up-end in the weed.
@@ -279,8 +294,7 @@ export class PondLife {
 
     for (let i = 0; i < this.ducks.length; i++) {
       const d = this.ducks[i];
-      const wanted =
-        d.kind === 'hen' ? 1 : d.kind === 'drake' ? season.drake : season.ducklings * (i - 2 < Math.round(season.ducklings * 4) ? 1 : 0);
+      const wanted = d.kind === 'hen' ? 1 : d.kind === 'drake' ? season.drake : season.ducklings * (i - 2 < this.brood ? 1 : 0);
       d.shown = ease(d.shown, wanted * (open > 0.4 ? 1 : 0), 1.2, dt);
 
       let x: number;
@@ -291,8 +305,9 @@ export class PondLife {
         z = head.z;
         heading = Math.atan2(tangent.x, tangent.z);
       } else {
-        const at = this.trailAt(d.behind);
-        const ahead = this.trailAt(Math.max(0, d.behind - 0.12));
+        const back = d.behind * this.sizeShown;
+        const at = this.trailAt(back);
+        const ahead = this.trailAt(Math.max(0, back - 0.12));
         heading = Math.atan2(ahead.x - at.x, ahead.z - at.z) || d.heading;
         x = at.x + Math.cos(heading) * d.side;
         z = at.z - Math.sin(heading) * d.side;
@@ -304,7 +319,7 @@ export class PondLife {
       // Bobbing on the ripples, each to its own rhythm; sunk under the ice.
       const bob = Math.sin(this.clock * 2.1 + d.phase) * 0.007;
       const sink = (1 - Math.min(1, d.shown * 1.4)) * 0.45;
-      const scale = d.kind === 'duckling' ? 0.36 + 0.16 * season.grown : 1;
+      const scale = (d.kind === 'duckling' ? 0.36 + 0.16 * season.grown : 1) * this.sizeShown;
       d.mesh.visible = d.shown > 0.01;
       d.mesh.position.set(x, POND.level + bob - sink, z);
       d.mesh.scale.setScalar(scale);

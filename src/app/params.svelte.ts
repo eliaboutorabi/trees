@@ -3,6 +3,7 @@ import { getSeason, getWeather, type Season, type Weather } from '../render/seas
 import type { Quality, StudioParams } from '../render/studio';
 import { DEFAULT_BIRDS } from '../render/birds';
 import { DEFAULT_BUTTERFLIES } from '../render/meadow';
+import { DEFAULT_DUCKLINGS } from '../render/pondLife';
 
 export interface AppParams extends StudioParams {
   /** Seconds-ish rate for the growth animation. */
@@ -35,6 +36,8 @@ export const SCENE_KEYS = [
   'birdSize',
   'butterflies',
   'butterflySize',
+  'ducklings',
+  'duckSize',
 ] as const;
 
 export const presets = PRESETS;
@@ -118,6 +121,8 @@ export function paramsFromPreset(id: string, season: Season = 'summer', weather?
     birdSize: 1,
     butterflies: DEFAULT_BUTTERFLIES,
     butterflySize: 1,
+    ducklings: DEFAULT_DUCKLINGS,
+    duckSize: 1,
   };
 }
 

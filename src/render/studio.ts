@@ -82,6 +82,9 @@ export interface LookParams {
   /** How many butterflies are out in the meadow, and how big. */
   butterflies: number;
   butterflySize: number;
+  /** How many ducklings the hen on the pond has, in their season, and how big the ducks are. */
+  ducklings: number;
+  duckSize: number;
 }
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -584,6 +587,7 @@ export class TreeStudio {
     this.flock.setPopulation(params.birds);
     this.flock.setSize(params.birdSize);
     this.meadow.setButterflies(params.butterflies, params.butterflySize);
+    this.pond.setDucks(params.ducklings, params.duckSize);
 
     if (!this.renderer) return;
     this.userExposure = params.exposure;
