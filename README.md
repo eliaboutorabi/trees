@@ -215,13 +215,15 @@ executes for every leaf vertex in the shadow pass as well as the picture.
 
 The dock's Wildlife card is the garden's field guide. Each creature has:
 
-- **a portrait** whose wings move while the card is open: the dove's beats from
-  the shoulder, the butterfly's close toward its body and open again;
+- **a portrait** that moves while the card is open: the dove's wing beats from
+  the shoulder, the butterfly's wings close and open, the duck rides a slow
+  swell;
 - **a line saying what it's up to**, so a slider set to twelve with nothing in
   sight explains itself ("Gone to roost — back at first light", "Not in winter
-  — they come back with the flowers");
-- **how many and how big**, as picture sliders: up to 24 doves and 60
-  butterflies.
+  — they come back with the flowers", "Gone while the pond is frozen — a robin
+  comes instead");
+- **how many and how big**, as picture sliders side by side: up to 24 doves,
+  60 butterflies and 6 ducklings on the pond (see [The pond](#the-pond)).
 
 The doves also get a **Shoo** button, which puts them up to wheel round the tree.
 
@@ -242,6 +244,79 @@ None of it rebuilds anything.
 
 The wildlife settings belong to the garden, not the tree: they stay put when
 you change species or season, and they travel in a shared link.
+
+## The pond
+
+A small one, a few strides across, to the right of the tree and a little
+behind it, its near end tucked behind the trunk. It's the most game-like corner
+of the garden and the one most made of tricks.
+
+**One outline, many jobs.** The pond is an ellipse whose edge wanders on three
+slow harmonics, so it is kidney-shaped. As a function
+([`pondShape.ts`](src/render/pondShape.ts)), that outline:
+
+- carves the hollow into the ground: a bank down to just under the water, then
+  on to the bed;
+- keeps grass, tussocks, flowers and stones out of the water;
+- sends the doves round it rather than through it;
+- turns the bank to mud, wet and dark toward the water;
+- tells the water how deep it is at every point.
+
+That last one makes the shore. The water fades out over its last few
+centimetres of depth, worked out from the outline rather than read back from a
+depth buffer. So the edge is a soft wet line along the bank, however coarse the
+ground mesh under it.
+
+**The mirror** ([`reflection.ts`](src/render/reflection.ts)). A second camera,
+reflected through the water, renders the scene into a small texture, and the
+water lays it over itself where the ripples push it. A planar mirror is exact
+for a flat pond, and it costs about half a millisecond, for four reasons:
+
+- it runs at half the screen's resolution;
+- grass, flowers and rain are hidden for the pass;
+- there's no sky in it, since the water's own lighting already reflects the
+  sky, so the pass clears to transparent and only lays on what stands in front;
+- it's skipped entirely while the pond is out of view.
+
+One physics lesson the pond teaches: **a reflection only shows in water between
+you and the thing**. From the opening view the pond is behind the tree, so it
+mirrors the hills; walk round it and the tree stands in it.
+
+**The year on the water** ([`pondSurface.ts`](src/render/pondSurface.ts)):
+
+| Season | On the water |
+| --- | --- |
+| Spring | Lily pads come up one raft at a time; a few flower |
+| Summer | Every pad out, with pink water lilies open on them |
+| Autumn | Pads brown, flowers gone; the tree's own leaves wander on slow currents |
+| Winter | Frozen from the bank inward: frosted white at the rim, dark clear ice in the middle, long cracks, snow drifting on |
+
+What floats drifts by the pond's own clock, which stops while it is frozen. A
+leaf the ice catches stays caught, and moves on from the same place when it
+thaws.
+
+**Rain** pocks the surface with rings, on two offset grids of cells, each with
+its own clock, so they never fall in step.
+
+**The bank** ([`pondShore.ts`](src/render/pondShore.ts)) has ten boulders,
+mossy where they face the sky, dark where they're wet, and capped with snow in
+winter. Reeds and cattails stand in the shallows. They go to straw-gold in
+autumn and stay up through the snow, as reeds do where the grass is buried.
+
+**The creatures** ([`pondLife.ts`](src/render/pondLife.ts)):
+
+- **Mallards.** A pair in spring with just-hatched ducklings, the hen and her
+  half-grown brood in summer, the pair again in autumn. The hen paddles a loop
+  and stops now and then to up-end and dabble. The ducklings follow her actual
+  wake, a little further back each, so they bunch up when she stops and string
+  out when she sets off. Every duck trails a V in the water at nineteen and a
+  half degrees either side, as wakes do on any water.
+- **A robin.** When the ice closes, the ducks slip under the water rather than
+  vanishing on the surface, and a robin comes to hop between the snowy tops of
+  the stones.
+
+The whole pond — water, mirror, bank, lilies and ducks — costs about 1.2 ms a
+frame.
 
 ## The world around the tree
 
@@ -543,6 +618,18 @@ from the outer counter is re-emitted as an expression where it's used. Inside
 the inner loop, `i` now means the *inner* `i`, so every aurora slice came out at
 the same height. Pin outer-loop values with `.toVar()`.
 
+**A leaf is one leaf.** Each floating leaf's drift — its home, its current,
+its phase — was drawn at random *per corner* rather than per leaf. Every corner
+wandered off on its own, and the pond filled with orange triangles metres
+across. They showed even in summer, when every leaf is scaled to nothing,
+because four corners at four different centres still make a triangle however
+small each corner's leaf is.
+
+**Count after you unindex.** The pond's stones got one tint per vertex,
+counted before the geometry was unindexed: 920 tints for 5,400 drawn vertices.
+WebGPU doesn't draw a mesh wrong in that case; it rejects the whole command
+buffer, and the entire frame went black.
+
 ### The flowers that twinkled
 
 three's bokeh depth of field gathers 64 taps per pixel at a fraction of the
@@ -711,7 +798,7 @@ src/
     build.ts    grammar → buffers, pure data (runs in build.worker.ts)
     tree.ts     the Tree class: meshes plus uniforms, nothing else
     index.ts    the entire public surface
-  render/   this app: studio, sky, aurora, landscape, meadow, birds, weather, post
+  render/   this app: studio, sky, aurora, landscape, meadow, birds, pond, weather, post
   app/      Svelte 5 UI: dock, cards, glyphs, hand-cut paper
     learn/    the Learn page: lessons, and the ink-on-paper drawing board
   lib/      rng, baked noise texture
