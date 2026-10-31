@@ -228,12 +228,16 @@ export const GLYPHS = {
   ],
 
   // Blossom, and berries on a stalk.
+  // A blossom up to the left and a pair of cherries hanging to the right, each
+  // filling its half of the grid, with clear air between them.
   bloom: [
-    ...petals(8.6, 8.6, [3.6, 4, 3.5, 3.9, 3.7], 1.8),
-    { d: ring(8.6, 8.6, 1.05), k: 'dot' },
-    { d: ring(15.6, 17.2, 2.5), k: 'both' },
-    { d: ring(19.2, 14.6, 2), k: 'both' },
-    { d: 'M15.6 14.7c.3-1.8 1.2-3.1 2.6-3.9M19.2 12.6c-.1-1-.1-1.7.5-2.4', k: 'ink' },
+    ...petals(8.2, 8.2, [5, 5.4, 4.9, 5.3, 5.1], 2.35),
+    { d: ring(8.2, 8.2, 1.35), k: 'dot' },
+    leafAt(17.8, 8.4, -38, 4.3),
+    { d: 'M14.6 15.1c.4-2.6 1.4-4.9 3.2-6.7M19.8 12.8c-.2-1.6-.9-3.1-2-4.4', k: 'ink' },
+    { d: ring(14.6, 18.4, 3.3), k: 'both', c: 'fruit' },
+    { d: ring(19.8, 15.6, 2.8), k: 'both', c: 'fruit' },
+    { d: 'M12.8 17.3c.3-.8.9-1.4 1.7-1.6M18.3 14.7c.2-.6.7-1.1 1.3-1.3', k: 'ink', o: 0.6, w: 0.7 },
   ],
 
   // The sun going down behind a line of land.
