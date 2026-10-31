@@ -75,6 +75,12 @@ export interface LookParams {
   autoRotate: boolean;
   /** 'auto' scales render resolution to hold the frame budget. */
   quality: Quality;
+  /** How many doves are about, and their size as a multiple of a dove's. */
+  birds: number;
+  birdSize: number;
+  /** How many butterflies are out in the meadow, and how big. */
+  butterflies: number;
+  butterflySize: number;
 }
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -564,6 +570,9 @@ export class TreeStudio {
     // One slider for every surface that holds snow, so the tree, the sward and
     // the ground under them are never dressed for different weather.
     this.groundUniforms.snowCover.value = params.snow;
+    this.flock.setPopulation(params.birds);
+    this.flock.setSize(params.birdSize);
+    this.meadow.setButterflies(params.butterflies, params.butterflySize);
 
     if (!this.renderer) return;
     this.userExposure = params.exposure;
@@ -1434,6 +1443,11 @@ export class TreeStudio {
     if (this.paused === paused) return;
     this.paused = paused;
     if (!paused) this.settle(1500);
+  }
+
+  /** Put the doves up: everything on the tree and on the grass near it wheels round and comes back. */
+  shooBirds(): void {
+    this.flock.startle(new Vector3(0, 0, 0));
   }
 
   /** Judge no frames for a while: the next few are not representative. */

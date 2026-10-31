@@ -1,6 +1,8 @@
 import { DEFAULT_PRESET_ID, getPreset, PRESETS } from '../engine';
 import { getSeason, getWeather, type Season, type Weather } from '../render/season';
 import type { Quality, StudioParams } from '../render/studio';
+import { DEFAULT_BIRDS } from '../render/birds';
+import { DEFAULT_BUTTERFLIES } from '../render/meadow';
 
 export interface AppParams extends StudioParams {
   /** Seconds-ish rate for the growth animation. */
@@ -19,7 +21,21 @@ export interface AppParams extends StudioParams {
  * Switches that belong to the scene, not to the tree: choosing another
  * species should not stop the camera circling or take the rainbow away.
  */
-const SCENE_KEYS = ['autoRotate', 'depthOfField', 'rainbow', 'night', 'aurora', 'grain', 'antialias', 'quality'] as const;
+export const SCENE_KEYS = [
+  'autoRotate',
+  'depthOfField',
+  'rainbow',
+  'night',
+  'aurora',
+  'grain',
+  'antialias',
+  'quality',
+  // The wildlife lives in the garden, not in the tree.
+  'birds',
+  'birdSize',
+  'butterflies',
+  'butterflySize',
+] as const;
 
 export const presets = PRESETS;
 
@@ -97,6 +113,11 @@ export function paramsFromPreset(id: string, season: Season = 'summer', weather?
 
     growthSpeed: 0.3,
     autoGrow: true,
+
+    birds: DEFAULT_BIRDS,
+    birdSize: 1,
+    butterflies: DEFAULT_BUTTERFLIES,
+    butterflySize: 1,
   };
 }
 

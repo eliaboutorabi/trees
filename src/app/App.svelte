@@ -25,6 +25,8 @@
   import Slider from './components/Slider.svelte';
   import Learn from './learn/Learn.svelte';
   import type { Planting } from './learn/lessons';
+  import { MAX_BIRDS } from '../render/birds';
+  import { MAX_BUTTERFLIES } from '../render/meadow';
 
   let canvas = $state<HTMLCanvasElement>();
   let stage = $state<HTMLDivElement>();
@@ -254,6 +256,31 @@
     glide = requestAnimationFrame(step);
   }
 
+  /*
+   * A line under each creature that says what it is up to, so a slider at
+   * twelve with no birds in sight (it is night) explains itself.
+   */
+  const doveStatus = $derived(
+    params.night
+      ? 'Gone to roost — back at first light'
+      : params.birds === 0
+        ? 'None about'
+        : params.birds === 1
+          ? 'Just the one'
+          : `${params.birds} about the tree`,
+  );
+  const butterflyStatus = $derived(
+    params.night
+      ? 'Asleep until morning'
+      : params.season === 'winter'
+        ? 'Not in winter — they come back with the flowers'
+        : params.butterflies === 0
+          ? 'None in the meadow'
+          : params.butterflies === 1
+            ? 'Just the one, among the flowers'
+            : `${params.butterflies} among the flowers`,
+  );
+
   function chooseWeather(id: Weather) {
     glideTo(weatherFields(params.presetId, params.season, id));
   }
@@ -482,6 +509,10 @@
       antialias: params.antialias,
       autoRotate: params.autoRotate,
       quality: params.quality,
+      birds: params.birds,
+      birdSize: params.birdSize,
+      butterflies: params.butterflies,
+      butterflySize: params.butterflySize,
     };
     if (!ready) return;
     studio?.applyLook(look);
@@ -637,6 +668,7 @@
           { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
           { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0, tone: '#9fcbc3', toneInk: '#2b625b' },
+          { id: 'wildlife', label: 'Wildlife', icon: 'wildlife', panel: wildlifePanel, group: 0, tone: '#e6bf94', toneInk: '#74461f' },
           { id: 'shape', label: 'Shape', icon: 'twig', panel: shapePanel, group: 1, tone: '#a4bb8c', toneInk: '#44592f' },
           { id: 'foliage', label: 'Foliage', icon: 'leaf', panel: foliagePanel, group: 1, tone: '#c4cc8f', toneInk: '#555b22' },
           { id: 'bloom', label: 'Bloom & fruit', icon: 'bloom', panel: bloomPanel, group: 1, tone: '#d99ca6', toneInk: '#7a3a45' },
@@ -691,6 +723,35 @@
   {/if}
   <PicSlider label="Clouds" bind:value={params.overcast} min={0} max={1} from="sky-clear" to="sky-overcast" hint="A clear sky, or one closed over — which takes the sun's strength and colour with it" />
   <PicSlider label="Snow on the ground" bind:value={params.snow} min={0} max={1} from="ground-grass" to="ground-snow" hint="Settles on the branches, the grass and the ground together" />
+{/snippet}
+
+{#snippet wildlifePanel()}
+  <div class="creature" style="--tone: #dfe5ea">
+    <span class="portrait illustrated" use:cut={{ seed: 'portrait-dove', inset: 1, radius: [12, 18], bulge: [-0.3, 1.2] }}>
+      <Glyph name="dove" size={46} weight={1.35} />
+    </span>
+    <span class="creature__text"><b>Doves</b>{doveStatus}</span>
+    <button
+      class="shoo"
+      onclick={() => studio?.shooBirds()}
+      disabled={params.night || params.birds === 0}
+      title="Put them up — they wheel round the tree and come back"
+      use:cut={{ seed: 'shoo', inset: 1, radius: [10, 16], bulge: [-0.3, 1] }}
+    >
+      <Glyph name="wind" size={16} weight={1.7} /> Shoo
+    </button>
+  </div>
+  <PicSlider label="How many" bind:value={params.birds} min={0} max={MAX_BIRDS} step={1} from="dove-few" to="dove-many" format={(v) => `${v}`} />
+  <PicSlider label="How big" bind:value={params.birdSize} min={0.6} max={1.8} from="dove-small" to="dove-big" format={(v) => `${v.toFixed(1)}×`} />
+
+  <div class="creature" style="--tone: #f3d8a8">
+    <span class="portrait illustrated" use:cut={{ seed: 'portrait-butterfly', inset: 1, radius: [12, 18], bulge: [-0.3, 1.2] }}>
+      <Glyph name="butterfly" size={46} weight={1.35} />
+    </span>
+    <span class="creature__text"><b>Butterflies</b>{butterflyStatus}</span>
+  </div>
+  <PicSlider label="How many" bind:value={params.butterflies} min={0} max={MAX_BUTTERFLIES} step={1} from="butterfly-few" to="butterfly-many" format={(v) => `${v}`} />
+  <PicSlider label="How big" bind:value={params.butterflySize} min={0.5} max={2.2} from="butterfly-small" to="butterfly-big" format={(v) => `${v.toFixed(1)}×`} />
 {/snippet}
 
 {#snippet shapePanel()}
@@ -1147,6 +1208,76 @@
 
   .tiles.four {
     grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* A creature in the Wildlife card: a field-guide portrait, its name and what it is up to. */
+  .creature {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.2rem 0 0.35rem;
+  }
+
+  .creature + :global(.pic) {
+    margin-top: 0.1rem;
+  }
+
+  /* The second creature sits a little apart from the first one's sliders. */
+  :global(.pic) + .creature {
+    margin-top: 1rem;
+  }
+
+  .portrait {
+    flex: none;
+    width: 3.6rem;
+    height: 3.4rem;
+    display: grid;
+    place-items: center;
+    background:
+      var(--sheen),
+      radial-gradient(120% 110% at 35% 25%, color-mix(in srgb, var(--tone) 85%, white 15%), color-mix(in srgb, var(--tone) 70%, transparent));
+  }
+
+  .creature__text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    color: var(--ink-faint);
+  }
+
+  .creature__text b {
+    display: block;
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .shoo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.42rem 0.8rem 0.42rem 0.62rem;
+    border: none;
+    background: rgba(169, 196, 216, 0.5);
+    color: #2c4a60;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background 0.2s,
+      transform 0.25s cubic-bezier(0.25, 0.8, 0.3, 1.4);
+  }
+
+  .shoo:hover:not(:disabled) {
+    background: rgba(169, 196, 216, 0.75);
+    transform: translateY(-1px) rotate(-1.5deg);
+  }
+
+  .shoo:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   .weather-art {
