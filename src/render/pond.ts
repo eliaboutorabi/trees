@@ -11,14 +11,17 @@
  * at every point — so the shore, where the water thins to nothing over the
  * bank, is smooth however coarse the ground mesh is under it.
  */
-import { BufferAttribute, BufferGeometry, Mesh } from 'three';
-import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, Mesh, Sphere, Vector3, type Object3D, type PerspectiveCamera, type Scene, type Texture } from 'three';
+import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
   atan,
+  cameraPosition,
   cameraViewMatrix,
   float,
   mix,
+  output,
   positionWorld,
+  screenUV,
   sin,
   smoothstep,
   texture,
@@ -27,6 +30,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
+import { PlanarReflection } from './reflection';
 import { createNoiseTexture } from '../lib/noiseTexture';
 import type { TreeUniforms } from '../engine/materials/shared';
 
@@ -171,8 +175,11 @@ function waterGeometry(): BufferGeometry {
  *   soft, wet line along the bank rather than where a sheet cuts the ground.
  * - The surface is never quite still: two drifting layers of noise tilt its
  *   normal a little, more as the wind gets up, so reflections shiver.
+ * - Over all that goes the mirror image of what stands above it — the tree,
+ *   the stones on the bank, the hills, a passing bird — sampled where the
+ *   ripples push it, and stronger the more glancing the view, as water is.
  */
-function waterMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
+function waterMaterial(u: TreeUniforms, mirror: Texture): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   material.transparent = true;
   material.depthWrite = false;
@@ -201,19 +208,39 @@ function waterMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   material.metalnessNode = float(0);
   material.opacityNode = smoothstep(0.0, 0.045, depth);
 
+  // The mirror: flipped left to right (see `PlanarReflection`), nudged by the
+  // ripples, and laid over the lit water where something stands above it.
+  // Water reflects little looking straight down and nearly everything at a
+  // glance; a pond seen from a few metres up sits between, and reads most
+  // like a pond when the reflection is clear, so it is weighted toward the
+  // glancing end.
+  const reflected = texture(mirror, vec2(screenUV.x.oneMinus(), screenUV.y).add(slope.mul(0.32)));
+  const view = cameraPosition.sub(p).normalize();
+  const glance = normal.dot(view).clamp(0, 1).oneMinus();
+  const strength = mix(float(0.5), float(0.92), glance.mul(glance)).mul(reflected.a);
+  material.outputNode = vec4(mix(output.rgb, reflected.rgb, strength), output.a);
+
   return material;
 }
 
 export interface Pond {
   /** Add to the scene. */
   water: Mesh;
+  /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
+  hideFromReflection(...objects: Object3D[]): void;
+  /** Draw the reflection for this frame's view, before the frame itself. */
+  reflect(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): void;
   dispose(): void;
 }
 
 export function createPond(u: TreeUniforms): Pond {
   const geometry = waterGeometry();
-  const material = waterMaterial(u);
+  const bounds = new Sphere(new Vector3(POND.x, POND.level, POND.z), POND.rx * 1.5);
+  const mirror = new PlanarReflection(POND.level, bounds);
+  const material = waterMaterial(u, mirror.texture);
   const water = new Mesh(geometry, material);
+  // The water is not in its own reflection.
+  mirror.hidden.push(water);
   water.receiveShadow = true;
   water.castShadow = false;
   // After the ground and everything standing in the water, so its soft edge
@@ -221,9 +248,16 @@ export function createPond(u: TreeUniforms): Pond {
   water.renderOrder = 1;
   return {
     water,
+    hideFromReflection(...objects: Object3D[]) {
+      for (const o of objects) if (!mirror.hidden.includes(o)) mirror.hidden.push(o);
+    },
+    reflect(renderer, scene, camera) {
+      mirror.render(renderer, scene, camera);
+    },
     dispose() {
       geometry.dispose();
       material.dispose();
+      mirror.dispose();
     },
   };
 }

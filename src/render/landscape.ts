@@ -26,6 +26,7 @@ import {
   Mesh,
   Quaternion,
   Vector3,
+  type Object3D,
 } from 'three';
 import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
@@ -540,6 +541,8 @@ function scatter(
 
 export interface Landscape {
   group: Group;
+  /** Too small to read in a reflection, and costly to draw twice: the grass and the tussocks. */
+  undergrowth: Object3D[];
   /** Colours shared with the ground shader, so haze can be retinted. */
   uniforms: ReturnType<typeof createGroundMaterial>['uniforms'];
   dispose(): void;
@@ -567,8 +570,8 @@ export function createLandscape(
   // the missing yaw is invisible.
   const grassGeo = track(tuftGeometry({ blades: 6, lean: 0.45, height: 0.62 }));
   const grassMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.55, rootShade: 0.28 }));
-  group.add(
-    scatter(grassGeo, grassMat, opts, {
+  const undergrowth: Object3D[] = [];
+  const grass = scatter(grassGeo, grassMat, opts, {
       // Small and dense rather than large and sparse. At this camera distance a
       // tuft you can pick out individually reads as a weed; the field only
       // reads as grass once the clumps overlap and merge into texture.
@@ -588,15 +591,15 @@ export function createLandscape(
       tint: { base: 0x5c6b2b, vary: 0.4 },
       // Down the bank to just above the water, where turf gives way to mud.
       keepOut: 1.14,
-    }),
-  );
+    });
+  group.add(grass);
+  undergrowth.push(grass);
 
   // Tussocks: taller, sparser, and allowed to spin freely because at this size
   // the eye reads the clump's silhouette rather than which way it leans.
   const tussockGeo = track(tuftGeometry({ blades: 8, lean: 0.7, height: 1.0, width: 0.06 }));
   const tussockMat = track(createGroundCoverMaterial(treeUniforms, { sway: 0.4, rootShade: 0.22 }));
-  group.add(
-    scatter(tussockGeo, tussockMat, opts, {
+  const tussocks = scatter(tussockGeo, tussockMat, opts, {
       count: Math.round(4200 * opts.detail),
       minRadius: 3,
       maxRadius: 58,
@@ -607,8 +610,9 @@ export function createLandscape(
       yaw: 1.2,
       tint: { base: 0x4e5f26, vary: 0.5 },
       keepOut: 1.32,
-    }),
-  );
+    });
+  group.add(tussocks);
+  undergrowth.push(tussocks);
 
   // Rocks: low-poly and half-buried, so they read as part of the ground rather
   // than as objects resting on it.
@@ -667,6 +671,7 @@ export function createLandscape(
 
   return {
     group,
+    undergrowth,
     uniforms: ground.uniforms,
     dispose() {
       for (const d of disposables) d.dispose();

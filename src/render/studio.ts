@@ -335,6 +335,10 @@ export class TreeStudio {
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
     this.scene.add(this.pond.water);
+    // The water mirrors what stands in the world; not the grass and flowers —
+    // tens of thousands of instances that would not read in a ripple — nor
+    // what is falling through the air.
+    this.pond.hideFromReflection(...this.landscape.undergrowth, this.meadow.group, this.snowfall, this.rainfall);
     this.scene.add(this.fireflies);
     this.scene.add(this.snowfall);
     this.scene.add(this.rainfall);
@@ -709,6 +713,9 @@ export class TreeStudio {
       aurora.compile(this.scene, this.camera).then(() => {
         if (this.disposed) return;
         this.scene.add(aurora.dome);
+        // Its picture is made for the main view; seen from under the water
+        // it would be the wrong way up.
+        this.pond.hideFromReflection(aurora.dome);
         this.auroraReady = true;
       });
     }
@@ -1203,6 +1210,7 @@ export class TreeStudio {
         aurora.update(this.camera);
       }
     }
+    this.pond.reflect(this.renderer, this.scene, this.camera);
     this.post.render();
 
     if (this.pendingCapture) {
