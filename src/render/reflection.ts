@@ -57,8 +57,6 @@ export class PlanarReflection {
   private readonly mirror = new PerspectiveCamera();
   /** Left out of the reflection: too small to read in it, or not in the sky. */
   readonly hidden: Object3D[] = [];
-  /** Called just before the pass, for the camera; what it returns is called just after. */
-  stage: ((camera: PerspectiveCamera) => () => void) | null = null;
   /** Whether the last frame drew a reflection; the water shows none when not. */
   visible = false;
 
@@ -139,13 +137,11 @@ export class PlanarReflection {
     const clearAlpha = renderer.getClearAlpha();
     renderer.setClearColor(0x000000, 0);
 
-    const unstage = this.stage?.(camera);
     const previous = renderer.getRenderTarget();
     renderer.setRenderTarget(this.target);
     renderer.clear();
     renderer.render(scene, mirror);
     renderer.setRenderTarget(previous);
-    unstage?.();
 
     renderer.setClearColor(clear, clearAlpha);
     scene.background = background;

@@ -276,8 +276,6 @@ export interface Pond {
   update(dt: number, season: DuckSeason): void;
   /** How many ducklings the hen has, in their season, and how big the ducks are. */
   setDucks(ducklings: number, size: number): void;
-  /** The tree, which the water shows even when the pond lies behind it (see below). */
-  reflectTree(tree: Object3D): void;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
   /** Draw the reflection for this frame's view, before the frame itself. */
@@ -313,33 +311,6 @@ export function createPond(u: TreeUniforms, sky: SkyUniforms): Pond {
     group,
     water,
     uniforms,
-    reflectTree(tree) {
-      /*
-       * The tree in the water, when strict optics would leave it out. Water
-       * only shows what stands beyond it, so with the pond behind the tree —
-       * the view the garden opens on — a true mirror holds hills and sky and
-       * no tree at all, and the pond looks disconnected from it. A tree that
-       * glows in the water beside it is too good to lose, so for the mirror
-       * pass alone the tree stands further off, just where its crown's image
-       * lands in the pond. It slides back to where it really is as you walk
-       * round to where the true reflection shows.
-       */
-      const crown = 5.5;
-      mirror.stage = (camera) => {
-        const cx = camera.position.x;
-        const cz = camera.position.z;
-        const toPond = Math.hypot(POND.x - cx, POND.z - cz);
-        const away = (POND.x * (POND.x - cx) + POND.z * (POND.z - cz)) / (Math.hypot(POND.x, POND.z) * toPond);
-        const t = Math.min(1, Math.max(0, (away - 0.1) / 0.5));
-        const amount = t * t * (3 - 2 * t);
-        // Aim at a point in the pond on the tree's side of its middle.
-        const aimX = POND.x * 0.78;
-        const aimZ = POND.z * 0.78;
-        const reach = (Math.max(1, camera.position.y) + crown) / Math.max(1, camera.position.y);
-        tree.position.set((cx + (aimX - cx) * reach) * amount, 0, (cz + (aimZ - cz) * reach) * amount);
-        return () => tree.position.set(0, 0, 0);
-      };
-    },
     setDucks(ducklings, size) {
       life.setDucks(ducklings, size);
     },

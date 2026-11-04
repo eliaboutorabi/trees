@@ -342,7 +342,6 @@ export class TreeStudio {
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
     this.scene.add(this.pond.group);
-    this.pond.reflectTree(this.tree.group);
     // The water mirrors what stands in the world; not the grass and flowers —
     // tens of thousands of instances that would not read in a ripple — nor
     // what is falling through the air.
