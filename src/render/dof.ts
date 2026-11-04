@@ -41,7 +41,11 @@ type N = any;
 export function stableDepthOfField(color: N, viewZ: N, focus: N, range: N, amount: N): N {
   const signed = viewZ.negate().sub(focus);
   const coc = smoothstep(0, range, signed.abs()).mul(amount) as N;
-  const far = select(signed.greaterThan(0), coc, 0) as N;
+  // The sharp zone runs well back behind the tree before the far field starts
+  // softening, so the garden round it — the pond above all — stays crisp and
+  // only the hills beyond go soft.
+  const farCoc = smoothstep(0, range, signed.sub(focus.mul(0.7)).max(0)).mul(amount) as N;
+  const far = select(signed.greaterThan(0), farCoc, 0) as N;
   const near = select(signed.lessThan(0), coc, 0) as N;
 
   // A floor on the weights keeps every texel defined where nothing in a

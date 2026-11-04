@@ -30,7 +30,7 @@ import {
 } from 'three';
 import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { mulberry32 } from '../lib/rng';
-import { pondField, pondGround } from './pondShape';
+import { pondCalm, pondField, pondGround } from './pondShape';
 import { createGroundMaterial } from './materials/ground';
 import { createGroundCoverMaterial } from './materials/groundCover';
 import type { TreeUniforms } from '../engine/materials/shared';
@@ -155,7 +155,7 @@ export function terrainHeight(x: number, z: number, opts: LandscapeOptions): num
   // very low frequency mass term lets whole massifs rise and others sink to
   // foothills, so the skyline has somewhere for the eye to rest.
   const rise = smootherstep((dist - opts.radius * 1.05) / (opts.horizonRadius * 0.42));
-  if (rise <= 0) return meadow * opts.relief + pondGround(x, z);
+  if (rise <= 0) return meadow * opts.relief * pondCalm(x, z) + pondGround(x, z);
 
   const mass = Math.pow(fbm(x * 0.0026, z * 0.0026, opts.seed + 1777, 3), 1.5);
   const crest = ridged(x * 0.0043, z * 0.0043, opts.seed + 313, 6);

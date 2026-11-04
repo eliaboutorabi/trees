@@ -182,7 +182,7 @@ export class TreeStudio {
   private readonly groundUniforms = this.landscape.uniforms;
   // Wildflowers, and butterflies that perch on the ones actually placed.
   private readonly meadow = createMeadow(this.tree.uniforms, DEFAULT_LANDSCAPE);
-  private readonly pond = createPond(this.tree.uniforms);
+  private readonly pond = createPond(this.tree.uniforms, this.sky.uniforms);
   /** Only out at night. */
   private readonly fireflies = createFireflies(this.tree.uniforms);
   private readonly snowfall = createSnowfall(this.tree.uniforms);
@@ -342,6 +342,7 @@ export class TreeStudio {
     this.scene.add(this.landscape.group);
     this.scene.add(this.meadow.group);
     this.scene.add(this.pond.group);
+    this.pond.reflectTree(this.tree.group);
     // The water mirrors what stands in the world; not the grass and flowers —
     // tens of thousands of instances that would not read in a ripple — nor
     // what is falling through the air.

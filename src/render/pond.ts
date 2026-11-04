@@ -9,7 +9,7 @@
  * (`pondSurface.ts`).
  */
 import { BufferAttribute, BufferGeometry, Group, Mesh, Sphere, Vector3, type Object3D, type PerspectiveCamera, type Scene, type Texture } from 'three';
-import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
+import { MeshPhysicalNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
   cameraPosition,
   cameraViewMatrix,
@@ -28,6 +28,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { PlanarReflection } from './reflection';
+import { skyNode, type SkyUniforms } from './sky';
 import { createPondShore } from './pondShore';
 import { createPondSurface } from './pondSurface';
 import { MAX_DUCKS, PondLife, type DuckSeason } from './pondLife';
@@ -101,8 +102,11 @@ function waterGeometry(): BufferGeometry {
  *   the stones on the bank, the hills, a passing bird — sampled where the
  *   ripples push it, and stronger the more glancing the view, as water is.
  */
-function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wakes: N): MeshStandardNodeMaterial {
-  const material = new MeshStandardNodeMaterial();
+function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wakes: N, sky: SkyUniforms): MeshPhysicalNodeMaterial {
+  const material = new MeshPhysicalNodeMaterial();
+  // The sky's reflection is worked out below, exactly; the lighting's own
+  // would only wash the water's colour out, so it is kept to a glint.
+  material.specularIntensity = 0.22;
   material.transparent = true;
   material.depthWrite = false;
 
@@ -119,7 +123,7 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
   const a = texture(noise, p.xz.mul(0.55).add(vec2(drift, drift.mul(0.6))));
   const b = texture(noise, p.xz.mul(1.3).add(vec2(drift.mul(-0.7), drift.mul(0.9))));
   const ripple = u.wind.mul(0.07).add(0.035).add(u.rainfall.mul(0.05));
-  const slope = vec2(a.g.add(b.b).sub(1), a.b.add(b.g).sub(1)).mul(ripple).mul(open).toVar();
+  let slope: N = vec2(a.g.add(b.b).sub(1), a.b.add(b.g).sub(1)).mul(ripple).mul(open);
 
   /*
    * Rain. Every drop that lands throws a ring: the surface is cut into cells
@@ -142,7 +146,7 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
     const wave = ring.mul(ring).negate().exp().mul(t.oneMinus()).mul(ring.mul(3.1).sin());
     return off.div(d.max(0.001)).mul(wave);
   };
-  slope.addAssign(rings(3.1, 0.9, 0).add(rings(2.3, 0.7, 17.3)).mul(u.rainfall).mul(0.6).mul(open));
+  slope = slope.add(rings(3.1, 0.9, 0).add(rings(2.3, 0.7, 17.3)).mul(u.rainfall).mul(0.6).mul(open));
 
   /*
    * Wakes. Every duck trails a V behind it — two arms opening at the angle
@@ -162,18 +166,19 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
     const arm = side.abs().sub(behind.mul(0.354)).abs();
     const reach = behind.mul(-1.4).exp().mul(smoothstep(0, 0.06, behind));
     const crest = behind.mul(34).sub(time.mul(6)).sin().mul(arm.mul(arm).div(-0.0022).exp());
-    slope.addAssign(vec2(dir.y.negate(), dir.x).mul(side.sign()).mul(crest).mul(reach).mul(sp).mul(1.6));
+    slope = slope.add(vec2(dir.y.negate(), dir.x).mul(side.sign()).mul(crest).mul(reach).mul(sp).mul(1.6));
     const r = rel.length();
     const bow = r.mul(46).sub(time.mul(5)).sin().mul(r.mul(-9).exp()).mul(sp).mul(0.9);
-    slope.addAssign(rel.div(r.max(0.01)).mul(bow));
+    slope = slope.add(rel.div(r.max(0.01)).mul(bow));
   }
 
   const normal = vec3(slope.x, 1, slope.y).normalize();
   material.normalNode = cameraViewMatrix.mul(vec4(normal, 0)).xyz.normalize();
 
-  const shallow = vec3(0.12, 0.115, 0.075);
-  const mid = vec3(0.07, 0.13, 0.1);
-  const deep = vec3(0.03, 0.105, 0.11);
+  // A clear, saturated teal: green in the shallows, deepening to blue.
+  const shallow = vec3(0.2, 0.44, 0.3);
+  const mid = vec3(0.05, 0.44, 0.45);
+  const deep = vec3(0.02, 0.29, 0.37);
   // Rain stirs up the silt and darkens the water a little.
   const water = mix(mix(shallow, mid, smoothstep(0.0, 0.14, depth)), deep, smoothstep(0.12, 0.5, depth)).mul(
     u.rainfall.mul(0.18).oneMinus(),
@@ -203,18 +208,27 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
   material.metalnessNode = float(0);
   material.opacityNode = smoothstep(0.0, 0.045, depth);
 
-  // The mirror: flipped left to right (see `PlanarReflection`), nudged by the
-  // ripples, and laid over the lit water where something stands above it.
-  // Water reflects little looking straight down and nearly everything at a
-  // glance; a pond seen from a few metres up sits between, and reads most
-  // like a pond when the reflection is clear, so it is weighted toward the
-  // glancing end. Ice reflects far less, and frost and snow not at all.
+  /*
+   * The reflection. What stands above the water comes from the mirror,
+   * flipped left to right (see `PlanarReflection`) and nudged by the ripples;
+   * everywhere else the water reflects the sky itself — the same shader,
+   * asked about the reflected ray, so sunset, cloud and stars all land in it.
+   * Sky is laid on lightly, so the water keeps its colour until the view is
+   * glancing; what stands over it reads clearly at any angle. Ice reflects
+   * strongly where it is clear, and not at all where frost or snow lie on it.
+   */
   const reflected = texture(mirror, vec2(screenUV.x.oneMinus(), screenUV.y).add(slope.mul(0.32)));
   const view = cameraPosition.sub(p).normalize();
-  const glance = normal.dot(view).clamp(0, 1).oneMinus();
-  const iceMirror = frost.max(drifts).oneMinus().mul(0.45);
-  const strength = mix(float(0.5), float(0.92), glance.mul(glance)).mul(reflected.a).mul(mix(float(1), iceMirror, ice));
-  material.outputNode = vec4(mix(output.rgb, reflected.rgb, strength), output.a);
+  const cosine = normal.dot(view).clamp(0, 1);
+  const glance = cosine.oneMinus();
+  const ray = view.negate().add(normal.mul(cosine.mul(2)));
+  const skyLight = skyNode(sky, vec3(ray.x, ray.y.abs(), ray.z) as never) as N;
+  const image = mix(skyLight, reflected.rgb, reflected.a);
+  const onSky = mix(float(0.05), float(0.45), glance.mul(glance).mul(glance).mul(glance));
+  const onThings = mix(float(0.55), float(0.92), glance.mul(glance));
+  const openMirror = mix(onSky, onThings, reflected.a);
+  const iceMirror = frost.max(drifts).oneMinus().mul(0.88);
+  material.outputNode = vec4(mix(output.rgb, image, mix(openMirror, iceMirror, ice)), output.a);
 
   return material;
 }
@@ -243,6 +257,8 @@ export interface Pond {
   update(dt: number, season: DuckSeason): void;
   /** How many ducklings the hen has, in their season, and how big the ducks are. */
   setDucks(ducklings: number, size: number): void;
+  /** The tree, which the water shows even when the pond lies behind it (see below). */
+  reflectTree(tree: Object3D): void;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
   /** Draw the reflection for this frame's view, before the frame itself. */
@@ -250,14 +266,14 @@ export interface Pond {
   dispose(): void;
 }
 
-export function createPond(u: TreeUniforms): Pond {
+export function createPond(u: TreeUniforms, sky: SkyUniforms): Pond {
   const geometry = waterGeometry();
   const bounds = new Sphere(new Vector3(POND.x, POND.level, POND.z), POND.rx * 1.5);
   const mirror = new PlanarReflection(POND.level, bounds);
   const uniforms = pondUniforms();
   const life = new PondLife();
   const wakes = uniformArray(life.wakes, 'vec4');
-  const material = waterMaterial(u, mirror.texture, uniforms, wakes);
+  const material = waterMaterial(u, mirror.texture, uniforms, wakes, sky);
   const perches = stoneTops();
   const water = new Mesh(geometry, material);
   // The water is not in its own reflection.
@@ -277,6 +293,33 @@ export function createPond(u: TreeUniforms): Pond {
     group,
     water,
     uniforms,
+    reflectTree(tree) {
+      /*
+       * The tree in the water, when strict optics would leave it out. Water
+       * only shows what stands beyond it, so with the pond behind the tree —
+       * the view the garden opens on — a true mirror holds hills and sky and
+       * no tree at all, and the pond looks disconnected from it. A tree that
+       * glows in the water beside it is too good to lose, so for the mirror
+       * pass alone the tree stands further off, just where its crown's image
+       * lands in the pond. It slides back to where it really is as you walk
+       * round to where the true reflection shows.
+       */
+      const crown = 5.5;
+      mirror.stage = (camera) => {
+        const cx = camera.position.x;
+        const cz = camera.position.z;
+        const toPond = Math.hypot(POND.x - cx, POND.z - cz);
+        const away = (POND.x * (POND.x - cx) + POND.z * (POND.z - cz)) / (Math.hypot(POND.x, POND.z) * toPond);
+        const t = Math.min(1, Math.max(0, (away - 0.1) / 0.5));
+        const amount = t * t * (3 - 2 * t);
+        // Aim at a point in the pond on the tree's side of its middle.
+        const aimX = POND.x * 0.78;
+        const aimZ = POND.z * 0.78;
+        const reach = (Math.max(1, camera.position.y) + crown) / Math.max(1, camera.position.y);
+        tree.position.set((cx + (aimX - cx) * reach) * amount, 0, (cz + (aimZ - cz) * reach) * amount);
+        return () => tree.position.set(0, 0, 0);
+      };
+    },
     setDucks(ducklings, size) {
       life.setDucks(ducklings, size);
     },

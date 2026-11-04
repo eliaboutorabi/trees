@@ -18,16 +18,16 @@ type N = any;
 export const POND = {
   /**
    * Centre, in metres from the trunk: as the camera first finds the tree,
-   * about four metres to its right and four behind it, so the near end of
-   * the pond tucks in behind the trunk.
+   * a little to its right and well behind it, so the pond spreads out across
+   * the view on both sides of the trunk.
    */
-  x: 0.55,
-  z: -5.6,
+  x: -2.56,
+  z: -7.58,
   /** Its long axis runs across the first view: a bearing about +Y, radians. */
   angle: -0.6435,
   /** Half-length and half-width, before the edge wanders. */
-  rx: 3.8,
-  rz: 2.5,
+  rx: 4.7,
+  rz: 3.7,
   /** The water's surface, a hand's breadth below the meadow. */
   level: -0.06,
   /** How far the bed falls below that in the middle. */
@@ -65,6 +65,16 @@ const ss = (a: number, b: number, x: number) => {
  * meadow's: nothing past the top of the bank; a gentle slope down to just
  * under the water at the outline; and on down to the bed in the middle.
  */
+/**
+ * How much of the meadow's own relief is allowed here: none in and around the
+ * pond, whose water lies level and whose depth assumes level ground, easing
+ * back to all of it a good way up the bank.
+ */
+export function pondCalm(x: number, z: number): number {
+  if (Math.abs(x - POND.x) > POND.rx * 3.4 || Math.abs(z - POND.z) > POND.rx * 3.4) return 1;
+  return ss(1.5, 2.6, pondField(x, z));
+}
+
 export function pondGround(x: number, z: number): number {
   if (Math.abs(x - POND.x) > POND.rx * 2 || Math.abs(z - POND.z) > POND.rx * 2) return 0;
   return groundAt(pondField(x, z));
