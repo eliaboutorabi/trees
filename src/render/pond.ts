@@ -179,10 +179,11 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
   const shallow = vec3(0.2, 0.44, 0.3);
   const mid = vec3(0.05, 0.44, 0.45);
   const deep = vec3(0.02, 0.29, 0.37);
-  // Rain stirs up the silt and darkens the water a little.
-  const water = mix(mix(shallow, mid, smoothstep(0.0, 0.14, depth)), deep, smoothstep(0.12, 0.5, depth)).mul(
-    u.rainfall.mul(0.18).oneMinus(),
-  );
+  // Under a closed sky the colour goes out of it: a dark slate teal, with the
+  // silt rain stirs up.
+  const clearWater = mix(mix(shallow, mid, smoothstep(0.0, 0.14, depth)), deep, smoothstep(0.12, 0.5, depth));
+  const slate = vec3(clearWater.y.mul(0.42), clearWater.y.mul(0.72), clearWater.y.mul(0.78));
+  const water = mix(clearWater, slate, sky.overcast).mul(mix(float(1), float(0.5), sky.overcast)).mul(u.rainfall.mul(0.25).oneMinus());
 
   /*
    * Ice. It forms from the bank inward, so it is white and frosted round the
@@ -191,13 +192,16 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
    * thickest by the shore.
    */
   const grain = texture(noise, p.xz.mul(0.9).add(0.31));
-  const frost = smoothstep(0.55, 1.0, field.add(grain.r.sub(0.5).mul(0.35)));
+  // A jagged, crunchy front between the frosted rim and the clear middle.
+  const fine = texture(noise, p.xz.mul(3.1).add(0.13));
+  const frost = smoothstep(0.68, 0.8, field.add(grain.r.sub(0.5).mul(0.3)).add(fine.g.sub(0.5).mul(0.14)));
   const crackField = texture(noise, p.xz.mul(0.32).add(0.77)).g;
   const crack = smoothstep(0.012, 0.0, crackField.sub(0.5).abs()).mul(frost.oneMinus().mul(0.6).add(0.4));
   const clear = vec3(0.16, 0.24, 0.28);
-  const rime = vec3(0.78, 0.84, 0.88);
-  const iceColour = mix(clear, rime, frost.mul(0.85)).add(crack.mul(0.18));
-  const drifts = smoothstep(0.35, 0.75, grain.g.add(frost.mul(0.4))).mul(u.snow);
+  const rime = vec3(0.86, 0.9, 0.94).mul(fine.b.mul(0.22).add(0.86));
+  const iceColour = mix(clear, rime, frost).add(crack.mul(0.18));
+  // Snow lies on the frost by the shore and leaves the clear ice to the sky.
+  const drifts = smoothstep(0.55, 0.85, grain.g.mul(0.5).add(frost.mul(0.62))).mul(u.snow);
   const iceTop = mix(iceColour, u.snowColor, drifts);
   material.colorNode = mix(water, iceTop, ice);
 
@@ -223,7 +227,8 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
   const glance = cosine.oneMinus();
   const ray = view.negate().add(normal.mul(cosine.mul(2)));
   const skyLight = skyNode(sky, vec3(ray.x, ray.y.abs(), ray.z) as never) as N;
-  const image = mix(skyLight, reflected.rgb, reflected.a);
+  // Frozen, the image of what stands over it is only a faint darkening.
+  const image = mix(skyLight, reflected.rgb, reflected.a.mul(mix(float(1), float(0.22), ice)));
   const onSky = mix(float(0.05), float(0.45), glance.mul(glance).mul(glance).mul(glance));
   const onThings = mix(float(0.55), float(0.92), glance.mul(glance));
   const openMirror = mix(onSky, onThings, reflected.a);
@@ -283,7 +288,8 @@ export function createPond(u: TreeUniforms, sky: SkyUniforms): Pond {
   // Lying flat on the water, they have no reflection worth drawing.
   mirror.hidden.push(surface.lilies, surface.leaves);
   const group = new Group();
-  group.add(shore.stones, shore.reeds, surface.lilies, surface.leaves, life.group, water);
+  group.add(shore.stones, shore.reeds, shore.mushrooms, surface.lilies, surface.leaves, life.group, water);
+  mirror.hidden.push(shore.mushrooms);
   water.receiveShadow = true;
   water.castShadow = false;
   // After the ground and everything standing in the water, so its soft edge

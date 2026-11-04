@@ -10,7 +10,7 @@
  *
  * Both are single merged meshes, so the whole bank costs two draws.
  */
-import { BufferAttribute, BufferGeometry, DoubleSide, IcosahedronGeometry, Mesh, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, CylinderGeometry, DoubleSide, IcosahedronGeometry, Mesh, SphereGeometry, Vector3 } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, float, mix, normalWorld, positionLocal, positionWorld, sin, smoothstep, uv, vec3 } from 'three/tsl';
@@ -128,7 +128,14 @@ function stonesMesh(u: TreeUniforms): Mesh {
     .clamp(0, 1);
   const mossy = smoothstep(0.25, 0.75, up).mul(patches);
   const wet = smoothstep(POND.level + 0.1, POND.level, positionWorld.y);
-  const dry = mix(rock, vec3(0.13, 0.19, 0.06), mossy.mul(0.9).mul(u.snow.oneMinus()));
+  const moss = mix(vec3(0.2, 0.33, 0.07), vec3(0.3, 0.26, 0.08), u.autumn);
+  const mossed = mix(rock, moss, mossy.mul(0.95).mul(u.snow.oneMinus()));
+  // Fallen leaves caught on the tops of the stones, in autumn.
+  const leafy = smoothstep(0.5, 0.8, up)
+    .mul(smoothstep(0.62, 0.8, sin(positionWorld.x.mul(21.3).add(positionWorld.z.mul(17.1))).mul(sin(positionWorld.z.mul(19.7).sub(positionWorld.x.mul(11.3))).mul(0.5).add(0.5))))
+    .mul(u.autumn)
+    .mul(u.snow.oneMinus());
+  const dry = mix(mossed, vec3(0.8, 0.34, 0.07), leafy);
   // A cap of snow on top, the sides left dark.
   const snow = smoothstep(0.62, 0.86, up).mul(u.snow).mul(wet.oneMinus());
   material.colorNode = mix(dry.mul(wet.mul(0.45).oneMinus()), u.snowColor, snow);
@@ -286,20 +293,97 @@ function reedsMesh(u: TreeUniforms): Mesh {
   return mesh;
 }
 
+// ------------------------------------------------------------ mushrooms
+
+/** Clusters of mushrooms on the bank: angle, how far out, how many. They come up in autumn. */
+const PATCHES: [number, number, number][] = [
+  [2.5, 1.14, 5],
+  [-2.95, 1.16, 4],
+  [0.8, 1.14, 5],
+  [1.15, 1.12, 3],
+  [-0.2, 1.14, 4],
+  [2.05, 1.12, 3],
+];
+
+/** Each mushroom a stem and a domed cap; every vertex knows its root, to come up out of the ground. */
+function mushroomGeometry(): BufferGeometry {
+  const rng = mulberry32(2207);
+  const parts: BufferGeometry[] = [];
+  for (const [theta, f, count] of PATCHES) {
+    const at = shorePoint(theta, f);
+    for (let i = 0; i < count; i++) {
+      const a = rng() * Math.PI * 2;
+      const d = Math.sqrt(rng()) * 0.42;
+      const x = at.x + Math.cos(a) * d;
+      const z = at.z + Math.sin(a) * d;
+      const h = 0.1 + rng() * 0.14;
+      const r = h * (0.62 + rng() * 0.3);
+      const stem = new CylinderGeometry(r * 0.2, r * 0.27, h, 7);
+      stem.translate(0, h / 2, 0);
+      const cap = new SphereGeometry(r, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+      cap.scale(1, 0.72, 1);
+      cap.translate(0, h * 0.9, 0);
+      const pale = rng() < 0.3;
+      const capColour = pale ? [0.88, 0.8, 0.68] : [0.5 + rng() * 0.12, 0.28 + rng() * 0.08, 0.14];
+      const tilt = (rng() - 0.5) * 0.3;
+      for (const [g, colour] of [
+        [stem, [0.86, 0.8, 0.68]],
+        [cap, capColour],
+      ] as [BufferGeometry, number[]][]) {
+        g.rotateZ(tilt);
+        const flat = g.index ? g.toNonIndexed() : g;
+        const n = flat.getAttribute('position').count;
+        flat.deleteAttribute('uv');
+        flat.translate(x, at.y - 0.01, z);
+        const roots = new Float32Array(n * 3);
+        const colours = new Float32Array(n * 3);
+        for (let k = 0; k < n; k++) {
+          roots.set([x, at.y - 0.01, z], k * 3);
+          colours.set(colour, k * 3);
+        }
+        flat.setAttribute('aRoot', new BufferAttribute(roots, 3));
+        flat.setAttribute('aColour', new BufferAttribute(colours, 3));
+        parts.push(flat);
+      }
+    }
+  }
+  const merged = mergeGeometries(parts)!;
+  for (const p of parts) p.dispose();
+  return merged;
+}
+
+function mushroomsMesh(u: TreeUniforms): Mesh {
+  const material = new MeshStandardNodeMaterial();
+  const root = attribute<'vec3'>('aRoot', 'vec3');
+  // They come up with the autumn, and go under the snow.
+  const up = u.autumn.mul(u.snow.oneMinus());
+  material.positionNode = root.add(positionLocal.sub(root).mul(up));
+  material.colorNode = attribute<'vec3'>('aColour', 'vec3');
+  material.roughnessNode = float(0.7);
+  material.metalnessNode = float(0);
+  const mesh = new Mesh(mushroomGeometry(), material);
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 export interface PondShore {
   stones: Mesh;
   reeds: Mesh;
+  mushrooms: Mesh;
   dispose(): void;
 }
 
 export function createPondShore(u: TreeUniforms): PondShore {
   const stones = stonesMesh(u);
   const reeds = reedsMesh(u);
+  const mushrooms = mushroomsMesh(u);
   return {
     stones,
     reeds,
+    mushrooms,
     dispose() {
-      for (const m of [stones, reeds]) {
+      for (const m of [stones, reeds, mushrooms]) {
         m.geometry.dispose();
         (m.material as MeshStandardNodeMaterial).dispose();
       }

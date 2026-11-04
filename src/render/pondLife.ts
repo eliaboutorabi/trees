@@ -1,5 +1,5 @@
 /**
- * The pond's own creatures: a family of mallards, and a robin in winter.
+ * The pond's own creatures: a family of mallards, and a chickadee in winter.
  *
  * The ducks keep the year as the pond does. In spring a pair arrives and the
  * hen has ducklings, tiny, trailing her in a line; in summer the ducklings
@@ -130,27 +130,35 @@ function duckGeometry(kind: Plumage): BufferGeometry {
   return merged;
 }
 
-/** A robin: round, brown above with an orange breast, a thin tail and a dark bill. Feet at y = 0. */
+/** A chickadee: round, grey above and buff below, black cap and bib, white cheek, feet at y = 0. */
 function robinGeometry(): BufferGeometry {
-  const body = new SphereGeometry(0.055, 12, 9);
+  const body = new SphereGeometry(0.055, 14, 10);
   body.scale(1, 0.95, 1.15);
   body.translate(0, 0.07, 0);
-  const head = new SphereGeometry(0.036, 10, 8);
+  const head = new SphereGeometry(0.038, 14, 10);
   head.translate(0, 0.125, 0.04);
-  const tail = new ConeGeometry(0.022, 0.07, 5);
+  const tail = new ConeGeometry(0.022, 0.08, 5);
   tail.rotateX(-Math.PI / 2 - 0.4);
-  tail.translate(0, 0.07, -0.07);
-  const bill = new ConeGeometry(0.008, 0.025, 5);
+  tail.translate(0, 0.07, -0.075);
+  const bill = new ConeGeometry(0.008, 0.022, 5);
   bill.rotateX(Math.PI / 2);
-  bill.translate(0, 0.122, 0.082);
+  bill.translate(0, 0.122, 0.084);
   const legs = new CylinderGeometry(0.004, 0.004, 0.03, 4);
   const legL = legs.clone().translate(0.015, 0.015, 0);
   const legR = legs.clone().translate(-0.015, 0.015, 0);
   legs.dispose();
   const parts: Part[] = [
-    { geometry: body, colour: (p) => (p.z > 0.0 && p.y < 0.095 ? c(0.88, 0.42, 0.16) : c(0.4, 0.31, 0.22)) },
-    { geometry: head, colour: (p) => (p.z > 0.05 && p.y < 0.13 ? c(0.88, 0.42, 0.16) : c(0.4, 0.31, 0.22)) },
-    { geometry: tail, colour: () => c(0.33, 0.25, 0.18) },
+    { geometry: body, colour: (p) => (p.y < 0.075 || (p.z > 0.02 && p.y < 0.09) ? c(0.88, 0.76, 0.58) : c(0.34, 0.36, 0.39)) },
+    {
+      geometry: head,
+      colour: (p) => {
+        // A black cap and bib, with a white cheek between them.
+        if (p.y > 0.132) return c(0.03, 0.03, 0.035);
+        if (p.y < 0.112) return c(0.03, 0.03, 0.035);
+        return c(0.95, 0.94, 0.92);
+      },
+    },
+    { geometry: tail, colour: () => c(0.2, 0.21, 0.23) },
     { geometry: bill, colour: () => c(0.1, 0.08, 0.06) },
     { geometry: legL, colour: () => c(0.3, 0.22, 0.18) },
     { geometry: legR, colour: () => c(0.3, 0.22, 0.18) },
@@ -381,8 +389,8 @@ export class PondLife {
     }
     this.robin.position.copy(pos);
     this.robin.rotation.y = facing;
-    // A little larger than life, like the doves, so it reads from where the camera usually is.
-    this.robin.scale.setScalar(this.robinShown * 1.5);
+    // Larger than life, like the doves, so it reads from where the camera usually is.
+    this.robin.scale.setScalar(this.robinShown * 2.5);
   }
 
   dispose(): void {

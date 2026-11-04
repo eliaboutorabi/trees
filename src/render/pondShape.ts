@@ -21,13 +21,13 @@ export const POND = {
    * a little to its right and well behind it, so the pond spreads out across
    * the view on both sides of the trunk.
    */
-  x: -2.56,
-  z: -7.58,
+  x: -2.3,
+  z: -7.8,
   /** Its long axis runs across the first view: a bearing about +Y, radians. */
   angle: -0.6435,
   /** Half-length and half-width, before the edge wanders. */
-  rx: 4.7,
-  rz: 3.7,
+  rx: 5.2,
+  rz: 3.9,
   /** The water's surface, a hand's breadth below the meadow. */
   level: -0.06,
   /** How far the bed falls below that in the middle. */
