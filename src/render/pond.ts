@@ -146,7 +146,8 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
     const wave = ring.mul(ring).negate().exp().mul(t.oneMinus()).mul(ring.mul(3.1).sin());
     return off.div(d.max(0.001)).mul(wave);
   };
-  slope = slope.add(rings(3.1, 0.9, 0).add(rings(2.3, 0.7, 17.3)).mul(u.rainfall).mul(0.6).mul(open));
+  const drops = rings(3.1, 0.9, 0).add(rings(2.3, 0.7, 17.3));
+  slope = slope.add(drops.mul(u.rainfall).mul(0.6).mul(open));
 
   /*
    * Wakes. Every duck trails a V behind it — two arms opening at the angle
@@ -155,6 +156,9 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
    * its breast. All of it scales with how fast the bird is going, so a duck
    * that stops to dabble leaves the water to settle.
    */
+  // Crests also catch the light a little: a slope alone hardly shows on water
+  // that mostly shows its own colour.
+  let sheen: N = float(0);
   for (let i = 0; i < MAX_DUCKS; i++) {
     const w = wakes.element(i);
     const rel = p.xz.sub(w.xy);
@@ -167,6 +171,7 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
     const reach = behind.mul(-1.4).exp().mul(smoothstep(0, 0.06, behind));
     const crest = behind.mul(34).sub(time.mul(6)).sin().mul(arm.mul(arm).div(-0.0022).exp());
     slope = slope.add(vec2(dir.y.negate(), dir.x).mul(side.sign()).mul(crest).mul(reach).mul(sp).mul(1.6));
+    sheen = sheen.add(arm.mul(arm).div(-0.0035).exp().mul(reach).mul(sp.mul(9).clamp(0, 1)).mul(behind.mul(30).sub(time.mul(5)).sin().mul(0.3).add(0.7)));
     const r = rel.length();
     const bow = r.mul(46).sub(time.mul(5)).sin().mul(r.mul(-9).exp()).mul(sp).mul(0.9);
     slope = slope.add(rel.div(r.max(0.01)).mul(bow));
@@ -233,7 +238,8 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
   const onThings = mix(float(0.55), float(0.92), glance.mul(glance));
   const openMirror = mix(onSky, onThings, reflected.a);
   const iceMirror = frost.max(drifts).oneMinus().mul(0.88);
-  material.outputNode = vec4(mix(output.rgb, image, mix(openMirror, iceMirror, ice)), output.a);
+  const surfaceLight = sheen.mul(0.55).add(drops.length().mul(u.rainfall).mul(1.1)).mul(open).clamp(0, 0.7);
+  material.outputNode = vec4(mix(mix(output.rgb, image, mix(openMirror, iceMirror, ice)), skyLight.mul(1.15), surfaceLight), output.a);
 
   return material;
 }

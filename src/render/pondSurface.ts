@@ -25,7 +25,9 @@ import type { PondUniforms } from './pond';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
-const SURFACE = POND.level + 0.006;
+// A little proud of the water: any closer, and at this distance from the
+// camera the depth buffer cannot tell them apart and the water draws over them.
+const SURFACE = POND.level + 0.03;
 
 /** Rafts of pads: angle round the pond, how far out, how many. */
 const RAFTS: [number, number, number][] = [
@@ -157,7 +159,7 @@ function lilyMaterial(u: TreeUniforms, pond: PondUniforms): MeshStandardNodeMate
 
   // Pads: deep green with a paler rim, browning in autumn. Flowers: pink
   // petals going white at the tips, round a golden heart.
-  const pad = mix(vec3(0.07, 0.16, 0.05), vec3(0.2, 0.33, 0.09), out);
+  const pad = mix(vec3(0.1, 0.27, 0.06), vec3(0.3, 0.5, 0.11), out);
   const padColour = mix(pad, mix(vec3(0.3, 0.2, 0.07), vec3(0.45, 0.33, 0.12), out), u.autumn.mul(0.85));
   const petal = mix(vec3(0.95, 0.5, 0.68), vec3(1.0, 0.82, 0.88), out.mul(out));
   const heart = vec3(0.98, 0.76, 0.2);
@@ -241,7 +243,7 @@ function leafMaterial(u: TreeUniforms, pond: PondUniforms): MeshStandardNodeMate
   // Down in autumn, one after another; and buried as the snow comes.
   const present = u.autumn.sub(order.mul(0.7)).mul(3.3).clamp(0, 1).mul(u.snow.mul(0.85).oneMinus());
   const t = pond.flow.mul(0.05).mul(drift.y).add(anchor.z);
-  const centre = vec3(anchor.x.add(cos(t).mul(drift.x)), POND.level + 0.004, anchor.y.add(sin(t.mul(0.8)).mul(drift.x)));
+  const centre = vec3(anchor.x.add(cos(t).mul(drift.x)), POND.level + 0.025, anchor.y.add(sin(t.mul(0.8)).mul(drift.x)));
   const spin = pond.flow.mul(drift.z).add(anchor.z);
   const local = positionLocal.mul(present) as N;
   const turned = vec3(local.x.mul(cos(spin)).sub(local.z.mul(sin(spin))), 0, local.x.mul(sin(spin)).add(local.z.mul(cos(spin))));

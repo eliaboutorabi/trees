@@ -79,11 +79,11 @@ function duckGeometry(kind: Plumage): BufferGeometry {
   const P: Record<Plumage, { body: (p: Vector3) => Color; head: Color; bill: Color; tail: Color; neck: (p: Vector3) => Color }> = {
     hen: {
       // Mottled brown, a little darker on the back.
-      body: (p) => c(0.42, 0.3, 0.18).multiplyScalar(0.85 + Math.sin(p.x * 61 + p.z * 47) * 0.08 + (p.y > 0.08 ? -0.08 : 0.04)),
-      head: c(0.36, 0.26, 0.15),
+      body: (p) => c(0.2, 0.135, 0.075).multiplyScalar(0.85 + Math.sin(p.x * 61 + p.z * 47) * 0.14 + (p.y > 0.08 ? -0.1 : 0.06)),
+      head: c(0.19, 0.13, 0.075),
       bill: c(0.86, 0.5, 0.16),
-      tail: c(0.3, 0.21, 0.12),
-      neck: () => c(0.38, 0.27, 0.16),
+      tail: c(0.13, 0.09, 0.05),
+      neck: () => c(0.2, 0.14, 0.08),
     },
     drake: {
       // Grey flanks, a chestnut breast, a white collar under a green head.
