@@ -29,10 +29,11 @@ const SURFACE = POND.level + 0.006;
 
 /** Rafts of pads: angle round the pond, how far out, how many. */
 const RAFTS: [number, number, number][] = [
-  [0.25, 0.58, 7],
-  [-1.45, 0.55, 6],
-  [2.35, 0.5, 5],
-  [-0.6, 0.35, 3],
+  [0.75, 0.76, 9],
+  [-2.7, 0.76, 8],
+  [-0.85, 0.72, 7],
+  [0.08, 0.8, 5],
+  [2.2, 0.72, 3],
 ];
 
 /**
@@ -64,9 +65,9 @@ function lilyGeometry(): BufferGeometry {
     const raft = shorePoint(theta, f);
     for (let i = 0; i < count; i++) {
       const a = rng() * Math.PI * 2;
-      const d = Math.sqrt(rng()) * 0.55;
+      const d = Math.sqrt(rng()) * 0.85;
       const c: [number, number, number] = [raft.x + Math.cos(a) * d, raft.z + Math.sin(a) * d, rng() * 6.28];
-      const radius = 0.15 + rng() * 0.14;
+      const radius = 0.2 + rng() * 0.18;
       const notch = rng() * Math.PI * 2;
       const k = (order + rng() * 0.5) / total;
       const flowerRank = rng();
@@ -86,7 +87,7 @@ function lilyGeometry(): BufferGeometry {
 
       // One pad in three carries a flower: two rings of pointed petals,
       // the inner ones more upright, round a small golden heart.
-      if (rng() < 0.38) {
+      if (rng() < 0.5) {
         const fx = Math.cos(notch + Math.PI) * radius * 0.25;
         const fz = Math.sin(notch + Math.PI) * radius * 0.25;
         const petal = (ang: number, len: number, lift: number, wid: number) => {
@@ -102,13 +103,15 @@ function lilyGeometry(): BufferGeometry {
           index.push(p0, p0 + 1, p0 + 2, p0, p0 + 2, p0 + 3);
         };
         const spin = rng() * 6.28;
-        for (let pIdx = 0; pIdx < 8; pIdx++) petal(spin + (pIdx / 8) * Math.PI * 2, 0.085, 0.42, 0.024);
-        for (let pIdx = 0; pIdx < 7; pIdx++) petal(spin + 0.4 + (pIdx / 7) * Math.PI * 2, 0.065, 0.95, 0.019);
+        // Big and showy: the flower is what the eye goes to, from across the garden.
+        for (let pIdx = 0; pIdx < 10; pIdx++) petal(spin + (pIdx / 10) * Math.PI * 2, 0.2, 0.3, 0.05);
+        for (let pIdx = 0; pIdx < 9; pIdx++) petal(spin + 0.35 + (pIdx / 9) * Math.PI * 2, 0.165, 0.72, 0.043);
+        for (let pIdx = 0; pIdx < 7; pIdx++) petal(spin + 0.8 + (pIdx / 7) * Math.PI * 2, 0.11, 1.15, 0.032);
         const h0 = position.length / 3;
-        vertex(fx, 0.03, fz, c, k, flowerRank, 2, 0);
+        vertex(fx, 0.075, fz, c, k, flowerRank, 2, 0);
         for (let s = 0; s < 6; s++) {
           const ang = (s / 6) * Math.PI * 2;
-          vertex(fx + Math.cos(ang) * 0.018, 0.02, fz + Math.sin(ang) * 0.018, c, k, flowerRank, 2, 1);
+          vertex(fx + Math.cos(ang) * 0.042, 0.05, fz + Math.sin(ang) * 0.042, c, k, flowerRank, 2, 1);
         }
         for (let s = 0; s < 6; s++) index.push(h0, h0 + 1 + ((s + 1) % 6), h0 + 1 + s);
       }
@@ -156,7 +159,7 @@ function lilyMaterial(u: TreeUniforms, pond: PondUniforms): MeshStandardNodeMate
   // petals going white at the tips, round a golden heart.
   const pad = mix(vec3(0.07, 0.16, 0.05), vec3(0.2, 0.33, 0.09), out);
   const padColour = mix(pad, mix(vec3(0.3, 0.2, 0.07), vec3(0.45, 0.33, 0.12), out), u.autumn.mul(0.85));
-  const petal = mix(vec3(0.9, 0.42, 0.6), vec3(0.98, 0.9, 0.92), out.mul(out));
+  const petal = mix(vec3(0.95, 0.5, 0.68), vec3(1.0, 0.82, 0.88), out.mul(out));
   const heart = vec3(0.98, 0.76, 0.2);
   const flower = mix(petal, heart, smoothstep(1.5, 2, kind));
   material.colorNode = mix(padColour, flower, isFlower);

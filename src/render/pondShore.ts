@@ -22,16 +22,25 @@ import { POND, shorePoint } from './pondShape';
 
 /** Where the stones sit round the pond — angle, how far out, size — placed by eye. */
 const STONES: [number, number, number][] = [
-  [-1.92, 1.04, 0.78],
-  [-1.62, 1.08, 0.46],
-  [-2.55, 1.06, 0.56],
-  [0.12, 1.03, 0.62],
-  [-0.38, 1.1, 0.34],
-  [1.18, 1.05, 0.42],
-  [1.46, 1.12, 0.26],
-  [2.78, 1.07, 0.4],
-  [-2.95, 1.13, 0.28],
-  [0.48, 1.15, 0.22],
+  // Big ones at the far right, where the eye rests.
+  [-0.98, 1.03, 0.66],
+  [-0.46, 1.05, 0.74],
+  [0.36, 1.08, 0.64],
+  [-1.9, 1.08, 0.58],
+  // The left end, either side of the trunk.
+  [2.92, 1.05, 0.44],
+  [-2.86, 1.08, 0.36],
+  [2.32, 1.05, 0.52],
+  // A chain of small ones along the near shore.
+  [1.12, 1.03, 0.3],
+  [1.24, 1.06, 0.2],
+  [1.36, 1.02, 0.26],
+  [1.47, 1.07, 0.32],
+  [1.58, 1.03, 0.18],
+  [1.68, 1.05, 0.28],
+  [1.8, 1.02, 0.22],
+  [1.93, 1.06, 0.3],
+  [2.05, 1.03, 0.19],
 ];
 
 /** A boulder: an icosphere pushed in and out by a few lumps, flattened, and set into the bank. */
@@ -136,12 +145,16 @@ function stonesMesh(u: TreeUniforms): Mesh {
 
 /** Clumps of reeds: angle round the pond, how far out, how many blades, how many cattails among them. */
 const CLUMPS: [number, number, number, number][] = [
-  [-1.25, 0.98, 16, 3],
-  [-1.05, 1.06, 9, 1],
-  [0.55, 1.0, 12, 2],
-  [-2.3, 1.02, 11, 2],
-  [0.92, 1.04, 7, 0],
-  [2.45, 1.03, 8, 1],
+  [-1.14, 1.0, 26, 3],
+  [-0.72, 1.03, 14, 1],
+  [0.16, 1.04, 22, 3],
+  [0.58, 1.0, 26, 2],
+  [0.92, 1.03, 16, 1],
+  [2.56, 1.02, 22, 2],
+  [3.02, 1.0, 18, 2],
+  [-2.66, 1.03, 14, 1],
+  [-2.12, 1.05, 12, 1],
+  [-1.58, 1.04, 16, 2],
 ];
 
 /**
@@ -172,7 +185,7 @@ function reedGeometry(): BufferGeometry {
     for (let b = 0; b < blades + cattails; b++) {
       const isCattail = b >= blades;
       const a = rng() * Math.PI * 2;
-      const d = Math.sqrt(rng()) * 0.38;
+      const d = Math.sqrt(rng()) * 0.62;
       const base = new Vector3(r.x + Math.cos(a) * d, centre.y - 0.03, r.z + Math.sin(a) * d);
       const height = isCattail ? 1.05 + rng() * 0.35 : 0.65 + rng() * 0.7;
       const width = isCattail ? 0.014 : 0.028 + rng() * 0.02;

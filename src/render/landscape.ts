@@ -589,8 +589,8 @@ export function createLandscape(
       seedOffset: 29,
       yaw: 0.7,
       tint: { base: 0x5c6b2b, vary: 0.4 },
-      // Down the bank to just above the water, where turf gives way to mud.
-      keepOut: 1.14,
+      // Right down the bank to the water's edge.
+      keepOut: 1.05,
     });
   group.add(grass);
   undergrowth.push(grass);
@@ -609,7 +609,7 @@ export function createLandscape(
       seedOffset: 71,
       yaw: 1.2,
       tint: { base: 0x4e5f26, vary: 0.5 },
-      keepOut: 1.32,
+      keepOut: 1.2,
     });
   group.add(tussocks);
   undergrowth.push(tussocks);

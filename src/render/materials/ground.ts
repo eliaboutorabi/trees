@@ -255,15 +255,18 @@ export function createGroundMaterial() {
   const soak = uniforms.wetness.mul(snowMask.oneMinus());
   const darken = soak.mul(mix(float(0.28), float(0.5), kDirt.div(kGrass.add(kDirt).max(0.0001))));
 
-  // The pond: turf gives way to mud down its bank, ragged at the top where
-  // the grass holds on in tufts, and the mud is wet — dark and glossy — from
-  // a little above the water's edge on down to the bed. Snow lies on the
+  // The pond: the turf runs right down to the water, where a narrow margin of
+  // wet mud — dark and glossy — goes on down to the bed. Snow lies on the
   // upper bank as on any other ground.
   const field = pondFieldNode(p.xz);
-  const mudLine = smoothstep(1.22, 1.05, field.add(patch.sub(0.5).mul(0.3)).add(detail.sub(0.5).mul(0.08)));
-  const wetBank = smoothstep(1.12, 1.0, field);
-  const mud = mix(vec3(0.15, 0.125, 0.09), vec3(0.06, 0.05, 0.038), wetBank);
-  const ground = mix(surface, mud, mudLine.mul(snowMask.mul(smoothstep(1.0, 1.12, field)).oneMinus()));
+  const mudLine = smoothstep(1.1, 1.0, field.add(patch.sub(0.5).mul(0.1)));
+  const wetBank = smoothstep(1.08, 1.0, field);
+  const mud = mix(vec3(0.13, 0.11, 0.07), vec3(0.06, 0.05, 0.038), wetBank);
+  // Above the water the bank is the lushest ground in the garden: a bright rim
+  // of whatever the season's grass is, which is what sets the pond off.
+  const rim = smoothstep(1.5, 1.14, field.add(patch.sub(0.5).mul(0.2))).mul(snowMask.oneMinus());
+  const lushBank = mix(surface, uniforms.grassMid.mul(1.55), rim.mul(0.8));
+  const ground = mix(lushBank, mud, mudLine.mul(snowMask.mul(smoothstep(1.0, 1.08, field)).oneMinus()));
 
   material.colorNode = ground
     .mul(mix(shade, float(1), snowMask))
