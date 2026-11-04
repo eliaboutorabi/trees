@@ -28,7 +28,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { PlanarReflection } from './reflection';
-import { skyNode, type SkyUniforms } from './sky';
+import type { SkyUniforms } from './sky';
 import { createPondShore } from './pondShore';
 import { createPondSurface } from './pondSurface';
 import { MAX_DUCKS, PondLife, type DuckSeason } from './pondLife';
@@ -231,7 +231,15 @@ function waterMaterial(u: TreeUniforms, mirror: Texture, pond: PondUniforms, wak
   const cosine = normal.dot(view).clamp(0, 1);
   const glance = cosine.oneMinus();
   const ray = view.negate().add(normal.mul(cosine.mul(2)));
-  const skyLight = skyNode(sky, vec3(ray.x, ray.y.abs(), ray.z) as never) as N;
+  // The sky along that ray: its gradient, the sun's glow, the cloud's grey and
+  // the night, from the sky's own colours. Not the sky's whole shader, whose
+  // fractal noise made this one take a minute to compile on a first visit, for
+  // detail no ripple would ever show.
+  const rise = ray.y.abs().clamp(0, 1).pow(float(0.42).add(sky.haze.mul(0.3)));
+  const toSun = ray.dot(sky.sunDir).clamp(0, 1);
+  const clearSky = mix(sky.horizon, sky.zenith, rise).add(sky.sunTint.mul(toSun.pow(16).mul(0.5).add(toSun.pow(4).mul(0.11))));
+  const closedSky = mix(clearSky, mix(sky.cloudLow, sky.cloudHigh, rise), sky.overcast);
+  const skyLight = mix(closedSky, vec3(0.018, 0.028, 0.06), sky.night).mul(sky.intensity) as N;
   // Frozen, the image of what stands over it is only a faint darkening.
   const image = mix(skyLight, reflected.rgb, reflected.a.mul(mix(float(1), float(0.22), ice)));
   const onSky = mix(float(0.05), float(0.45), glance.mul(glance).mul(glance).mul(glance));
