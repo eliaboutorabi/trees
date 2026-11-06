@@ -840,7 +840,10 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan, s
     // leaves the trunk, but well inside its parent: start it at the parent's
     // own thickness and it sheathes the parent above the fork, a cone of the
     // wrong bark wrapped round the right one.
-    emitStrand(ring, p >= 0 ? Math.min(radius[i] * 1.2, radius[p] * 0.85) : radius[i], ++strandIndex, p < 0);
+    // Well inside, too, or a limb leaving at a shallow angle runs nearly
+    // flush with its parent's surface for a stretch and the two fight over
+    // the same pixels in streaks.
+    emitStrand(ring, p >= 0 ? Math.min(radius[i] * 1.15, radius[p] * 0.72) : radius[i], ++strandIndex, p < 0);
   }
 
   return { buf };
