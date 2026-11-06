@@ -14,7 +14,7 @@
 import { BufferAttribute, BufferGeometry, Quaternion, Vector3 } from 'three';
 import type { LeafPlacement, Skeleton } from './lsystem/turtle';
 import { CanopyOcclusion } from './occlusion';
-import { emitRoots, flareScale, planRoots, type RootPlan } from './roots';
+import { emitBase, planRoots, type RootPlan, type TrunkSampler } from './roots';
 
 export interface TreeGeometryOptions {
   /** 0 broad · 1 needle · 2 blossom · 3 lance. */
@@ -138,9 +138,83 @@ function toGeometry(b: Buffers): BufferGeometry {
 function radialSegmentsFor(ratio: number): number {
   if (ratio < 0.03) return 3;
   if (ratio < 0.08) return 4;
-  if (ratio < 0.18) return 6;
-  if (ratio < 0.4) return 11;
-  return 20;
+  if (ratio < 0.15) return 6;
+  if (ratio < 0.25) return 10;
+  if (ratio < 0.45) return 16;
+  return 24;
+}
+
+/**
+ * Around the trunk. Far more than its silhouette needs, because the base sweeps
+ * one column per trunk segment out across the roots, and a root a metre out
+ * subtends only a few degrees.
+ */
+const TRUNK_SEGMENTS = 128;
+
+/**
+ * Resample a strand through its nodes as a smooth curve.
+ *
+ * The turtle steps in straight lines and turns at each node, so a tube built
+ * on its nodes alone is a chain of straight pipes with a crease at every
+ * joint — on a twig too short to see, on a trunk the first thing anyone sees.
+ * So thick strands are drawn through their nodes as a centripetal Catmull-Rom
+ * spline, subdivided until a piece is not much longer than the strand is
+ * thick. The nodes themselves stay on the curve, so forks and leaves stay
+ * attached exactly where the turtle put them.
+ */
+function resampleStrand(
+  centers: number[],
+  radii: number[],
+  arcs: number[],
+  minPiece: number,
+  out: { centers: number[]; radii: number[]; arcs: number[] },
+): void {
+  const n = radii.length;
+  out.centers.length = 0;
+  out.radii.length = 0;
+  out.arcs.length = 0;
+  const at = (i: number, c: number) => centers[Math.min(n - 1, Math.max(0, i)) * 3 + c];
+  for (let i = 0; i < n - 1; i++) {
+    const len = Math.hypot(at(i + 1, 0) - at(i, 0), at(i + 1, 1) - at(i, 1), at(i + 1, 2) - at(i, 2));
+    const r = Math.max(1e-5, (radii[i] + radii[i + 1]) * 0.5);
+    const pieces = Math.min(6, Math.max(1, Math.ceil(len / Math.max(minPiece, r * 1.4))));
+    // Centripetal knots: the parameterisation that cannot overshoot into a
+    // loop at a sharp turn.
+    const knot = (a: number, b: number) =>
+      Math.max(1e-6, Math.pow(Math.hypot(at(b, 0) - at(a, 0), at(b, 1) - at(a, 1), at(b, 2) - at(a, 2)), 0.5));
+    const t0 = 0;
+    const t1 = t0 + (i > 0 ? knot(i - 1, i) : knot(i, i + 1));
+    const t2 = t1 + knot(i, i + 1);
+    const t3 = t2 + (i + 2 < n ? knot(i + 1, i + 2) : knot(i, i + 1));
+    for (let s = 0; s < pieces; s++) {
+      const f = s / pieces;
+      if (s === 0) {
+        out.centers.push(at(i, 0), at(i, 1), at(i, 2));
+      } else {
+        const t = t1 + (t2 - t1) * f;
+        for (let c = 0; c < 3; c++) {
+          // Ends with no neighbour are reflected, so the curve leaves them straight.
+          const p0 = i > 0 ? at(i - 1, c) : 2 * at(i, c) - at(i + 1, c);
+          const p1 = at(i, c);
+          const p2 = at(i + 1, c);
+          const p3 = i + 2 < n ? at(i + 2, c) : 2 * at(i + 1, c) - at(i, c);
+          const a1 = ((t1 - t) * p0 + (t - t0) * p1) / (t1 - t0);
+          const a2 = ((t2 - t) * p1 + (t - t1) * p2) / (t2 - t1);
+          const a3 = ((t3 - t) * p2 + (t - t2) * p3) / (t3 - t2);
+          const b1 = ((t2 - t) * a1 + (t - t0) * a2) / (t2 - t0);
+          const b2 = ((t3 - t) * a2 + (t - t1) * a3) / (t3 - t1);
+          out.centers.push(((t2 - t) * b1 + (t - t1) * b2) / (t2 - t1));
+        }
+      }
+      // Radius eases between nodes rather than stepping, never past either.
+      const e = f * f * (3 - 2 * f);
+      out.radii.push(radii[i] + (radii[i + 1] - radii[i]) * e);
+      out.arcs.push(arcs[i] + (arcs[i + 1] - arcs[i]) * f);
+    }
+  }
+  out.centers.push(at(n - 1, 0), at(n - 1, 1), at(n - 1, 2));
+  out.radii.push(radii[n - 1]);
+  out.arcs.push(arcs[n - 1]);
 }
 
 /**
@@ -468,40 +542,55 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
   const maxArc = Math.max(1e-5, skel.maxArc);
   const heightRef = Math.max(0.5, skel.height);
 
-  const centers: number[] = [];
-  const radii: number[] = [];
-  const arcs: number[] = [];
+  const raw = { centers: [] as number[], radii: [] as number[], arcs: [] as number[] };
+  const smooth = { centers: [] as number[], radii: [] as number[], arcs: [] as number[] };
 
   const emitStrand = (ring: number[], firstRadiusCap: number, strandSeed: number, isTrunk = false) => {
     if (ring.length < 2) return;
 
-    centers.length = 0;
-    radii.length = 0;
-    arcs.length = 0;
+    raw.centers.length = 0;
+    raw.radii.length = 0;
+    raw.arcs.length = 0;
     let maxR = 0;
     for (let i = 0; i < ring.length; i++) {
       const node = ring[i];
-      centers.push(pos[node * 3], pos[node * 3 + 1], pos[node * 3 + 2]);
+      raw.centers.push(pos[node * 3], pos[node * 3 + 1], pos[node * 3 + 2]);
       const r = i === 0 ? Math.min(radius[node], firstRadiusCap) : radius[node];
-      radii.push(r);
-      arcs.push(arc[node]);
+      raw.radii.push(r);
+      raw.arcs.push(arc[node]);
       if (r > maxR) maxR = r;
     }
 
+    // Anything thick enough to show its joints is drawn as a curve.
+    const curved = maxR / rootRadius >= 0.12;
+    let centers = raw.centers;
+    let radii = raw.radii;
+    let arcs = raw.arcs;
+    if (curved) {
+      resampleStrand(raw.centers, raw.radii, raw.arcs, rootRadius * 0.5, smooth);
+      centers = smooth.centers;
+      radii = smooth.radii;
+      arcs = smooth.arcs;
+    }
+
+    // The trunk's foot is the base's job. Find where it hands over, and start
+    // the tube there; below that the base wraps a trunk sampled from the
+    // same curve.
+    let first = 0;
+    let sampler: TrunkSampler | null = null;
     if (isTrunk) {
-      // Carry the trunk below the soil line. Its lowest ring is an open end,
-      // and left at ground level any dip in the terrain — or a camera dropped
-      // to grazing — looks straight up inside the tree.
-      centers.unshift(centers[0], centers[1] - plan.bury, centers[2]);
-      radii.unshift(radii[0]);
-      arcs.unshift(arcs[0]);
+      sampler = trunkSampler(centers, radii, arcs, strandSeed);
+      if (sampler) {
+        first = insertJunction(centers, radii, arcs, plan.top);
+        if (first < 0) {
+          sampler = null;
+          first = 0;
+        }
+      }
     }
 
     const n = radii.length;
-    // The flare more than doubles the trunk's width at the soil line, and the
-    // lobes are the whole point — at the trunk's usual segment count they would
-    // read as facets rather than as swellings.
-    const segs = isTrunk ? 28 : radialSegmentsFor(maxR / rootRadius);
+    const segs = isTrunk ? TRUNK_SEGMENTS : radialSegmentsFor(maxR / rootRadius);
     const ringVerts = segs + 1;
     const base = buf.position.length / 3;
 
@@ -513,12 +602,15 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
     const dir = new Vector3();
     const vNormal = new Vector3();
 
-    tangentAt(centers, 0, n, tangent);
+    tangentAt(centers, first, n, tangent);
     perpendicular(tangent, normalA);
     normalB.crossVectors(tangent, normalA).normalize();
 
-    for (let i = 0; i < n; i++) {
-      if (i > 0) {
+    const ringPositions: number[] = [];
+    const ringNormals: number[] = [];
+
+    for (let i = first; i < n; i++) {
+      if (i > first) {
         tangentAt(centers, i, n, nextT);
         // Rotate the frame minimally onto the new tangent.
         normalA.addScaledVector(nextT, -normalA.dot(nextT));
@@ -535,27 +627,19 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
       const a = arcs[i];
 
       // Where this ring grows out of — the previous ring's centre.
-      const oi = Math.max(0, i - 1);
+      const oi = Math.max(first, i - 1);
       const ox = centers[oi * 3];
       const oy = centers[oi * 3 + 1];
       const oz = centers[oi * 3 + 2];
 
       const birth = Math.min(1, a / maxArc);
       const occlusion = field.sample(cx, cy, cz);
-
-      // Wind weight is dominated by height, not by arc length. Height is a
-      // smooth function of space, so anything sitting near anything else bends
-      // by nearly the same angle and the two never scissor through each other.
-      // Arc length is not: a twig tip and the limb it hangs off can share a
-      // location while being metres apart along the branch.
-      const thin = 1 - Math.min(1, r / rootRadius);
-      const heightNorm = Math.max(0, Math.min(1, cy / heightRef));
-      const flex = Math.pow(heightNorm, 1.3) * (0.62 + 0.38 * Math.pow(thin, 1.5));
+      const flex = flexFor(r, cy);
 
       // Taper slope, so normals lean along the cone rather than straight out.
-      const rPrev = radii[Math.max(0, i - 1)];
+      const rPrev = radii[Math.max(first, i - 1)];
       const rNext = radii[Math.min(n - 1, i + 1)];
-      const dsA = Math.max(1e-4, Math.abs(arcs[Math.min(n - 1, i + 1)] - arcs[Math.max(0, i - 1)]));
+      const dsA = Math.max(1e-4, Math.abs(arcs[Math.min(n - 1, i + 1)] - arcs[Math.max(first, i - 1)]));
       const slope = (rNext - rPrev) / dsA;
 
       for (let k = 0; k <= segs; k++) {
@@ -569,13 +653,14 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
         );
 
         // Nibble the silhouette so branches are not perfect cylinders.
-        let rr = r * (1 + SILHOUETTE_WOBBLE * 0.13 * silhouetteWobble(strandSeed * 0.137, a, t));
-        // ...and swell the foot of the trunk into a buttress.
-        if (isTrunk) rr *= flareScale(plan, cy, dir.x, dir.z);
+        const rr = r * (1 + SILHOUETTE_WOBBLE * 0.13 * silhouetteWobble(strandSeed * 0.137, a, t));
 
         vNormal.copy(dir).addScaledVector(tangent, -slope).normalize();
 
-        buf.position.push(cx + dir.x * rr, cy + dir.y * rr, cz + dir.z * rr);
+        const px = cx + dir.x * rr;
+        const py = cy + dir.y * rr;
+        const pz = cz + dir.z * rr;
+        buf.position.push(px, py, pz);
         buf.normal.push(vNormal.x, vNormal.y, vNormal.z);
         buf.uv.push(k / segs, a);
         buf.origin.push(ox, oy, oz);
@@ -584,10 +669,27 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
         buf.flex.push(flex);
         buf.seed.push(strandSeed);
         buf.occlusion.push(occlusion);
+        if (i === first && sampler) {
+          ringPositions.push(px, py, pz);
+          ringNormals.push(vNormal.x, vNormal.y, vNormal.z);
+        }
+      }
+
+      if (i === first && sampler) {
+        sampler.ring = {
+          y: cy,
+          center: new Vector3(cx, cy, cz),
+          a: normalA.clone(),
+          b: normalB.clone(),
+          positions: ringPositions,
+          normals: ringNormals,
+          arc: a,
+        };
       }
     }
 
-    for (let i = 0; i < n - 1; i++) {
+    const rings = n - first;
+    for (let i = 0; i < rings - 1; i++) {
       const a0 = base + i * ringVerts;
       const b0 = base + (i + 1) * ringVerts;
       for (let k = 0; k < segs; k++) {
@@ -598,7 +700,76 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
         buf.index.push(a0 + k, a0 + k + 1, b0 + k + 1, a0 + k, b0 + k + 1, b0 + k);
       }
     }
+
+    if (sampler) emitBase(buf, plan, sampler, field);
   };
+
+  // Wind weight is dominated by height, not by arc length. Height is a smooth
+  // function of space, so anything sitting near anything else bends by nearly
+  // the same angle and the two never scissor through each other. Arc length is
+  // not: a twig tip and the limb it hangs off can share a location while being
+  // metres apart along the branch.
+  function flexFor(r: number, y: number): number {
+    const thin = 1 - Math.min(1, r / rootRadius);
+    const heightNorm = Math.max(0, Math.min(1, y / heightRef));
+    return Math.pow(heightNorm, 1.3) * (0.62 + 0.38 * Math.pow(thin, 1.5));
+  }
+
+  /**
+   * The trunk below the hand-over, as the base sees it. Null if this trunk
+   * does not stand up out of the ground — a grammar is free to start sideways,
+   * and a base swept round a horizontal stem would be nonsense.
+   */
+  function trunkSampler(centers: number[], radii: number[], arcs: number[], strandSeed: number): TrunkSampler | null {
+    const n = radii.length;
+    if (n < 2) return null;
+    const rise = centers[(n - 1) * 3 + 1] - centers[1];
+    const run = Math.hypot(centers[(n - 1) * 3] - centers[0], centers[(n - 1) * 3 + 2] - centers[2]);
+    if (rise < plan.top * 1.25 || run > rise * 0.7) return null;
+    // Index of the last sample at or below `y`.
+    const below = (y: number) => {
+      let i = 0;
+      while (i < n - 2 && centers[(i + 1) * 3 + 1] <= y) i++;
+      return i;
+    };
+    const frac = (i: number, y: number) => {
+      const y0 = centers[i * 3 + 1];
+      const y1 = centers[(i + 1) * 3 + 1];
+      return y1 > y0 ? Math.min(1, Math.max(0, (y - y0) / (y1 - y0))) : 0;
+    };
+    const y0 = centers[1];
+    return {
+      segs: TRUNK_SEGMENTS,
+      ring: null as unknown as TrunkSampler['ring'],
+      centerAt(y, out) {
+        if (y <= y0) return out.set(centers[0], y, centers[2]);
+        const i = below(y);
+        const f = frac(i, y);
+        return out.set(
+          centers[i * 3] + (centers[(i + 1) * 3] - centers[i * 3]) * f,
+          y,
+          centers[i * 3 + 2] + (centers[(i + 1) * 3 + 2] - centers[i * 3 + 2]) * f,
+        );
+      },
+      radiusAt(y, t) {
+        const i = below(y);
+        const f = frac(i, y);
+        const r = radii[i] + (radii[i + 1] - radii[i]) * f;
+        return r * (1 + SILHOUETTE_WOBBLE * 0.13 * silhouetteWobble(strandSeed * 0.137, this.arcAt(y), t));
+      },
+      arcAt(y) {
+        if (y <= y0) return arcs[0] + (y - y0);
+        const i = below(y);
+        return arcs[i] + (arcs[i + 1] - arcs[i]) * frac(i, y);
+      },
+      flexAt(y) {
+        const i = below(y);
+        return flexFor(radii[i] + (radii[i + 1] - radii[i]) * frac(i, y), y);
+      },
+      seed: strandSeed,
+      maxArc,
+    };
+  }
 
   // Walk every strand: start at a root or a fork, follow the thickest child.
   const ring: number[] = [];
@@ -615,13 +786,12 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
       ring.push(node);
       node = continuation[node];
     }
-    // A fork should not start at full parent thickness or it looks swollen.
-    emitStrand(ring, radius[i] * 1.7, ++strandIndex, p < 0);
+    // A fork starts a little fatter than it goes on, as a limb does where it
+    // leaves the trunk, but well inside its parent: start it at the parent's
+    // own thickness and it sheathes the parent above the fork, a cone of the
+    // wrong bark wrapped round the right one.
+    emitStrand(ring, p >= 0 ? Math.min(radius[i] * 1.2, radius[p] * 0.85) : radius[i], ++strandIndex, p < 0);
   }
-
-  // Roots ride in the same buffer as the wood, so the whole tree stays one
-  // draw call and picks up the bark material for free.
-  emitRoots(buf, plan, field, 0.41);
 
   return { buf };
 }
@@ -642,6 +812,29 @@ function perpendicular(v: Vector3, out: Vector3): void {
   if (Math.abs(v.y) < 0.9) out.set(0, 1, 0);
   else out.set(1, 0, 0);
   out.crossVectors(v, out).normalize();
+}
+
+/**
+ * Put a sample exactly at height `y` on a rising strand and return its index,
+ * or -1 if the strand never reaches it. The tube starts there and the base
+ * repeats that ring as its first row, so the two meet without a gap.
+ */
+function insertJunction(centers: number[], radii: number[], arcs: number[], y: number): number {
+  const n = radii.length;
+  for (let i = 0; i < n - 1; i++) {
+    const ya = centers[i * 3 + 1];
+    const yb = centers[(i + 1) * 3 + 1];
+    if (ya <= y && yb > y) {
+      const f = (y - ya) / (yb - ya);
+      if (f < 0.02) return i;
+      if (f > 0.98) return i + 1;
+      centers.splice((i + 1) * 3, 0, ...[0, 1, 2].map((c) => centers[i * 3 + c] + (centers[(i + 1) * 3 + c] - centers[i * 3 + c]) * f));
+      radii.splice(i + 1, 0, radii[i] + (radii[i + 1] - radii[i]) * f);
+      arcs.splice(i + 1, 0, arcs[i] + (arcs[i + 1] - arcs[i]) * f);
+      return i + 1;
+    }
+  }
+  return -1;
 }
 
 // ----------------------------------------------------------------- foliage

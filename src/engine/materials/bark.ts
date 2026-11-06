@@ -64,7 +64,11 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
     .mul(twigness.oneMinus())
     .clamp(0, 1);
 
-  const withMoss = mix(withTwig, u.barkMoss, mossMask);
+  // Where wood meets soil it is soil-coloured: earth dries on it and moss
+  // takes the damp. It is what makes a root look half buried rather than
+  // laid on the grass.
+  const soilLine = smoothstep(0.09, 0.0, positionGeometry.y).mul(twigness.oneMinus());
+  const withMoss = mix(mix(withTwig, u.barkMoss, mossMask), mix(u.barkMoss, u.barkDark, 0.55), soilLine.mul(0.85));
   const withLenticels = mix(withMoss, u.barkDark, lenticel);
 
   // Cavity occlusion. This, not the normal map, is what makes bark read as
@@ -78,7 +82,11 @@ export function createBarkMaterial(u: TreeUniforms): MeshStandardNodeMaterial {
   // Multiplying it into the albedo as well double-counts it and takes the whole
   // trunk to near-black.
   const cavity = height.pow(0.75).mul(0.68).add(0.32);
-  material.aoNode = cavity;
+  // And the ground takes half the sky from whatever is close to it, so the
+  // foot of the trunk and the roots sink into shade where they meet the soil
+  // instead of sitting on it lit like everything else.
+  const nearGround = smoothstep(-0.02, 0.45, positionGeometry.y).mul(0.55).add(0.45);
+  material.aoNode = cavity.mul(nearGround);
 
   // Branches buried inside the canopy sit in ambient shade.
   const canopyShade = occlusion.mul(u.occlusionStrength).mul(u.leafCull.mul(0.7).add(0.3)).mul(0.55);

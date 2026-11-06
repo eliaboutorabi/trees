@@ -275,12 +275,10 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   if (opts.pipeModel) applyPipeModel(parentArr, radiusArr, count, opts.pipeExponent);
   normalizeRadii(radiusArr, count, opts.trunkRadius);
 
-  // Sink the root below ground and flare it, so the trunk meets the earth
-  // instead of showing the open end of a tube.
-  if (count > 0) {
-    posArr[1] = -Math.max(0.25, radiusArr[0] * 1.2);
-    radiusArr[0] *= 1.35;
-  }
+  // Sink the root below ground, so the trunk's curve carries on under the soil
+  // and whatever is swept round its foot has a trunk to hold on to there.
+  // (The flare itself is the geometry's job: see `roots.ts`.)
+  if (count > 0) posArr[1] = -Math.max(0.25, radiusArr[0] * 1.2);
 
   if (opts.autoLeaves && leaves.length === 0) {
     scatterLeavesOnTips(posArr, parentArr, arc, count, leaves, opts);
