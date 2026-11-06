@@ -44,6 +44,8 @@ export interface LeafPlacement {
   seed: number;
   /** 0 = leaf (`L`), 1 = blossom (`K`). */
   kind: 0 | 1;
+  /** The skeleton node it grows from, so it can move exactly as its twig does. */
+  node: number;
 }
 
 export interface TurtleOptions {
@@ -258,6 +260,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
             order: state.order,
             seed: rng(),
             kind: m.s === 'K' ? 1 : 0,
+            node: state.node,
           });
         }
         break;
@@ -409,6 +412,7 @@ function scatterLeavesOnTips(
         order: 0,
         seed: rng(),
         kind: 0,
+        node: i,
       });
     }
   }

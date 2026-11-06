@@ -35,6 +35,7 @@ import {
 // `three/webgpu` re-exports the concrete node classes but not the base `Node`
 // type itself, which is what every TSL operator actually returns.
 import type Node from 'three/src/nodes/core/Node.js';
+import { PEND_UNIT } from '../sway';
 
 export type TreeUniforms = ReturnType<typeof createTreeUniforms>;
 
@@ -73,7 +74,10 @@ export const vec4Attribute = (name: string) => attribute<'vec4'>(name, 'vec4');
  */
 export function treeParams() {
   const p = vec4Attribute('aParams');
-  return { birth: p.x, flex: p.y, seed: p.z, occlusion: p.w };
+  // The flex slot carries two values, see `sway.ts`: the pendulum length in
+  // the even integers and the lean weight in what is left.
+  const pair = p.y.mul(0.5).floor();
+  return { birth: p.x, flex: p.y.sub(pair.mul(2)), pend: pair.mul(PEND_UNIT), seed: p.z, occlusion: p.w };
 }
 
 export function createTreeUniforms() {
@@ -319,7 +323,7 @@ export function growthPosition(
 ): { position: Vec3Node; pivot: Vec3Node } {
   const origin = vec3Attribute('aOrigin');
   const center = vec3Attribute('aCenter');
-  const { birth, flex, seed } = treeParams();
+  const { birth, flex, pend, seed } = treeParams();
 
   // ------------------------------------------------------------- growth
   const w = u.growthWindow;
@@ -370,7 +374,19 @@ export function growthPosition(
 
   const bendAxis = vec3(0, 1, 0).cross(windDir).normalize();
   const bend = drive.mul(u.wind).mul(flex).mul(extend).mul(u.windBend);
-  const swayed = rotateAboutAxis(displaced, bendAxis, bend);
+
+  // Whatever hangs swings as well as leans: blown downwind by its length
+  // times the lean of what holds it, a little more than a rigid pendulum
+  // would be because the wind drags on the shoot itself, and wandering
+  // across the wind on its own slow beat so a curtain never moves as a sheet.
+  // The beat is phased by place, not by seed, so a shoot and the leaves on it
+  // — which share a place but not a seed — keep time together.
+  const across = vec3(windDir.z.negate(), 0, windDir.x);
+  const beat = t.mul(0.83).add(center.x.mul(1.7)).add(center.z.mul(2.3)).sin();
+  const hang = windDir
+    .mul(bend.mul(pend).mul(1.6))
+    .add(across.mul(beat.mul(pend).mul(u.wind).mul(u.windBend).mul(extend).mul(0.12)));
+  const swayed = rotateAboutAxis(displaced, bendAxis, bend).add(hang);
 
   // -------------------------------------------------------------- pointer
   //
@@ -378,7 +394,7 @@ export function growthPosition(
   // against the pointer. Comparing the *rest* pivot instead would leave a
   // gusting canopy responding where it used to be, which on a windy preset is
   // most of a leaf's length away from where it is drawn.
-  const pivot = rotateAboutAxis(center, bendAxis, bend);
+  const pivot = rotateAboutAxis(center, bendAxis, bend).add(hang);
 
   // Only what can actually move. Foliage always can; wood is compliant in
   // proportion to how thin it is, taken from the vertex's own distance to the

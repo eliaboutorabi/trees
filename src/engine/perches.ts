@@ -10,6 +10,7 @@
  * other.
  */
 import type { Skeleton } from './lsystem/turtle';
+import { computeSway } from './sway';
 
 export interface Perch {
   /** Where the feet go: on top of the branch, at rest. Tree space. */
@@ -36,6 +37,7 @@ export function findPerches(skel: Skeleton, options: PerchOptions = {}): Perch[]
   const height = Math.max(0.5, skel.height);
   const spread = Math.max(0.5, skel.radiusXZ);
   const rootRadius = Math.max(1e-5, skel.maxRadius);
+  const sway = computeSway(skel);
   const maxArc = Math.max(1e-5, skel.maxArc);
 
   // Leaves, hashed into cells about a perch's sight-line deep, so each
@@ -120,9 +122,9 @@ export function findPerches(skel: Skeleton, options: PerchOptions = {}): Perch[]
     if (out < spread * 0.5) continue;
 
     // The same weight the branch geometry is built with, so a perched bird
-    // sways by exactly what its twig does.
-    const thin = 1 - Math.min(1, r / rootRadius);
-    const flex = Math.pow(Math.min(1, y / height), 1.3) * (0.62 + 0.38 * Math.pow(thin, 1.5));
+    // sways by exactly what its twig does. (A perch is a level twig, never a
+    // hanging one, so it has no pendulum to swing on.)
+    const flex = sway.flex[p] + (sway.flex[i] - sway.flex[p]) * 0.6;
 
     // A deterministic jitter, so ties break differently on every tree.
     const jitter = (Math.sin(i * 12.9898) * 43758.5453) % 1;

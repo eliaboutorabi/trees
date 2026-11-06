@@ -15,6 +15,7 @@ import { BufferAttribute, BufferGeometry, Quaternion, Vector3 } from 'three';
 import type { LeafPlacement, Skeleton } from './lsystem/turtle';
 import { CanopyOcclusion } from './occlusion';
 import { emitBase, planRoots, type RootPlan, type TrunkSampler } from './roots';
+import { computeSway, flexOf, pack, type Sway } from './sway';
 
 export interface TreeGeometryOptions {
   /** 0 broad · 1 needle · 2 blossom · 3 lance. */
@@ -162,18 +163,22 @@ const TRUNK_SEGMENTS = 128;
  * thick. The nodes themselves stay on the curve, so forks and leaves stay
  * attached exactly where the turtle put them.
  */
-function resampleStrand(
-  centers: number[],
-  radii: number[],
-  arcs: number[],
-  minPiece: number,
-  seed: number,
-  out: { centers: number[]; radii: number[]; arcs: number[] },
-): void {
+interface StrandSamples {
+  centers: number[];
+  radii: number[];
+  arcs: number[];
+  flex: number[];
+  pend: number[];
+}
+
+function resampleStrand(src: StrandSamples, minPiece: number, seed: number, out: StrandSamples): void {
+  const { centers, radii, arcs, flex, pend } = src;
   const n = radii.length;
   out.centers.length = 0;
   out.radii.length = 0;
   out.arcs.length = 0;
+  out.flex.length = 0;
+  out.pend.length = 0;
   const at = (i: number, c: number) => centers[Math.min(n - 1, Math.max(0, i)) * 3 + c];
   for (let i = 0; i < n - 1; i++) {
     const len = Math.hypot(at(i + 1, 0) - at(i, 0), at(i + 1, 1) - at(i, 1), at(i + 1, 2) - at(i, 2));
@@ -245,11 +250,15 @@ function resampleStrand(
       const e = f * f * (3 - 2 * f);
       out.radii.push(radii[i] + (radii[i + 1] - radii[i]) * e);
       out.arcs.push(arcs[i] + (arcs[i + 1] - arcs[i]) * f);
+      out.flex.push(flex[i] + (flex[i + 1] - flex[i]) * f);
+      out.pend.push(pend[i] + (pend[i + 1] - pend[i]) * f);
     }
   }
   out.centers.push(at(n - 1, 0), at(n - 1, 1), at(n - 1, 2));
   out.radii.push(radii[n - 1]);
   out.arcs.push(arcs[n - 1]);
+  out.flex.push(flex[n - 1]);
+  out.pend.push(pend[n - 1]);
 }
 
 /**
@@ -277,20 +286,21 @@ export function buildTreeGeometry(skel: Skeleton, opts: TreeGeometryOptions): Tr
   // trunk bulges toward each root's bearing and each root leaves from inside
   // its own bulge.
   const plan = planRoots(skel.radius[0] ?? skel.maxRadius, skel.height, opts.seed ?? 1337);
-  const branches = buildBranches(skel, field, plan);
-  const foliage = buildFoliage(skel, kept, template, blossomTpl, field);
+  const sway = computeSway(skel);
+  const branches = buildBranches(skel, field, plan, sway);
+  const foliage = buildFoliage(skel, kept, template, blossomTpl, field, sway);
 
   // Flowers and fruit hang off the same attachment points as the leaves, so any
   // species can carry them without the grammar knowing anything about it.
   const sites = selectOrnamentSites(kept, opts.maxOrnaments ?? 2600);
-  const flowers = buildOrnaments(skel, sites, flowerTemplate(), field, { droop: 0 });
+  const flowers = buildOrnaments(skel, sites, flowerTemplate(), field, sway, { droop: 0 });
   // A berry is a sphere and can point anywhere, but an apple and a cone both
   // have a top and a bottom, so they hang upright rather than inheriting
   // whatever rotation the leaf beside them happened to get.
   const shape = opts.fruitShape ?? 0;
   const axial = shape !== 0;
   const fruitTpl = shape === 2 ? coneTemplate() : shape === 1 ? appleTemplate() : berryTemplate();
-  const fruit = buildOrnaments(skel, sites, fruitTpl, field, {
+  const fruit = buildOrnaments(skel, sites, fruitTpl, field, sway, {
     droop: shape === 1 ? 1.25 : shape === 2 ? 0.55 : 1.05,
     seedShift: 0.37,
     upright: axial,
@@ -403,13 +413,13 @@ function buildOrnaments(
   sites: { leaf: LeafPlacement; rank: number }[],
   tpl: LeafTemplate,
   field: CanopyOcclusion,
+  sway: Sway,
   opts: { droop: number; seedShift?: number; upright?: boolean },
 ): Buffers | null {
   if (sites.length === 0) return null;
 
   const buf = newBuffers();
   const maxArc = Math.max(1e-5, skel.maxArc);
-  const heightRef = Math.max(0.5, skel.height);
   const v = new Vector3();
   const nrm = new Vector3();
   const shift = opts.seedShift ?? 0;
@@ -423,7 +433,8 @@ function buildOrnaments(
     // Ornaments arrive a little after the leaves that share their twig.
     const birth = Math.min(1, leaf.arc / maxArc + 0.04);
     const occlusion = field.sample(leaf.pos.x, leaf.pos.y, leaf.pos.z);
-    const flex = Math.pow(Math.max(0, Math.min(1, leaf.pos.y / heightRef)), 1.3);
+    // Exactly what its twig does.
+    const flex = pack(sway.flex[leaf.node], sway.pend[leaf.node]);
     // Fruit hangs straight down whatever the twig is doing, so the droop is
     // applied in world space after the placement rotation. It scales with the
     // ornament because the pivot stays at the anchor: bigger fruit hangs lower.
@@ -538,7 +549,7 @@ function buildOcclusionField(
 
 // ---------------------------------------------------------------- branches
 
-function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): { buf: Buffers } {
+function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan, sway: Sway): { buf: Buffers } {
   const buf = newBuffers();
   const { pos, parent, radius, arc, count } = skel;
   if (count === 0) return { buf };
@@ -577,8 +588,8 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
   const maxArc = Math.max(1e-5, skel.maxArc);
   const heightRef = Math.max(0.5, skel.height);
 
-  const raw = { centers: [] as number[], radii: [] as number[], arcs: [] as number[] };
-  const smooth = { centers: [] as number[], radii: [] as number[], arcs: [] as number[] };
+  const raw = { centers: [] as number[], radii: [] as number[], arcs: [] as number[], flex: [] as number[], pend: [] as number[] };
+  const smooth = { centers: [] as number[], radii: [] as number[], arcs: [] as number[], flex: [] as number[], pend: [] as number[] };
 
   const emitStrand = (ring: number[], firstRadiusCap: number, strandSeed: number, isTrunk = false) => {
     if (ring.length < 2) return;
@@ -586,6 +597,8 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
     raw.centers.length = 0;
     raw.radii.length = 0;
     raw.arcs.length = 0;
+    raw.flex.length = 0;
+    raw.pend.length = 0;
     let maxR = 0;
     for (let i = 0; i < ring.length; i++) {
       const node = ring[i];
@@ -593,6 +606,8 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
       const r = i === 0 ? Math.min(radius[node], firstRadiusCap) : radius[node];
       raw.radii.push(r);
       raw.arcs.push(arc[node]);
+      raw.flex.push(sway.flex[node]);
+      raw.pend.push(sway.pend[node]);
       if (r > maxR) maxR = r;
     }
 
@@ -601,11 +616,15 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
     let centers = raw.centers;
     let radii = raw.radii;
     let arcs = raw.arcs;
+    let flexes = raw.flex;
+    let pends = raw.pend;
     if (curved) {
-      resampleStrand(raw.centers, raw.radii, raw.arcs, rootRadius * 0.5, strandSeed, smooth);
+      resampleStrand(raw, rootRadius * 0.5, strandSeed, smooth);
       centers = smooth.centers;
       radii = smooth.radii;
       arcs = smooth.arcs;
+      flexes = smooth.flex;
+      pends = smooth.pend;
     }
 
     // The trunk's foot is the base's job. Find where it hands over, and start
@@ -614,9 +633,9 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
     let first = 0;
     let sampler: TrunkSampler | null = null;
     if (isTrunk) {
-      sampler = trunkSampler(centers, radii, arcs, strandSeed);
+      sampler = trunkSampler(centers, radii, arcs, flexes, strandSeed);
       if (sampler) {
-        first = insertJunction(centers, radii, arcs, plan.top);
+        first = insertJunction(centers, radii, arcs, flexes, pends, plan.top);
         if (first < 0) {
           sampler = null;
           first = 0;
@@ -669,7 +688,7 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
 
       const birth = Math.min(1, a / maxArc);
       const occlusion = field.sample(cx, cy, cz);
-      const flex = flexFor(r, cy);
+      const flex = pack(flexes[i], pends[i]);
 
       // Taper slope, so normals lean along the cone rather than straight out.
       const rPrev = radii[Math.max(first, i - 1)];
@@ -739,23 +758,13 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
     if (sampler) emitBase(buf, plan, sampler, field);
   };
 
-  // Wind weight is dominated by height, not by arc length. Height is a smooth
-  // function of space, so anything sitting near anything else bends by nearly
-  // the same angle and the two never scissor through each other. Arc length is
-  // not: a twig tip and the limb it hangs off can share a location while being
-  // metres apart along the branch.
-  function flexFor(r: number, y: number): number {
-    const thin = 1 - Math.min(1, r / rootRadius);
-    const heightNorm = Math.max(0, Math.min(1, y / heightRef));
-    return Math.pow(heightNorm, 1.3) * (0.62 + 0.38 * Math.pow(thin, 1.5));
-  }
 
   /**
    * The trunk below the hand-over, as the base sees it. Null if this trunk
    * does not stand up out of the ground — a grammar is free to start sideways,
    * and a base swept round a horizontal stem would be nonsense.
    */
-  function trunkSampler(centers: number[], radii: number[], arcs: number[], strandSeed: number): TrunkSampler | null {
+  function trunkSampler(centers: number[], radii: number[], arcs: number[], flexes: number[], strandSeed: number): TrunkSampler | null {
     const n = radii.length;
     if (n < 2) return null;
     // Judge the stem by its foot, not by wherever its thickest line wanders
@@ -802,8 +811,10 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
         return arcs[i] + (arcs[i + 1] - arcs[i]) * frac(i, y);
       },
       flexAt(y) {
+        // Below the lowest sample the trunk does not move at all.
+        if (y <= y0) return Math.min(flexes[0], flexOf(radii[0], Math.max(0, y), rootRadius, heightRef));
         const i = below(y);
-        return flexFor(radii[i] + (radii[i + 1] - radii[i]) * frac(i, y), y);
+        return flexes[i] + (flexes[i + 1] - flexes[i]) * frac(i, y);
       },
       seed: strandSeed,
       maxArc,
@@ -858,7 +869,7 @@ function perpendicular(v: Vector3, out: Vector3): void {
  * or -1 if the strand never reaches it. The tube starts there and the base
  * repeats that ring as its first row, so the two meet without a gap.
  */
-function insertJunction(centers: number[], radii: number[], arcs: number[], y: number): number {
+function insertJunction(centers: number[], radii: number[], arcs: number[], flexes: number[], pends: number[], y: number): number {
   const n = radii.length;
   for (let i = 0; i < n - 1; i++) {
     const ya = centers[i * 3 + 1];
@@ -870,6 +881,8 @@ function insertJunction(centers: number[], radii: number[], arcs: number[], y: n
       centers.splice((i + 1) * 3, 0, ...[0, 1, 2].map((c) => centers[i * 3 + c] + (centers[(i + 1) * 3 + c] - centers[i * 3 + c]) * f));
       radii.splice(i + 1, 0, radii[i] + (radii[i + 1] - radii[i]) * f);
       arcs.splice(i + 1, 0, arcs[i] + (arcs[i + 1] - arcs[i]) * f);
+      flexes.splice(i + 1, 0, flexes[i] + (flexes[i + 1] - flexes[i]) * f);
+      pends.splice(i + 1, 0, pends[i] + (pends[i + 1] - pends[i]) * f);
       return i + 1;
     }
   }
@@ -1283,13 +1296,13 @@ function buildFoliage(
   blade: LeafTemplate,
   blossom: LeafTemplate,
   field: CanopyOcclusion,
+  sway: Sway,
 ): { buf: Buffers; count: number; ids: number[] } | null {
   if (kept.length === 0) return null;
 
   const buf = newBuffers();
   const ids: number[] = [];
   const maxArc = Math.max(1e-5, skel.maxArc);
-  const heightRef = Math.max(0.5, skel.height);
   const v = new Vector3();
   const nrm = new Vector3();
 
@@ -1303,9 +1316,9 @@ function buildFoliage(
     const occlusion = field.sample(leaf.pos.x, leaf.pos.y, leaf.pos.z);
 
     // A leaf must bend by the same amount as the twig it hangs on, or it slides
-    // along the branch and shears through its neighbours. Twigs are thin, so
-    // their `thin` term is ~1 and this reduces to the branch formula.
-    const flex = Math.pow(Math.max(0, Math.min(1, leaf.pos.y / heightRef)), 1.3);
+    // along the branch and shears through its neighbours — so it takes its
+    // twig's own weights rather than working out its own.
+    const flex = pack(sway.flex[leaf.node], sway.pend[leaf.node]);
 
     for (let i = 0; i < tpl.position.length; i += 3) {
       v.set(tpl.position[i], tpl.position[i + 1], tpl.position[i + 2])
