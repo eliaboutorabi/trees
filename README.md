@@ -68,9 +68,10 @@ with **da Vinci's pipe model**: a limb is as thick as its children combined. The
 
 The skeleton becomes:
 
-- tubes of bark;
+- tubes of bark, drawn through their nodes as smooth curves;
 - leaf blades with their outline baked into the geometry (no alpha test);
-- a lobed root flare;
+- the foot of the tree: flare, buttresses and roots as one surface (see
+  [How the roots work](#how-the-roots-work));
 - flower and fruit sites;
 - a list of **perches**: real twigs, thick enough to grip and level enough to
   sit on, toward the outer crown where birds actually sit.
@@ -152,6 +153,45 @@ Gusts change speed without lurching because the sway runs on an
 **integrated** phase. The host adds `windSpeed × dt` each frame. Swaying on
 `time × speed` instead makes every branch jump to another point in its swing
 the instant the speed changes.
+
+Rule 2 has one exception, and the willow found it. Weight by height and a
+shoot hanging from six metres to one gets a one-metre weight at its tip: the
+branch sways while the tip stands still, a curtain pinned to the lawn and
+waving from the bottom like weed in a current. So a node never bends less than
+the wood it hangs from, and anything below where it began to fall carries a
+**pendulum length** ([`sway.ts`](src/engine/sway.ts)). The shader blows it
+downwind by that length times its support's lean, and lets it wander across
+the wind on a slow beat phased by *place*, so a shoot and the leaves on it
+(same place, different seeds) keep time. The pendulum rides in the same float
+as the bend weight, in the even integers, because all eight vertex buffers
+WebGPU guarantees are already taken.
+
+## How the roots work
+
+Roots used to be tubes: eight-sided pipes poking out of a cone-shaped flare.
+That gets every part of a root wrong at once. A tube has an underside, a round
+end and a seam where it meets the trunk, and it lies on the lawn like a
+dropped log. Look at a real tree in grass and the roots are the ground's own
+relief: rounded ridges that swell out of the trunk, run a metre or two and
+sink back under the soil.
+
+So in [`roots.ts`](src/engine/roots.ts) they're a **heightfield**. Each root is
+a meandering path that carries a crest height and a width. The crest is high
+where it leaves the trunk and falls as `h₀ − (h₀ + dive)·tᵖ`, with `p` chosen
+so it hugs the ground for a while before going under. Big roots fork, small
+ones fill the gaps, and the field is their smooth maximum. That's what lets a
+fork part from its parent as one swelling, not two ridges crossing.
+
+The trunk's foot and that field are a single sheet, swept column by column
+round the trunk: down the wall, round a fillet, out along the field until it's
+well under the soil. The fillet is the exact zero set of a quadratic smooth
+minimum of the two surfaces it joins, so it meets both with matching slope.
+Over a root's crest it's wide and climbs the trunk, which is the buttress.
+Between roots it's tight and happens underground, and the trunk simply enters
+the soil. The sheet's first row *is* the trunk tube's last ring, so there's no
+gap to hide. The bark's grain runs on down the profile, so it follows the
+trunk into each root. Where wood meets soil it darkens and takes the soil's
+colour.
 
 ## Hovering the canopy
 
@@ -758,13 +798,13 @@ comparisons plus `rand(a,b)`, `sin`, `cos`, `min`, `max`, `pow`, `clamp`, `mix`,
 
 | Symbol | Effect |
 | --- | --- |
-| `F(len[, r])` | Move forward, drawing an internode |
+| `F(len[, w])` | Move forward, drawing an internode. A width `w`, in units of an ordinary tip, is kept as given |
 | `f(len)` | Move forward without drawing |
 | `+(a)` `-(a)` | Turn left / right |
 | `&(a)` `^(a)` | Pitch down / up |
 | `\(a)` `/(a)` | Roll left / right |
 | `\|` | Turn 180° |
-| `$` | Roll level with the horizon |
+| `$` | Roll level with the horizon; after it `&` tilts toward the sky and `^` toward the ground |
 | `!(r)` | Set branch radius (overwritten by the pipe model) |
 | `T(e)` | Set tropism for this branch: negative droops, positive reaches up |
 | `[` `]` | Push / pop turtle state |
@@ -780,6 +820,19 @@ generations.
   vertical *and* off the parent's roll. The Willow uses `$` to level the frame
   before pitching; otherwise shoots launch sideways or skyward and run out of
   generations before gravity turns them over.
+- **A frame has to be right-handed.** `$` once built its levelled frame as
+  (left, heading, up) with `up = heading × left`, which is a mirror image. No
+  rotation can represent that, so the quaternion recovered from it pointed the
+  turtle somewhere arbitrary. Half the willow's branches climbed when told to
+  arch over, and the rest dived. It's `left × heading` now.
+- **The pipe model makes ropes of twigs.** Radii are normalised to the trunk,
+  so only ratios survive, and with a few hundred tips the finest twig is still
+  a twelfth of the trunk's girth. Scaling the tips down changes nothing,
+  because the ratio is all that's left. So `F(len, w)` keeps its width but
+  still counts as an ordinary tip toward the wood that carries it. That's how
+  the willow hangs a thousand shoots as fine as string.
+- **Nothing grows into the soil.** A tree's turtle stops a branch that grows
+  down to the ground, so a curtain ends at the grass, not under it.
 - **Rewriting is parallel, so length costs generations.** A long hanging
   curtain needs many iterations after the symbol that starts it, however much
   structure came before.
