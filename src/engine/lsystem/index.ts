@@ -21,6 +21,8 @@ export interface TreeConfig {
   leafScale: number;
   seed: number;
   autoLeaves?: boolean;
+  /** Stop anything that grows down to the soil from going into it. Trees want this; flat drawings do not. */
+  ground?: boolean;
   maxModules?: number;
   maxSegments?: number;
   /** Hand back the derived word as well, for showing it. */
@@ -89,6 +91,7 @@ export function buildTree(cfg: TreeConfig): TreeBuild {
     pipeExponent: cfg.pipeExponent,
     leafScale: cfg.leafScale,
     autoLeaves: cfg.autoLeaves ?? true,
+    ground: cfg.ground ?? false,
     rng,
     maxSegments: cfg.maxSegments,
   });

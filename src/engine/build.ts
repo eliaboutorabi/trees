@@ -69,7 +69,8 @@ export interface TreeData {
 }
 
 export function computeTree(params: TreeStructure, limits: BuildLimits): TreeData {
-  const build = buildTree({ ...params, maxModules: limits.maxModules });
+  // A tree stands in a meadow, so nothing of it may grow into the soil.
+  const build = buildTree({ ...params, maxModules: limits.maxModules, ground: true });
   const empty = {
     branches: null,
     foliage: null,

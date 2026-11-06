@@ -108,63 +108,60 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
   {
     id: 'willow',
     name: 'Willow',
-    blurb: 'Broad dome hung with long trailing shoots',
-    axiom: '!(1)A(1)',
-    rules: `# Salix babylonica: a stout trunk under a broad dome, spread roughly equal
-# to height, hung with unbranched shoots 50-70% of the tree's height that
-# sweep down to near ground level. The shoots are the whole silhouette, so
-# nearly every generation is spent making them long rather than branchy.
+    blurb: 'A vase of limbs under a dome of hanging curtains',
+    // A short, stout trunk before it divides.
+    axiom: '!(1)F(LEN*1.8)A(1)',
+    rules: `# Salix babylonica. The trunk divides low into a vase of scaffold limbs
+# that climb, spread and arch over into a broad dome, and from every node
+# of the outer branches a long, thin, unbranched shoot hangs straight down.
+# The shoots are the silhouette: curtains falling from the top of the dome
+# to near the ground, swaying as one.
 
-# Anything unresolved on the last step just leafs out — a V here would have no
-# generation left to expand into a shoot.
-A(s) : n >= N-1 -> F(LEN*s)[&(76)L(0.8)][/(140)&(84)L(0.75)][/(250)&(70)L(0.8)]
+# Four scaffolds out of the top of the trunk
+A(s) -> /(rand(0,120))[&(ANG*rand(0.85,1.1))S(s*0.8,0,1)]/(rand(105,135))[&(ANG*rand(0.85,1.1))S(s*0.78,0,-1)]/(rand(105,135))[&(ANG*rand(0.8,1.05))S(s*0.76,0,1)]&(rand(6,12))S(s*0.84,0,-1)
 
-# Trunk, then an open framework of ascending scaffolds. A wide angle is what
-# gets the spread out to match the height.
-A(s) : s > 0.36 -> F(LEN*s)/(137.5)[&(ANG*rand(0.85,1.15))A(s*SHRINK*0.86)][/(158)&(ANG*rand(0.9,1.2))A(s*SHRINK*0.84)]$&(5)A(s*SHRINK*0.94)
+# A scaffold climbs and leans further out, throwing a crown branch to one
+# side and then the other. $ levels the frame first, so + and - swing a
+# branch round the outside of the vase, and ^ tips it outward and down.
+S(s, k, d) : k < 4 -> F(LEN*s)$[+(d*rand(30,55))^(rand(12,28))C(s*0.72,0)]^(rand(3,7))S(s*0.88,k+1,-d)
+S(s, k, d) -> $^(rand(10,20))C(s*0.9,0)
 
-A(s) -> C(s, 0)
+# Crown branches run outward and arch slowly over toward the ground, two
+# shoots dropping from every node and side twigs dropping more
+C(s, k) : k < 7 -> F(LEN*s*0.8)[V][&(60)L(1)][/(180)&(60)L(1)]$[+(rand(-70,70))^(rand(5,15))D(s*0.6,0)][/(180)V]^(rand(4,8))C(s*0.92,k+1)
+C(s, k) -> V
+D(s, k) : k < 4 -> F(LEN*s*0.7)[V][&(60)L(0.95)]$^(rand(4,9))D(s*0.88,k+1)
+D(s, k) -> V
 
-# The scaffold has to CLIMB before it sheds anything. A shoot hangs a fixed
-# length, so one dropped low simply runs into the ground — the height gained
-# here is what the curtain hangs from. After $ the frame is levelled, so & now
-# tilts toward the sky and ^ toward the ground.
-C(s, k) : k < 6 -> F(LEN*s*1.15)$&(rand(9,17))+(rand(-26,26))C(s*0.95, k+1)
+# A shoot leaves its branch rising, the way new growth does, and its own
+# weight turns it over within a step or two and hangs it plumb: a fountain
+# of them roofs the dome with leaves before the curtain falls from it.
+V -> [$+(rand(-50,50))&(rand(15,50))T(-2.4)W(0)]
 
-# Only the outer, highest reach of the scaffold arches over and weeps.
-C(s, k) : k < 9 -> F(LEN*s*1.05)$^(rand(4,11))+(rand(-24,24))[V(s)]C(s*0.93, k+1)
-C(s, k) -> V(s)
-
-# A curtain. The $ levels the frame against the horizon first, so the pitch
-# after it is measured from the ground rather than from whatever roll the limb
-# was carrying — otherwise shoots launch sideways and run out of generations
-# before gravity turns them over. Straight down is the stable point of the
-# tropism, so a strong T settles the shoot to vertical and holds it there.
-V(s) -> [$^(108)T(-1.7)W(s, 0)]
-
-# The shoot itself: unbranched, leafy the whole way, and a decay near 1 so it
-# keeps running for every generation it is given.
-W(s, j) : j < 14 -> F(LEN*s*1.1)[/(70)L(0.95)][/(190)L(0.9)][/(300)L(0.95)]/(137.5)W(s*0.99, j+1)
-W(s, j) -> L(0.85)`,
+# Thin, unbranched and leafy all the way down. The second argument to F
+# fixes its width, finer than the pipe model would ever make a tip.
+W(j) : j < 14 -> F(LEN*0.28, 0.16)[/(60)&(34)L(0.85)][/(200)&(28)L(0.8)]/(137.5)W(j+1)
+W(j) -> L(0.7)`,
     params: {
-      iterations: 22,
-      angle: 62,
-      step: 1.122,
+      iterations: 34,
+      angle: 34,
+      step: 1.45,
       shrink: 0.9,
-      trunkRadius: 0.26,
-      tropism: 0.041,
-      pipeExponent: 2.6,
+      trunkRadius: 0.36,
+      tropism: 0.03,
+      pipeExponent: 2.1,
       leafScale: 0.19,
       leafShape: 3,
       windiness: 1.5,
     },
     palette: {
-      barkDark: 0x1c1811,
-      barkLight: 0x655a41,
-      twig: 0x7d7a46,
+      // Willow bark is grey-brown and deeply ridged, lighter than an oak's.
+      barkDark: 0x2a251d,
+      barkLight: 0x847a64,
+      twig: 0x8a8448,
       moss: 0x4a5a2c,
-      leafBase: 0x466a2b,
-      leafTip: 0xa8bd5a,
+      leafBase: 0x4f7430,
+      leafTip: 0xb3c766,
       leafAutumn: 0xd0a72e,
       blossom: 0xeee0c0,
     },

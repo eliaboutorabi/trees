@@ -62,6 +62,8 @@ export interface TurtleOptions {
   leafScale: number;
   /** Scatter leaves on terminal twigs when the grammar produces none. */
   autoLeaves: boolean;
+  /** Stop growth that reaches the soil. See `GROUND_CLEARANCE`. */
+  ground?: boolean;
   rng: Rng;
   maxSegments?: number;
 }
@@ -82,7 +84,17 @@ interface TurtleState {
   arc: number;
   /** Per-branch tropism, saved and restored by `[` / `]`. */
   tropism: number;
+  /** This branch has reached the soil and draws nothing more until `]`. */
+  grounded: boolean;
 }
+
+/**
+ * How close to the soil anything may grow. A weeping shoot or a drooping limb
+ * that reaches the ground stops there, as it would against the earth, rather
+ * than carrying on into it — the grammar has no way to know where the ground
+ * is, so the turtle does.
+ */
+const GROUND_CLEARANCE = 0.12;
 
 export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   const maxSegments = opts.maxSegments ?? 80_000;
@@ -91,14 +103,17 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   const pos: number[] = [];
   const parent: number[] = [];
   const radius: number[] = [];
+  /** Width given explicitly by `F(length, width)`, or 0 to leave it to the pipe model. */
+  const fixed: number[] = [];
   const order: number[] = [];
   const arc: number[] = [];
   const leaves: LeafPlacement[] = [];
 
-  const pushNode = (p: Vector3, parentIndex: number, r: number, o: number, a: number): number => {
+  const pushNode = (p: Vector3, parentIndex: number, r: number, o: number, a: number, width = 0): number => {
     pos.push(p.x, p.y, p.z);
     parent.push(parentIndex);
     radius.push(r);
+    fixed.push(width);
     order.push(Math.min(255, o));
     arc.push(a);
     return parent.length - 1;
@@ -112,6 +127,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
     order: 0,
     arc: 0,
     tropism: opts.tropism,
+    grounded: false,
   };
 
   const stack: TurtleState[] = [];
@@ -139,7 +155,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
       case 'G': {
         const len = m.p.length > 0 ? m.p[0] : opts.step;
         if (m.p.length > 1) state.radius = Math.max(1e-4, m.p[1]);
-        if (!(len > 0)) break;
+        if (!(len > 0) || state.grounded) break;
         if (parent.length >= maxSegments) {
           truncated = true;
           break;
@@ -160,9 +176,16 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
           }
         }
 
+        // Only something heading down, from above the soil, can be stopped by
+        // it: the trunk starts below ground on purpose.
+        if (opts.ground && heading.y < 0 && state.pos.y >= GROUND_CLEARANCE && state.pos.y + heading.y * len < GROUND_CLEARANCE) {
+          state.grounded = true;
+          break;
+        }
+
         state.pos.addScaledVector(heading, len);
         state.arc += len;
-        state.node = pushNode(state.pos, state.node, state.radius, state.order, state.arc);
+        state.node = pushNode(state.pos, state.node, state.radius, state.order, state.arc, m.p.length > 1 ? state.radius : 0);
 
         if (state.pos.x < minX) minX = state.pos.x;
         if (state.pos.x > maxX) maxX = state.pos.x;
@@ -193,12 +216,19 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
       case '|': rotateLocal(LOCAL_UP, Math.PI); break;
 
       case '$': {
-        // Roll so the turtle's left axis is horizontal again.
+        // Roll so the turtle's left axis is horizontal again, with its up
+        // axis on the sky's side: after it, & tilts toward the sky and ^
+        // toward the ground, whatever roll the turtle was carrying.
+        //
+        // The frame is (left, heading, up) = local (x, y, z), so it has to be
+        // right-handed, left × heading = up. Building it the other way round
+        // makes a mirror image, which no rotation can represent, and the
+        // quaternion recovered from it points the turtle somewhere arbitrary.
         heading.copy(LOCAL_HEADING).applyQuaternion(state.quat);
-        left.crossVectors(WORLD_UP, heading);
+        left.crossVectors(heading, WORLD_UP);
         if (left.lengthSq() > 1e-8) {
           left.normalize();
-          up.crossVectors(heading, left).normalize();
+          up.crossVectors(left, heading).normalize();
           state.quat.setFromRotationMatrix(levelBasis.makeBasis(left, heading, up));
         }
         break;
@@ -215,7 +245,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
       case 'L':
       case 'K': {
         const scale = (m.p.length > 0 ? m.p[0] : 1) * opts.leafScale;
-        if (scale > 0) {
+        if (scale > 0 && !state.grounded) {
           leaves.push({
             pos: state.pos.clone(),
             quat: state.quat.clone().multiply(
@@ -242,6 +272,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
           order: state.order,
           arc: state.arc,
           tropism: state.tropism,
+          grounded: state.grounded,
         });
         state.order++;
         break;
@@ -256,6 +287,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
           state.order = s.order;
           state.arc = s.arc;
           state.tropism = s.tropism;
+          state.grounded = s.grounded;
         }
         break;
       }
@@ -272,7 +304,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   const radiusArr = Float32Array.from(radius);
   const posArr = Float32Array.from(pos);
 
-  if (opts.pipeModel) applyPipeModel(parentArr, radiusArr, count, opts.pipeExponent);
+  if (opts.pipeModel) applyPipeModel(parentArr, radiusArr, count, opts.pipeExponent, fixed);
   normalizeRadii(radiusArr, count, opts.trunkRadius);
 
   // Sink the root below ground, so the trunk's curve carries on under the soil
@@ -308,15 +340,23 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
  * da Vinci's pipe model: a parent branch is as thick as its children combined.
  * Runs bottom-up, which is simply reverse index order because a node is always
  * pushed after its parent.
+ *
+ * A segment drawn as `F(length, width)` keeps the width it was given, in
+ * units of an ordinary tip. It still counts as an ordinary tip toward
+ * everything that carries it, though — counting it at its own width instead
+ * would change nothing, because the radii are normalised to the trunk
+ * afterwards and only the ratios survive. This is what lets a willow hang
+ * hundreds of shoots as fine as string from limbs as thick as they should be:
+ * the pipe model alone, with a few hundred tips, makes every twig a rope.
  */
-function applyPipeModel(parent: Int32Array, radius: Float32Array, count: number, exponent: number): void {
+function applyPipeModel(parent: Int32Array, radius: Float32Array, count: number, exponent: number, fixed: number[]): void {
   const e = Math.max(1.2, exponent);
   const accum = new Float64Array(count);
   for (let i = 0; i < count; i++) accum[i] = 0;
 
   for (let i = count - 1; i >= 1; i--) {
     const own = accum[i] > 0 ? Math.pow(accum[i], 1 / e) : 1;
-    radius[i] = own;
+    radius[i] = fixed[i] > 0 ? fixed[i] : own;
     const p = parent[i];
     if (p >= 0) accum[p] += Math.pow(own, e);
   }

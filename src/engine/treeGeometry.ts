@@ -758,9 +758,13 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
   function trunkSampler(centers: number[], radii: number[], arcs: number[], strandSeed: number): TrunkSampler | null {
     const n = radii.length;
     if (n < 2) return null;
-    const rise = centers[(n - 1) * 3 + 1] - centers[1];
-    const run = Math.hypot(centers[(n - 1) * 3] - centers[0], centers[(n - 1) * 3 + 2] - centers[2]);
-    if (rise < plan.top * 1.25 || run > rise * 0.7) return null;
+    // Judge the stem by its foot, not by wherever its thickest line wanders
+    // to once it is up among the limbs.
+    let end = 1;
+    while (end < n - 1 && centers[end * 3 + 1] < plan.top * 2) end++;
+    const rise = centers[end * 3 + 1] - centers[1];
+    const run = Math.hypot(centers[end * 3] - centers[0], centers[end * 3 + 2] - centers[2]);
+    if (rise < plan.top * 1.25 || run > rise * 0.5) return null;
     // Index of the last sample at or below `y`.
     const below = (y: number) => {
       let i = 0;
@@ -959,7 +963,7 @@ function mergeTemplates(parts: { tpl: LeafTemplate; quat: Quaternion; scale: num
 function leafTemplate(shape: 0 | 1 | 2 | 3): LeafTemplate {
   if (shape === 3) {
     // Lance: long, narrow and drooping, the way a willow leaf hangs.
-    return bladeTemplate(0.115, 1.7, 0.035, 0.34, 3, 6);
+    return bladeTemplate(0.13, 1.7, 0.035, 0.34, 3, 6);
   }
 
   if (shape === 1) {
