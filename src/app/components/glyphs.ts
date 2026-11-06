@@ -173,6 +173,13 @@ const CLOUD =
 const CLOUD_HIGH =
   'M6.9 14.6h9.8c2 0 3.5-1.5 3.5-3.3 0-1.8-1.4-3.2-3.2-3.3-.5-2.2-2.4-3.8-4.7-3.8-2.1 0-3.8 1.3-4.5 3.1-2 .2-3.5 1.8-3.5 3.7 0 2 1.6 3.6 3.6 3.6z';
 
+/** The year's wheel with one quarter, `d`, filled in. */
+const yearWheel = (d: string, c: Hue): Part[] => [
+  { d, k: 'both', c, o: 2.6 },
+  { d: 'M12 3.6c4.7-.1 8.5 3.8 8.4 8.5-.1 4.6-3.9 8.3-8.5 8.3-4.6 0-8.4-3.8-8.3-8.5.1-4.6 3.8-8.3 8.4-8.3z', k: 'ink' },
+  { d: 'M12 3.8v16.4M3.8 12h16.4', k: 'ink', o: 0.4, w: 0.75 },
+];
+
 export const GLYPHS = {
   // A small grove: a round tree and a young conifer on a line of ground.
   grove: [
@@ -186,34 +193,21 @@ export const GLYPHS = {
     { d: 'M3.1 20.2c3.3-.6 6.5-.5 9.1 0 2.9.5 5.6.4 8.7-.3', k: 'ink' },
   ],
 
-  // Seasons.
-  'season-spring': [
-    ...petals(12, 12, [5.6, 6.2, 5.4, 6, 5.8], 2.5),
-    { d: ring(12, 12, 1.5), k: 'dot' },
-  ],
+  // The year as a wheel, a quarter to each season, clockwise from the top:
+  // the season you are in is the quarter coloured in. (Not a sun or a
+  // snowflake, which would read as the light or the weather.)
+  'year-spring': yearWheel('M12.2 11.9V3.8c4.3.1 7.9 3.7 8 8.1z', 'petal'),
+  'year-summer': yearWheel('M12.2 12.1h8c-.1 4.4-3.6 7.9-8 8.1z', 'leaf'),
+  'year-autumn': yearWheel('M11.8 12.1v8.1c-4.4-.1-7.9-3.7-8-8.1z', 'fruit'),
+  'year-winter': yearWheel('M11.8 11.9h-8c.1-4.4 3.6-8 8-8.1z', 'snow'),
+
+  // The sun, for the day/night switch.
   'season-summer': [
     { d: 'M12 7.5c2.6-.1 4.6 2 4.5 4.6-.1 2.4-2.1 4.4-4.6 4.4-2.5-.1-4.4-2.1-4.4-4.6.1-2.4 2-4.3 4.5-4.4z', k: 'both' },
     {
       d: 'M12 2.7v2.1M12.1 19.3v2.2M2.8 12.1h2.1M19.2 11.9h2.1M5.4 5.2l1.5 1.4M17.1 17.2l1.6 1.5M18.6 5.4l-1.5 1.5M6.8 17.4l-1.5 1.4',
       k: 'ink',
     },
-  ],
-  // An acorn: unmistakably autumn, and kinder than a spiky leaf.
-  'season-autumn': [
-    { d: 'M7.9 11.7c0 4 1.8 7.4 4.1 8.6 2.4-1.1 4.2-4.6 4.2-8.6z', k: 'both' },
-    { d: 'M6.3 11.8c-.2-2.9 2.5-5 5.7-5 3.3 0 5.9 2.2 5.7 5z', k: 'both' },
-    { d: 'M8.6 9.4l1 1.4M11.3 8.4l.8 1.6M14.1 8.6l.6 1.6', k: 'ink' },
-    { d: 'M12 6.8c.1-1.5.7-2.7 1.8-3.6', k: 'ink' },
-  ],
-  'season-winter': [
-    {
-      d: 'M12 3.4v17.2M4.5 7.7l15 8.6M4.6 16.3l14.9-8.6',
-      k: 'ink',
-    },
-    { d: 'M9.9 5.1L12 6.9l2.1-1.8M9.9 18.9l2.1-1.8 2.1 1.8', k: 'ink' },
-    { d: 'M9.9 5.1L12 6.9l2.1-1.8M9.9 18.9l2.1-1.8 2.1 1.8', k: 'ink', t: 'rotate(60 12 12)' },
-    { d: 'M9.9 5.1L12 6.9l2.1-1.8M9.9 18.9l2.1-1.8 2.1 1.8', k: 'ink', t: 'rotate(120 12 12)' },
-    { d: ring(12, 12, 1.2), k: 'dot' },
   ],
 
   // Weather.

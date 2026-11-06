@@ -45,10 +45,10 @@
     winter: ['#b4c9db', '#38566f'],
   } as const;
   const SEASON_ICONS = {
-    spring: 'season-spring',
-    summer: 'season-summer',
-    autumn: 'season-autumn',
-    winter: 'season-winter',
+    spring: 'year-spring',
+    summer: 'year-summer',
+    autumn: 'year-autumn',
+    winter: 'year-winter',
   } as const;
   // Leaf and fruit shapes, as tiles.
   const LEAF_SHAPES = [
