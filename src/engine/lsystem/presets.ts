@@ -69,7 +69,7 @@ export const PRESETS: Preset[] = [
     name: 'Oak',
     blurb: 'Sturdy trunk, wide gnarled crown',
     // A clear bole under the crown, as an oak grown in the open has.
-    axiom: '!(1)F(LEN*1.15)A(1)',
+    axiom: '!(1)F(LEN*0.55)A(1)',
     rules: `# Terminal generation: the last apex becomes a leafy shoot rather than
 # a single rosette, so leaves spread along the twig instead of bunching
 A(s) : n >= N-1 -> F(LEN*s*0.4)[&(38)L(1.15)]/(137.5)F(LEN*s*0.3)[&(30)L(1.0)]/(137.5)F(LEN*s*0.3)[&(42)L(1.1)]/(137.5)[&(25)L(0.95)][/(150)&(34)L(1.05)]
@@ -108,49 +108,44 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
   {
     id: 'willow',
     name: 'Willow',
-    blurb: 'A vase of limbs under a dome of hanging curtains',
-    // A short, stout trunk before it divides.
-    axiom: '!(1)F(LEN*1.8)A(1)',
-    rules: `# Salix babylonica. The trunk divides low into a vase of scaffold limbs
-# that climb, spread and arch over into a broad dome, and from every node
-# of the outer branches a long, thin, unbranched shoot hangs straight down.
-# The shoots are the silhouette: curtains falling from the top of the dome
-# to near the ground, swaying as one.
+    blurb: 'Climbing limbs veiled in long hanging whips',
+    axiom: '!(1)F(LEN*0.8)A(1)',
+    rules: `# Salix babylonica, from winter photographs, when the structure shows.
+# The wood is an ordinary broadleaf's: a trunk that climbs well into the
+# crown throwing limbs that ascend and spread, and splits near the top into
+# co-dominant stems. Nothing in the framework weeps. What weeps are the
+# whips: long, fine, unbranched shoots hanging from every branch of the
+# outer crown, a veil over the whole tree.
 
-# Four scaffolds out of the top of the trunk
-A(s) -> /(rand(0,120))[&(ANG*rand(0.85,1.1))S(s*0.8,0,1)]/(rand(105,135))[&(ANG*rand(0.85,1.1))S(s*0.78,0,-1)]/(rand(105,135))[&(ANG*rand(0.8,1.05))S(s*0.76,0,1)]&(rand(6,12))S(s*0.84,0,-1)
+# The trunk climbs, throwing a limb at each node, and divides near the top
+A(s) : s > 0.6 -> F(LEN*s)/(rand(115,165))[&(ANG*rand(1.0,1.3))B(s*0.74)]^(rand(2,7))A(s*0.88)
+A(s) -> /(rand(0,90))[&(ANG*rand(0.45,0.65))B(s*0.92)][/(180)&(ANG*rand(0.45,0.65))B(s*0.88)]
 
-# A scaffold climbs and leans further out, throwing a crown branch to one
-# side and then the other. $ levels the frame first, so + and - swing a
-# branch round the outside of the vase, and ^ tips it outward and down.
-S(s, k, d) : k < 4 -> F(LEN*s)$[+(d*rand(30,55))^(rand(12,28))C(s*0.72,0)]^(rand(3,7))S(s*0.88,k+1,-d)
-S(s, k, d) -> $^(rand(10,20))C(s*0.9,0)
+# Limbs ascend and spread, forking as they go and bending at each fork the
+# way willow wood does. The outer ones shed whips from every node.
+B(s) : s > 0.4 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.64)]+(rand(-12,12))^(rand(0,8))B(s*0.86)
+B(s) : s > 0.14 -> F(LEN*s)[V][/(180)&(55)L(0.9)]/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.62)]+(rand(-12,12))^(rand(0,8))B(s*0.85)
+B(s) -> [V][/(120)V][/(240)V]
 
-# Crown branches run outward and arch slowly over toward the ground, two
-# shoots dropping from every node and side twigs dropping more
-C(s, k) : k < 7 -> F(LEN*s*0.8)[V][&(60)L(1)][/(180)&(60)L(1)]$[+(rand(-70,70))^(rand(5,15))D(s*0.6,0)][/(180)V]^(rand(4,8))C(s*0.92,k+1)
-C(s, k) -> V
-D(s, k) : k < 4 -> F(LEN*s*0.7)[V][&(60)L(0.95)]$^(rand(4,9))D(s*0.88,k+1)
-D(s, k) -> V
+# A whip leaves rising, as new growth does, and its own weight turns it
+# over within a step or two and hangs it plumb
+V -> [$+(rand(-60,60))&(rand(15,45))T(-2.2)W(0)]
 
-# A shoot leaves its branch rising, the way new growth does, and its own
-# weight turns it over within a step or two and hangs it plumb: a fountain
-# of them roofs the dome with leaves before the curtain falls from it.
-V -> [$+(rand(-50,50))&(rand(15,50))T(-2.4)W(0)]
-
-# Thin, unbranched and leafy all the way down. The second argument to F
-# fixes its width, finer than the pipe model would ever make a tip.
-W(j) : j < 14 -> F(LEN*0.28, 0.16)[/(60)&(34)L(0.85)][/(200)&(28)L(0.8)]/(137.5)W(j+1)
+# Fine, unbranched and leafy all the way down. The second argument to F
+# fixes its width, in ordinary tips, so the pipe model cannot swell it.
+W(j) : j < 11 -> F(LEN*0.26, 1.3)[/(60)&(34)L(0.85)][/(200)&(28)L(0.8)]/(137.5)W(j+1)
 W(j) -> L(0.7)`,
     params: {
-      iterations: 34,
-      angle: 34,
-      step: 1.45,
+      iterations: 28,
+      angle: 40,
+      step: 1.3,
       shrink: 0.9,
-      trunkRadius: 0.36,
-      tropism: 0.03,
-      pipeExponent: 2.1,
-      leafScale: 0.19,
+      trunkRadius: 0.38,
+      tropism: 0.02,
+      // Willow wood tapers hard: limbs that start as thick as a leg end in
+      // twigs no thicker than the whips they carry.
+      pipeExponent: 1.6,
+      leafScale: 0.15,
       leafShape: 3,
       windiness: 1.5,
     },
@@ -158,7 +153,7 @@ W(j) -> L(0.7)`,
       // Willow bark is grey-brown and deeply ridged, lighter than an oak's.
       barkDark: 0x2a251d,
       barkLight: 0x847a64,
-      twig: 0x8a8448,
+      twig: 0x9a8f58,
       moss: 0x4a5a2c,
       leafBase: 0x4f7430,
       leafTip: 0xb3c766,
@@ -171,7 +166,7 @@ W(j) -> L(0.7)`,
     name: 'Pine',
     blurb: 'Conical, four-branch whorls, needle sprays',
     // The lowest whorls are long gone on a grown pine: a bare trunk first.
-    axiom: '!(1)F(LEN*2.2)A(1)',
+    axiom: '!(1)F(LEN*1.1)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.6)][/(120)L(0.6)][/(240)L(0.6)]
 
 # A whorl of five near-horizontal limbs, then the leader carries on up
@@ -218,7 +213,7 @@ B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
     id: 'birch',
     name: 'Birch',
     blurb: 'Slender and upright, sparse airy canopy',
-    axiom: '!(1)F(LEN*1.3)A(1)',
+    axiom: '!(1)F(LEN*0.6)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(1.0)][/(96)&(30)L(0.9)][/(192)^(22)L(0.95)][/(288)&(26)L(0.85)]
 
 # Thin shoots leaf out along their length
@@ -256,7 +251,7 @@ A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
     id: 'sakura',
     name: 'Sakura',
     blurb: 'Low spreading limbs under a cloud of blossom',
-    axiom: '!(1)F(LEN*0.45)A(1)',
+    axiom: '!(1)F(LEN*0.25)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[K(1.1)][/(72)&(26)K(1.0)][/(144)^(20)K(1.05)][/(216)&(30)K(0.95)][/(288)^(16)K(1.0)]
 
 # Outer twigs are smothered in blossom
@@ -350,7 +345,7 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
     id: 'rowan',
     name: 'Rowan',
     blurb: 'Upright and airy, hung with orange berries',
-    axiom: '!(1)F(LEN*0.9)A(1)',
+    axiom: '!(1)F(LEN*0.45)A(1)',
     rules: `# Sorbus aucuparia: a slender, steeply ascending tree with an open oval
 # crown. Narrow branch angles and a strong upward tropism are what keep it
 # from spreading into an oak.
@@ -395,7 +390,7 @@ A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
     name: 'Baobab',
     blurb: 'Colossal trunk, stubby crown of thick limbs',
     // A baobab is mostly trunk: a great bottle with the crown on top.
-    axiom: '!(1)F(LEN*1.5)A(1)',
+    axiom: '!(1)F(LEN*0.8)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.8)][/(72)&(30)L(0.75)][/(144)^(20)L(0.8)][/(216)&(26)L(0.7)][/(288)^(16)L(0.75)]
 
 # Stubby outer twigs carry the whole canopy
