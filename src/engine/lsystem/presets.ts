@@ -125,19 +125,20 @@ A(s) -> /(rand(0,90))[&(ANG*rand(0.45,0.65))B(s*0.92)][/(180)&(ANG*rand(0.45,0.6
 # way willow wood does. The outer ones shed whips from every node.
 B(s) : s > 0.4 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.64)]+(rand(-12,12))^(rand(0,8))B(s*0.86)
 B(s) : s > 0.14 -> F(LEN*s)[V][/(180)&(55)L(0.9)]/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.62)]+(rand(-12,12))^(rand(0,8))B(s*0.85)
-B(s) -> [V][/(120)V][/(240)V]
+B(s) -> [V][/(180)V]
 
 # A whip leaves rising, as new growth does, and its own weight turns it
 # over within a step or two and hangs it plumb
 V -> [$+(rand(-60,60))&(rand(15,45))T(-2.2)W(0)]
 
-# Fine, unbranched and leafy all the way down. The second argument to F
-# fixes its width, in ordinary tips, so the pipe model cannot swell it.
-W(j) : j < 11 -> F(LEN*0.26, 1.3)[/(60)&(34)L(0.85)][/(200)&(28)L(0.8)]/(137.5)W(j+1)
+# Fine, unbranched, and crowded with leaves all the way down, so each one
+# hangs as a feathery rope. The second argument to F fixes its width, in
+# ordinary tips, so the pipe model cannot swell it.
+W(j) : j < 11 -> F(LEN*0.26, 1.3)[/(40)&(20)L(0.9)][/(160)&(16)L(0.85)][/(280)&(22)L(0.8)]/(137.5)W(j+1)
 W(j) -> L(0.7)`,
     params: {
       iterations: 28,
-      angle: 40,
+      angle: 45,
       step: 1.3,
       shrink: 0.9,
       trunkRadius: 0.38,
@@ -145,7 +146,7 @@ W(j) -> L(0.7)`,
       // Willow wood tapers hard: limbs that start as thick as a leg end in
       // twigs no thicker than the whips they carry.
       pipeExponent: 1.6,
-      leafScale: 0.15,
+      leafScale: 0.17,
       leafShape: 3,
       windiness: 1.5,
     },
@@ -155,8 +156,9 @@ W(j) -> L(0.7)`,
       barkLight: 0x847a64,
       twig: 0x9a8f58,
       moss: 0x4a5a2c,
-      leafBase: 0x4f7430,
-      leafTip: 0xb3c766,
+      // Fresh and light, yellow-green where the light comes through.
+      leafBase: 0x5b8a34,
+      leafTip: 0xc2d872,
       leafAutumn: 0xd0a72e,
       blossom: 0xeee0c0,
     },

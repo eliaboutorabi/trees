@@ -978,8 +978,28 @@ function mergeTemplates(parts: { tpl: LeafTemplate; quat: Quaternion; scale: num
 
 function leafTemplate(shape: 0 | 1 | 2 | 3): LeafTemplate {
   if (shape === 3) {
-    // Lance: long, narrow and drooping, the way a willow leaf hangs.
-    return bladeTemplate(0.13, 1.7, 0.035, 0.34, 3, 6);
+    // Lance: a spray of four long, narrow, drooping blades, staggered down
+    // the shoot and turned round it, the way willow leaves crowd a whip so it
+    // hangs as a feathery rope rather than a string with leaves on it. A
+    // blade this narrow needs no midrib column, so four cost what one oak
+    // leaf does.
+    const blade = bladeTemplate(0.12, 1.55, 0, 0.32, 2, 4);
+    const Y = new Vector3(0, 1, 0);
+    const Z = new Vector3(0, 0, 1);
+    const spray = [
+      { along: 0, splay: 0.08, turn: 0, scale: 1 },
+      { along: 0.3, splay: 0.36, turn: 1.6, scale: 0.88 },
+      { along: 0.58, splay: -0.32, turn: -1.4, scale: 0.94 },
+      { along: 0.86, splay: 0.28, turn: 3.0, scale: 0.82 },
+    ];
+    return mergeTemplates(
+      spray.map((leaf) => ({
+        tpl: blade,
+        quat: new Quaternion().setFromAxisAngle(Y, leaf.turn).multiply(new Quaternion().setFromAxisAngle(Z, leaf.splay)),
+        scale: leaf.scale,
+        offset: new Vector3(0, leaf.along, 0),
+      })),
+    );
   }
 
   if (shape === 1) {
