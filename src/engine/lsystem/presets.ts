@@ -68,7 +68,8 @@ export const PRESETS: Preset[] = [
     id: 'oak',
     name: 'Oak',
     blurb: 'Sturdy trunk, wide gnarled crown',
-    axiom: '!(1)A(1)',
+    // A clear bole under the crown, as an oak grown in the open has.
+    axiom: '!(1)F(LEN*1.15)A(1)',
     rules: `# Terminal generation: the last apex becomes a leafy shoot rather than
 # a single rosette, so leaves spread along the twig instead of bunching
 A(s) : n >= N-1 -> F(LEN*s*0.4)[&(38)L(1.15)]/(137.5)F(LEN*s*0.3)[&(30)L(1.0)]/(137.5)F(LEN*s*0.3)[&(42)L(1.1)]/(137.5)[&(25)L(0.95)][/(150)&(34)L(1.05)]
@@ -86,7 +87,7 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
       angle: 34,
       step: 1.403,
       shrink: 0.88,
-      trunkRadius: 0.32,
+      trunkRadius: 0.36,
       tropism: 0.041,
       pipeExponent: 2.3,
       leafScale: 0.14,
@@ -172,7 +173,8 @@ W(s, j) -> L(0.85)`,
     id: 'pine',
     name: 'Pine',
     blurb: 'Conical, four-branch whorls, needle sprays',
-    axiom: '!(1)A(1)',
+    // The lowest whorls are long gone on a grown pine: a bare trunk first.
+    axiom: '!(1)F(LEN*2.2)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.6)][/(120)L(0.6)][/(240)L(0.6)]
 
 # A whorl of five near-horizontal limbs, then the leader carries on up
@@ -219,7 +221,7 @@ B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
     id: 'birch',
     name: 'Birch',
     blurb: 'Slender and upright, sparse airy canopy',
-    axiom: '!(1)A(1)',
+    axiom: '!(1)F(LEN*1.3)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(1.0)][/(96)&(30)L(0.9)][/(192)^(22)L(0.95)][/(288)&(26)L(0.85)]
 
 # Thin shoots leaf out along their length
@@ -257,7 +259,7 @@ A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
     id: 'sakura',
     name: 'Sakura',
     blurb: 'Low spreading limbs under a cloud of blossom',
-    axiom: '!(1)A(1)',
+    axiom: '!(1)F(LEN*0.45)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[K(1.1)][/(72)&(26)K(1.0)][/(144)^(20)K(1.05)][/(216)&(30)K(0.95)][/(288)^(16)K(1.0)]
 
 # Outer twigs are smothered in blossom
@@ -351,7 +353,7 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
     id: 'rowan',
     name: 'Rowan',
     blurb: 'Upright and airy, hung with orange berries',
-    axiom: '!(1)A(1)',
+    axiom: '!(1)F(LEN*0.9)A(1)',
     rules: `# Sorbus aucuparia: a slender, steeply ascending tree with an open oval
 # crown. Narrow branch angles and a strong upward tropism are what keep it
 # from spreading into an oak.
@@ -395,7 +397,8 @@ A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
     id: 'baobab',
     name: 'Baobab',
     blurb: 'Colossal trunk, stubby crown of thick limbs',
-    axiom: '!(1)A(1)',
+    // A baobab is mostly trunk: a great bottle with the crown on top.
+    axiom: '!(1)F(LEN*1.5)A(1)',
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.8)][/(72)&(30)L(0.75)][/(144)^(20)L(0.8)][/(216)&(26)L(0.7)][/(288)^(16)L(0.75)]
 
 # Stubby outer twigs carry the whole canopy

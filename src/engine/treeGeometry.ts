@@ -167,6 +167,7 @@ function resampleStrand(
   radii: number[],
   arcs: number[],
   minPiece: number,
+  seed: number,
   out: { centers: number[]; radii: number[]; arcs: number[] },
 ): void {
   const n = radii.length;
@@ -186,6 +187,35 @@ function resampleStrand(
     const t1 = t0 + (i > 0 ? knot(i - 1, i) : knot(i, i + 1));
     const t2 = t1 + knot(i, i + 1);
     const t3 = t2 + (i + 2 < n ? knot(i + 1, i + 2) : knot(i, i + 1));
+    // A long internode is not a ruled line either. Wood grows toward light
+    // and away from load a little differently each season, so a span bows
+    // gently between the places where it forks — never at them, so whatever
+    // grows from a node stays on it.
+    const h = Math.sin((i + 1) * 12.9898 + seed * 78.233) * 43758.5453;
+    const spin = (h - Math.floor(h)) * Math.PI * 2;
+    const bow = Math.min(r * 0.45, len * 0.04);
+    const sx = at(i + 1, 0) - at(i, 0);
+    const sy = at(i + 1, 1) - at(i, 1);
+    const sz = at(i + 1, 2) - at(i, 2);
+    // A direction across the span: any perpendicular, turned by `spin`.
+    let ux = -sz;
+    let uy = 0;
+    let uz = sx;
+    let ul = Math.hypot(ux, uy, uz);
+    if (ul < 1e-6) {
+      ux = 1;
+      uz = 0;
+      ul = 1;
+    }
+    ux /= ul;
+    uz /= ul;
+    const sl = Math.max(1e-6, len);
+    const vx = (sy * uz - sz * uy) / sl;
+    const vy = (sz * ux - sx * uz) / sl;
+    const vz = (sx * uy - sy * ux) / sl;
+    const bx = (ux * Math.cos(spin) + vx * Math.sin(spin)) * bow;
+    const by = (uy * Math.cos(spin) + vy * Math.sin(spin)) * bow;
+    const bz = (uz * Math.cos(spin) + vz * Math.sin(spin)) * bow;
     for (let s = 0; s < pieces; s++) {
       const f = s / pieces;
       if (s === 0) {
@@ -205,6 +235,11 @@ function resampleStrand(
           const b2 = ((t3 - t) * a2 + (t - t1) * a3) / (t3 - t1);
           out.centers.push(((t2 - t) * b1 + (t - t1) * b2) / (t2 - t1));
         }
+        const lift = Math.sin(Math.PI * f);
+        const o = out.centers.length - 3;
+        out.centers[o] += bx * lift;
+        out.centers[o + 1] += by * lift;
+        out.centers[o + 2] += bz * lift;
       }
       // Radius eases between nodes rather than stepping, never past either.
       const e = f * f * (3 - 2 * f);
@@ -567,7 +602,7 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan): 
     let radii = raw.radii;
     let arcs = raw.arcs;
     if (curved) {
-      resampleStrand(raw.centers, raw.radii, raw.arcs, rootRadius * 0.5, smooth);
+      resampleStrand(raw.centers, raw.radii, raw.arcs, rootRadius * 0.5, strandSeed, smooth);
       centers = smooth.centers;
       radii = smooth.radii;
       arcs = smooth.arcs;
