@@ -75,22 +75,24 @@ export const PRESETS: Preset[] = [
 A(s) : n >= N-1 -> F(LEN*s*0.4)[&(38)L(1.15)]/(137.5)F(LEN*s*0.3)[&(30)L(1.0)]/(137.5)F(LEN*s*0.3)[&(42)L(1.1)]/(137.5)[&(25)L(0.95)][/(150)&(34)L(1.05)]
 
 # Outer crown: same fork, but leafing out as it runs
-A(s) : s > 0.16 && s < 0.52 -> F(LEN*s)[&(52)L(0.85)][/(180)&(46)L(0.8)]/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.80)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.78)]^(rand(1,7))A(s*SHRINK)
+A(s) : s > 0.16 && s < 0.52 -> F(LEN*s)[&(52)L(0.85)][/(180)&(46)L(0.8)]/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.90)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.88)]^(rand(1,7))A(s*SHRINK*0.84)
 
-# Structural limbs, still too thick to carry leaves
-A(s) : s > 0.16 -> F(LEN*s)/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.80)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.78)]^(rand(1,7))A(s*SHRINK)
+# Structural limbs, still too thick to carry leaves. The leader gives way
+# to them, as it does on an oak grown in the open, so the crown spreads
+# wider than the tree is tall
+A(s) : s > 0.16 -> F(LEN*s)/(137.5)[&(ANG*rand(0.75,1.25))A(s*SHRINK*0.90)][/(155)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.88)]^(rand(1,7))A(s*SHRINK*0.84)
 
 # Too thin to branch again
 A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
     params: {
       iterations: 10,
-      angle: 34,
-      step: 1.403,
+      angle: 52,
+      step: 1.85,
       shrink: 0.88,
       trunkRadius: 0.36,
-      tropism: 0.041,
+      tropism: 0,
       pipeExponent: 2.3,
-      leafScale: 0.14,
+      leafScale: 0.155,
       leafShape: 0,
       windiness: 1,
     },
@@ -118,12 +120,12 @@ A(s) -> F(LEN*s*0.8)[L(1.1)][/(120)&(30)L(1.0)][/(240)^(20)L(1.05)]`,
 # outer crown, a veil over the whole tree.
 
 # The trunk climbs, throwing a limb at each node, and divides near the top
-A(s) : s > 0.6 -> F(LEN*s)/(rand(115,165))[&(ANG*rand(1.0,1.3))B(s*0.74)]^(rand(2,7))A(s*0.88)
+A(s) : s > 0.6 -> F(LEN*s)/(rand(115,165))[&(ANG*rand(1.0,1.3))B(s*0.74)]^(rand(2,7))A(s*0.8)
 A(s) -> /(rand(0,90))[&(ANG*rand(0.45,0.65))B(s*0.92)][/(180)&(ANG*rand(0.45,0.65))B(s*0.88)]
 
 # Limbs ascend and spread, forking as they go and bending at each fork the
 # way willow wood does. The outer ones shed whips from every node.
-B(s) : s > 0.4 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.64)]+(rand(-12,12))^(rand(0,8))B(s*0.86)
+B(s) : s > 0.4 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.64)]+(rand(-12,12))^(rand(0,8))B(s*0.9)
 B(s) : s > 0.14 -> F(LEN*s)[V][/(180)&(55)L(0.9)]/(137.5)[&(ANG*rand(0.8,1.2))B(s*0.62)]+(rand(-12,12))^(rand(0,8))B(s*0.85)
 B(s) -> [V][/(180)V]
 
@@ -138,11 +140,11 @@ W(j) : j < 11 -> F(LEN*0.26, 1.3)[/(40)&(20)L(0.9)][/(160)&(16)L(0.85)][/(280)&(
 W(j) -> L(0.7)`,
     params: {
       iterations: 28,
-      angle: 45,
+      angle: 56,
       step: 1.3,
       shrink: 0.9,
       trunkRadius: 0.38,
-      tropism: 0.02,
+      tropism: 0,
       // Willow wood tapers hard: limbs that start as thick as a leg end in
       // twigs no thicker than the whips they carry.
       pipeExponent: 1.6,
@@ -219,19 +221,19 @@ B(s) -> [L(0.8)][/(120)L(0.75)][/(240)L(0.8)]`,
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(1.0)][/(96)&(30)L(0.9)][/(192)^(22)L(0.95)][/(288)&(26)L(0.85)]
 
 # Thin shoots leaf out along their length
-A(s) : s > 0.12 && s < 0.42 -> F(LEN*s)[&(56)L(0.85)][/(180)&(50)L(0.8)]/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.72)]^(rand(0,5))A(s*SHRINK)
+A(s) : s > 0.12 && s < 0.42 -> F(LEN*s)[&(56)L(0.85)][/(180)&(50)L(0.8)]/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.80)]^(rand(0,5))A(s*SHRINK*0.96)
 
 # A single alternating side shoot per node keeps the crown open
-A(s) : s > 0.12 -> F(LEN*s)/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.72)]^(rand(0,5))A(s*SHRINK)
+A(s) : s > 0.12 -> F(LEN*s)/(137.5)[&(ANG*rand(0.7,1.25))A(s*SHRINK*0.80)]^(rand(0,5))A(s*SHRINK*0.96)
 
 A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
     params: {
       iterations: 12,
-      angle: 28,
+      angle: 36,
       step: 1.22,
       shrink: 0.9,
       trunkRadius: 0.22,
-      tropism: 0.115,
+      tropism: 0.085,
       pipeExponent: 2.4,
       leafScale: 0.13,
       leafShape: 0,
@@ -257,15 +259,15 @@ A(s) -> F(LEN*s*0.9)[L(0.95)][/(120)&(28)L(0.9)][/(240)^(18)L(0.85)]`,
     rules: `A(s) : n >= N-1 -> F(LEN*s)[K(1.1)][/(72)&(26)K(1.0)][/(144)^(20)K(1.05)][/(216)&(30)K(0.95)][/(288)^(16)K(1.0)]
 
 # Outer twigs are smothered in blossom
-A(s) : s > 0.17 && s < 0.5 -> F(LEN*s)[&(50)K(0.95)][/(180)&(44)K(0.9)]/(137.5)[&(ANG*rand(0.9,1.4))A(s*SHRINK*0.76)][/(165)&(ANG*rand(0.9,1.4))A(s*SHRINK*0.74)]^(rand(2,10))A(s*SHRINK*0.97)
+A(s) : s > 0.17 && s < 0.5 -> F(LEN*s)[&(50)K(0.95)][/(180)&(44)K(0.9)]/(137.5)[&(ANG*rand(0.9,1.4))A(s*SHRINK*0.90)][/(165)&(ANG*rand(0.9,1.4))A(s*SHRINK*0.88)]^(rand(2,10))A(s*SHRINK*0.84)
 
-A(s) : s > 0.17 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.4))A(s*SHRINK*0.76)][/(165)&(ANG*rand(0.9,1.4))A(s*SHRINK*0.74)]^(rand(2,10))A(s*SHRINK*0.97)
+A(s) : s > 0.17 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.4))A(s*SHRINK*0.90)][/(165)&(ANG*rand(0.9,1.4))A(s*SHRINK*0.88)]^(rand(2,10))A(s*SHRINK*0.84)
 
 A(s) -> F(LEN*s*0.8)[K(1.0)][/(90)&(28)L(0.6)][/(200)^(20)K(0.9)]`,
     params: {
       iterations: 10,
-      angle: 42,
-      step: 1.281,
+      angle: 50,
+      step: 1.6,
       shrink: 0.87,
       trunkRadius: 0.36,
       tropism: -0.016,
@@ -304,21 +306,21 @@ A(s) -> F(LEN*s*0.8)[K(1.0)][/(90)&(28)L(0.6)][/(200)^(20)K(0.9)]`,
 A(s) : n >= N-1 -> F(LEN*s*0.5)[&(40)L(1.05)]/(137.5)F(LEN*s*0.35)[&(32)L(1.0)][/(160)&(44)L(0.95)]/(137.5)[&(26)L(1.05)]
 
 # Fruiting wood: short, twiggy, and leafing out as it goes
-A(s) : s > 0.15 && s < 0.46 -> F(LEN*s*0.9)[&(58)L(0.9)][/(175)&(50)L(0.85)]/(137.5)[&(ANG*rand(0.85,1.3))A(s*SHRINK*0.74)][/(150)&(ANG*rand(0.9,1.35))A(s*SHRINK*0.72)]^(rand(3,11))A(s*SHRINK*0.93)
+A(s) : s > 0.15 && s < 0.46 -> F(LEN*s*0.9)[&(58)L(0.9)][/(175)&(50)L(0.85)]/(137.5)[&(ANG*rand(0.85,1.3))A(s*SHRINK*0.86)][/(150)&(ANG*rand(0.9,1.35))A(s*SHRINK*0.84)]^(rand(3,11))A(s*SHRINK*0.86)
 
 # Scaffold limbs sweep out and up, leaving the middle of the crown open
-A(s) : s > 0.15 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.25))A(s*SHRINK*0.80)][/(148)&(ANG*rand(0.95,1.3))A(s*SHRINK*0.78)]^(rand(2,8))A(s*SHRINK*0.96)
+A(s) : s > 0.15 -> F(LEN*s)/(137.5)[&(ANG*rand(0.9,1.25))A(s*SHRINK*0.90)][/(148)&(ANG*rand(0.95,1.3))A(s*SHRINK*0.88)]^(rand(2,8))A(s*SHRINK*0.86)
 
 A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
     params: {
       iterations: 10,
-      angle: 46,
-      step: 1.22,
+      angle: 58,
+      step: 1.4,
       shrink: 0.86,
       trunkRadius: 0.26,
       tropism: 0.025,
       pipeExponent: 2.2,
-      leafScale: 0.165,
+      leafScale: 0.18,
       leafShape: 0,
       windiness: 1,
       // The orchard grammar is deliberately open, so it carries far fewer
@@ -354,20 +356,20 @@ A(s) -> F(LEN*s*0.7)[L(1.0)][/(115)&(34)L(0.95)][/(235)^(22)L(1.0)]`,
 
 A(s) : n >= N-1 -> F(LEN*s*0.45)[&(30)L(0.95)][/(150)&(36)L(0.9)]/(137.5)F(LEN*s*0.35)[&(24)L(0.95)][/(170)&(32)L(0.85)]
 
-A(s) : s > 0.14 && s < 0.5 -> F(LEN*s)[&(46)L(0.85)][/(185)&(40)L(0.8)]/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.78)][/(160)&(ANG*rand(0.85,1.3))A(s*SHRINK*0.76)]^(rand(2,7))A(s*SHRINK*0.95)
+A(s) : s > 0.14 && s < 0.5 -> F(LEN*s)[&(46)L(0.85)][/(185)&(40)L(0.8)]/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.82)][/(160)&(ANG*rand(0.85,1.3))A(s*SHRINK*0.80)]^(rand(2,7))A(s*SHRINK*0.86)
 
-A(s) : s > 0.14 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.78)][/(160)&(ANG*rand(0.85,1.3))A(s*SHRINK*0.76)]^(rand(1,6))A(s*SHRINK*0.97)
+A(s) : s > 0.14 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.25))A(s*SHRINK*0.82)][/(160)&(ANG*rand(0.85,1.3))A(s*SHRINK*0.80)]^(rand(1,6))A(s*SHRINK*0.88)
 
 A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
     params: {
       iterations: 11,
-      angle: 30,
-      step: 1.22,
+      angle: 38,
+      step: 1.5,
       shrink: 0.88,
       trunkRadius: 0.2,
-      tropism: 0.107,
+      tropism: 0.077,
       pipeExponent: 2.4,
-      leafScale: 0.1,
+      leafScale: 0.11,
       leafShape: 3,
       windiness: 1.2,
       fruitDensity: 0.55,
@@ -396,20 +398,20 @@ A(s) -> F(LEN*s*0.8)[L(0.9)][/(125)&(26)L(0.85)][/(245)^(18)L(0.9)]`,
     rules: `A(s) : n >= N-1 -> F(LEN*s)[L(0.8)][/(72)&(30)L(0.75)][/(144)^(20)L(0.8)][/(216)&(26)L(0.7)][/(288)^(16)L(0.75)]
 
 # Stubby outer twigs carry the whole canopy
-A(s) : s > 0.10 && s < 0.42 -> F(LEN*s)[&(54)L(0.7)][/(180)&(48)L(0.65)]/(137.5)[&(ANG*rand(0.8,1.3))A(s*SHRINK*0.70)][/(140)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.68)]A(s*SHRINK*0.95)
+A(s) : s > 0.10 && s < 0.42 -> F(LEN*s)[&(54)L(0.7)][/(180)&(48)L(0.65)]/(137.5)[&(ANG*rand(0.8,1.3))A(s*SHRINK*0.80)][/(140)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.78)]A(s*SHRINK*0.82)
 
-A(s) : s > 0.10 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.3))A(s*SHRINK*0.70)][/(140)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.68)][/(260)&(ANG*rand(0.9,1.2))A(s*SHRINK*0.66)]A(s*SHRINK*0.95)
+A(s) : s > 0.10 -> F(LEN*s)/(137.5)[&(ANG*rand(0.8,1.3))A(s*SHRINK*0.80)][/(140)&(ANG*rand(0.8,1.3))A(s*SHRINK*0.78)][/(260)&(ANG*rand(0.9,1.2))A(s*SHRINK*0.76)]A(s*SHRINK*0.82)
 
 A(s) -> F(LEN*s*0.7)[L(0.75)][/(120)&(28)L(0.7)][/(240)^(18)L(0.8)]`,
     params: {
       iterations: 12,
-      angle: 38,
-      step: 1.342,
+      angle: 46,
+      step: 1.7,
       shrink: 0.88,
       trunkRadius: 0.62,
-      tropism: 0.066,
+      tropism: 0.036,
       pipeExponent: 1.85,
-      leafScale: 0.115,
+      leafScale: 0.13,
       leafShape: 0,
       windiness: 0.7,
     },
