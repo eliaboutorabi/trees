@@ -354,6 +354,18 @@ autumn and stay up through the snow, as reeds do where the grass is buried.
 - **A robin.** When the ice closes, the ducks slip under the water rather than
   vanishing on the surface, and a robin comes to hop between the snowy tops of
   the stones.
+- **Red fish** ([`pondFish.ts`](src/render/pondFish.ts)): goldfish and a few
+  red-and-white koi. They have no meshes. A fish under the surface is only
+  ever seen *through* it, so the water's own shader draws them. The view ray
+  bends as it enters the water (Snell's law, through the rippled surface, so
+  they shimmer as ripples pass), then carries on down to each fish's depth.
+  That's why a fish slides against the surface as you walk round the pond,
+  and why the glare of a glancing view hides it. Each sends a wave down its
+  body as it swims and lays a soft shadow on the bed, along the sun's
+  bent ray. They wander, school loosely, dart and glide, shy from a passing
+  duck, and now and then rise to kiss the surface, leaving a ring. Hold the
+  pointer over the water and they come and mill about under it. Under the
+  ice they sink to the bottom and barely move till spring.
 
 The whole pond — water, mirror, bank, lilies and ducks — costs about 1.2 ms a
 frame.

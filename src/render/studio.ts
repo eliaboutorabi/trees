@@ -22,6 +22,7 @@ import { getPreset, Tree, type Palette, type TreeInfo, type TreeStructure } from
 import { createLandscape, DEFAULT_LANDSCAPE } from './landscape';
 import { createMeadow } from './meadow';
 import { createPond } from './pond';
+import { POND, pondField } from './pondShape';
 import { createPostPipeline } from './post';
 import { createAurora, ProceduralSky, sunDirection, type Aurora, type SkySettings } from './sky';
 import { getSeason, snowTintFor, type Season, type Weather } from './season';
@@ -1030,6 +1031,24 @@ export class TreeStudio {
   };
 
   /**
+   * Where on the pond's surface the pointer is, if it is over the water and
+   * not orbiting the camera: the fish come to it.
+   */
+  private pointOnWater(): Vector3 | null {
+    if (!this.pointerInside || this.dragging) return null;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const { origin, direction } = this.raycaster.ray;
+    if (direction.y > -1e-3) return null;
+    const t = (POND.level - origin.y) / direction.y;
+    if (t <= 0) return null;
+    const x = origin.x + direction.x * t;
+    const z = origin.z + direction.z * t;
+    if (pondField(x, z) > 0.95) return null;
+    return this.lure.set(x, POND.level, z);
+  }
+  private readonly lure = new Vector3();
+
+  /**
    * Chase the point on the tree the pointer is over.
    *
    * Not a hit test against the mesh, for two reasons. Growth and wind both move
@@ -1171,7 +1190,7 @@ export class TreeStudio {
     this.updateHover(dt);
     this.flock.update(dt);
     this.meadow.update(dt);
-    this.pond.update(dt, this.seasonTarget.ducks);
+    this.pond.update(dt, this.seasonTarget.ducks, this.pointOnWater());
 
     this.easeSeason(dt);
 
