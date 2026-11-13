@@ -11,7 +11,7 @@
  * coloured berries reads as plastic.
  */
 import { DoubleSide, MeshPhysicalNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { cameraPosition, float, mix, normalWorld, positionWorld, smoothstep, step, uv, vec2, vec3 } from 'three/tsl';
+import { cameraPosition, float, mix, normalWorld, positionWorld, reflect, smoothstep, step, uv, vec2, vec3 } from 'three/tsl';
 import { attribute, uniformArray } from 'three/tsl';
 import { growthPosition, rotateAboutAxis, treeParams, vec3Attribute, type TreeUniforms } from './shared';
 
@@ -201,40 +201,56 @@ export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): Fruit
     .mul(Math.PI * 2)
     .add(vary.mul(6.283))
     .add(st.y.mul(2.6).add(vary.mul(11.0)).sin().mul(0.4));
-  // Integer harmonics, so the stripes meet themselves cleanly at the UV seam —
-  // and high ones. Broad, low-frequency bands do not read as apple striping at
-  // all; nine of them around a fruit reads as the ribbing on a pumpkin, which
-  // is exactly what the first attempt produced.
-  const stripe = around
-    .mul(17)
+  // Integer harmonics, so the streaks meet themselves cleanly at the UV seam,
+  // and fine ones. Bold, regular bands — what this used to paint — read as a
+  // striped lantern or a pumpkin; on a real apple the streaking is a fine,
+  // broken flecking *within* the red, seen only up close.
+  const streak = around
+    .mul(37)
     .sin()
-    .mul(0.45)
-    .add(around.mul(31).sin().mul(0.3))
-    .add(around.mul(53).sin().mul(0.25))
+    .mul(0.4)
+    .add(around.mul(61).add(st.y.mul(3.1)).sin().mul(0.35))
+    .add(around.mul(89).sin().mul(0.25))
     .mul(0.5)
     .add(0.5);
 
-  // Red is the base and the ground colour shows *through* it, not the other way
-  // round: strongest toward the calyx and on the shaded side, and never more
-  // than partial, with the stripes making the boundary ragged.
-  const bare = smoothstep(
-    0.5,
-    1.0,
-    st.y.oneMinus().mul(0.45).add(sunward.oneMinus().mul(0.3)).add(stripe.mul(0.5)),
+  /*
+   * Where the red lies. A blush, not a paint job: heaviest on the cheek that
+   * faces the sun and over the shoulders, breaking up in soft mottled patches,
+   * thinning toward the blossom end, and giving way to the yellow-green ground
+   * colour down in the stalk's cavity, as it does on a Gala or a Cox.
+   */
+  const mottle = around
+    .mul(3)
+    .add(st.y.mul(4.2))
+    .add(vary.mul(9.0))
+    .sin()
+    .mul(around.mul(2).sub(st.y.mul(3.3)).add(vary.mul(4.0)).sin())
+    .mul(0.5)
+    .add(around.mul(5).add(st.y.mul(1.7)).sin().mul(0.25));
+  const cavity = smoothstep(0.86, 0.99, st.y);
+  const blossomEnd = st.y.oneMinus().pow(3);
+  const cover = smoothstep(
+    0.18,
+    0.62,
+    float(0.6).add(sunward.mul(0.3)).add(mottle.mul(0.26)).add(streak.sub(0.5).mul(0.14)).sub(blossomEnd.mul(0.42)).sub(cavity.mul(0.5)),
   );
-  const striped = mix(plain, u.fruitGround, bare.mul(0.62));
+  // Within the red, darker and lighter flecks run stem to calyx.
+  const reds = mix(plain.mul(0.86), plain.mul(1.06), streak.pow(1.2));
+  const striped = mix(u.fruitGround, reds, cover);
 
-  // Lenticels: one freckle per cell of a coarse grid, jittered and thinned out
-  // so they do not read as a regular dot pattern.
-  const cell = vec2(st.x.mul(30), st.y.mul(19));
+  // Lenticels: one freckle per cell of a fine grid, jittered and thinned out
+  // so they do not read as a regular dot pattern — pale on the red, barely
+  // there on the green.
+  const cell = vec2(st.x.mul(44), st.y.mul(26));
   const id = cell.floor();
   const rand = (a: number, b: number) => id.dot(vec2(a, b)).sin().mul(43758.5453).fract();
   const speck = smoothstep(
-    0.17,
-    0.05,
+    0.13,
+    0.04,
     cell.fract().sub(vec2(rand(127.1, 311.7).mul(0.6).add(0.2), rand(269.5, 183.3).mul(0.6).add(0.2))).length(),
-  ).mul(step(0.42, rand(419.2, 371.9)));
-  const freckled = mix(striped, striped.mul(0.5).add(vec3(0.26, 0.22, 0.13)), speck.mul(0.8));
+  ).mul(step(0.38, rand(419.2, 371.9)));
+  const freckled = mix(striped, striped.mul(0.55).add(vec3(0.3, 0.26, 0.15)), speck.mul(cover).mul(0.55));
 
   const skin = mix(plain, freckled, u.fruitMarkings);
 
@@ -270,17 +286,43 @@ export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): Fruit
   // just the dark scar at the bottom, which is `st.y` near zero for both fruit
   // shapes, so berries get a blossom end out of it too.
   const woody = step(1.05, st.y);
+  // The apple's leaf, tagged above 2: green, darker toward its tip, and
+  // turning with the tree's own leaves in autumn.
+  const leafy = step(1.9, st.y);
+  const leafColour = mix(vec3(0.2, 0.36, 0.09), vec3(0.11, 0.24, 0.05), st.y.sub(2).mul(2).clamp(0, 1)).mul(vary.mul(0.25).add(0.85));
+  const leafTurned = mix(leafColour, vec3(0.52, 0.33, 0.08), u.autumn);
   const calyx = smoothstep(0.05, 0.0, st.y).mul(woody.oneMinus());
   const dressed = mix(
-    mix(body.mul(shade.oneMinus()), vec3(0.13, 0.09, 0.05), calyx.mul(0.8).mul(u.fruitCone.oneMinus())),
-    vec3(0.17, 0.115, 0.062),
-    woody,
+    mix(
+      mix(body.mul(shade.oneMinus()), vec3(0.13, 0.09, 0.05), calyx.mul(0.8).mul(u.fruitCone.oneMinus())),
+      vec3(0.17, 0.115, 0.062),
+      woody,
+    ),
+    leafTurned.mul(shade.oneMinus()),
+    leafy,
   );
   material.colorNode = mix(
     dressed,
     vec3(0.58, 0.56, 0.52),
     grazing.mul(u.fruitWax).mul(0.45).mul(woody.oneMinus()).mul(u.fruitCone.oneMinus()),
   );
+
+  /*
+   * Polish. A fresh apple carries a hard, bright glint where the sun catches
+   * its wax — the single thing that makes it look polished rather than matte.
+   * It cannot come from the renderer's own specular: turning that up mirrors
+   * the whole sky round every apple and washes the red to pink (see below).
+   * So the glint is the sun's alone, worked out here and added on top: a
+   * tight hot spot and a softer sheen round it, scaled by the gloss slider,
+   * dimmed inside the canopy's shade, gone at night.
+   */
+  const toEye = cameraPosition.sub(positionWorld).normalize();
+  const mirrored = reflect(toEye.negate(), normalWorld);
+  const facing = mirrored.dot(u.sunDir).clamp(0, 1);
+  const glint = facing.pow(90).mul(1.4).add(facing.pow(14).mul(0.16));
+  const lit = smoothstep(-0.02, 0.12, u.sunDir.y).mul(u.night.oneMinus()).mul(occlusion.mul(0.85).oneMinus());
+  const polished = woody.oneMinus().mul(leafy.oneMinus()).mul(u.fruitCone.oneMinus()).mul(u.fruitGloss.mul(1.6).add(0.2));
+  material.emissiveNode = u.sunColor.mul(glint).mul(lit).mul(polished);
 
   /*
    * Gloss controls how much sky the skin mirrors, not just how sharply.
@@ -329,6 +371,7 @@ export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): Fruit
   material.roughnessNode = mix(float(0.68), float(0.13), u.fruitGloss)
     .add(belly.mul(0.08))
     .add(woody.mul(0.5))
+    .add(leafy.mul(0.1))
     // Dry, fibrous, and not remotely glossy.
     .add(u.fruitCone.mul(0.45))
     .clamp(0.05, 1);

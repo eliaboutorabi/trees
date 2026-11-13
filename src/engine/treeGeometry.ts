@@ -1077,7 +1077,7 @@ function flowerTemplate(): LeafTemplate {
  * clusters them at both poles. Evenly spaced rings put barely one sample inside
  * the stem well and it renders as a crude notch.
  */
-function appleTemplate(radius = 0.44, segments = 12, rings = 12): LeafTemplate {
+function appleTemplate(radius = 0.44, segments = 18, rings = 14): LeafTemplate {
   const position: number[] = [];
   const normal: number[] = [];
   const uv: number[] = [];
@@ -1183,6 +1183,33 @@ function appleTemplate(radius = 0.44, segments = 12, rings = 12): LeafTemplate {
       const i0 = stemBase + r * stemStride + s;
       const i1 = i0 + stemStride;
       index.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1);
+    }
+  }
+
+  // A single leaf off the stalk, the way an apple comes off the tree with one.
+  // Folded a little along its midrib and tipped out and up; tagged with a UV
+  // above 2 so the shader paints it leaf-green. Both faces are in the mesh, as
+  // the fruit's material draws only front faces.
+  const leaf = bladeTemplate(0.2, 1.0, 0.16, 0.18, 3, 4);
+  const along = radius * 0.78;
+  const attach = new Vector3(radius * 0.035, wellFloor + radius * 0.4, 0);
+  const tilt = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(0.82, 0.48, 0.3).normalize());
+  const lv = new Vector3();
+  for (const face of [1, -1]) {
+    const base = position.length / 3;
+    for (let i = 0; i < leaf.position.length; i += 3) {
+      lv.set(leaf.position[i], leaf.position[i + 1], leaf.position[i + 2]).multiplyScalar(along).applyQuaternion(tilt).add(attach);
+      position.push(lv.x, lv.y, lv.z);
+      lv.set(leaf.normal[i], leaf.normal[i + 1], leaf.normal[i + 2]).applyQuaternion(tilt).multiplyScalar(face);
+      normal.push(lv.x, lv.y, lv.z);
+    }
+    for (let i = 0; i < leaf.uv.length; i += 2) uv.push(leaf.uv[i], 2 + leaf.uv[i + 1] * 0.5);
+    for (let i = 0; i < leaf.index.length; i += 3) {
+      const a = base + leaf.index[i];
+      const b = base + leaf.index[i + 1];
+      const c = base + leaf.index[i + 2];
+      if (face > 0) index.push(a, b, c);
+      else index.push(a, c, b);
     }
   }
 
