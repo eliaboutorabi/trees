@@ -289,7 +289,13 @@ export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): Fruit
   // The apple's leaf, tagged above 2: green, darker toward its tip, and
   // turning with the tree's own leaves in autumn.
   const leafy = step(1.9, st.y);
-  const leafColour = mix(vec3(0.2, 0.36, 0.09), vec3(0.11, 0.24, 0.05), st.y.sub(2).mul(2).clamp(0, 1)).mul(vary.mul(0.25).add(0.85));
+  // Fresh green, deepening toward its tip, with a paler midrib down it.
+  const midrib = smoothstep(0.1, 0.0, st.x.sub(0.5).abs());
+  const leafColour = mix(
+    mix(vec3(0.3, 0.52, 0.12), vec3(0.17, 0.37, 0.07), st.y.sub(2).mul(2).clamp(0, 1)),
+    vec3(0.5, 0.62, 0.24),
+    midrib.mul(0.6),
+  ).mul(vary.mul(0.2).add(0.9));
   const leafTurned = mix(leafColour, vec3(0.52, 0.33, 0.08), u.autumn);
   const calyx = smoothstep(0.05, 0.0, st.y).mul(woody.oneMinus());
   const dressed = mix(

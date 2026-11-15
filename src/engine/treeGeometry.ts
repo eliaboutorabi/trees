@@ -1158,16 +1158,18 @@ function appleTemplate(radius = 0.44, segments = 18, rings = 14): LeafTemplate {
   // shader can give it bark colour instead of skin — cheaper than a second
   // material for a dozen triangles.
   const stemBase = position.length / 3;
-  const stemSides = 5;
+  const stemSides = 6;
   const stemRings = 3;
   surface(0, 0, a);
   const wellFloor = a[1] - radius * 0.04;
   for (let r = 0; r <= stemRings; r++) {
     const t = r / stemRings;
-    const y = wellFloor + t * radius * 0.62;
+    // Long enough to stand clear of the well: the stalk is half of what
+    // makes an apple read as an apple at a glance.
+    const y = wellFloor + t * radius * 0.85;
     // Leans a little, and thickens where it meets the fruit.
-    const lean = t * t * radius * 0.07;
-    const rr = radius * (0.05 - 0.018 * t);
+    const lean = t * t * radius * 0.1;
+    const rr = radius * (0.068 - 0.024 * t);
     for (let s = 0; s <= stemSides; s++) {
       const th = (s / stemSides) * Math.PI * 2;
       const nx = Math.cos(th);
@@ -1186,14 +1188,17 @@ function appleTemplate(radius = 0.44, segments = 18, rings = 14): LeafTemplate {
     }
   }
 
-  // A single leaf off the stalk, the way an apple comes off the tree with one.
-  // Folded a little along its midrib and tipped out and up; tagged with a UV
-  // above 2 so the shader paints it leaf-green. Both faces are in the mesh, as
-  // the fruit's material draws only front faces.
-  const leaf = bladeTemplate(0.2, 1.0, 0.16, 0.18, 3, 4);
-  const along = radius * 0.78;
-  const attach = new Vector3(radius * 0.035, wellFloor + radius * 0.4, 0);
-  const tilt = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(0.82, 0.48, 0.3).normalize());
+  // A little leaf off the stalk, the way an apple comes off the tree with one.
+  // Big enough to read beside the fruit — near its own width, as on a real
+  // one; a third of that vanished among the tree's own leaves. Ovate and
+  // pointed, folded a little along its midrib, curving as it goes, and tipped
+  // out and up from near the top of the stalk. Tagged with a UV above 2 so
+  // the shader paints it leaf-green. Both faces are in the mesh, as the
+  // fruit's material draws only front faces.
+  const leaf = bladeTemplate(0.25, 1.0, 0.2, 0.22, 3, 5);
+  const along = radius * 1.5;
+  const attach = new Vector3(radius * 0.06, wellFloor + radius * 0.66, 0);
+  const tilt = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(0.84, 0.5, 0.22).normalize());
   const lv = new Vector3();
   for (const face of [1, -1]) {
     const base = position.length / 3;
