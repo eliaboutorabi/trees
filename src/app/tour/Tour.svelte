@@ -14,7 +14,7 @@
    * shown often moves while it is being shown: a card rising into place, a
    * button that grows on hover.
    */
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import Glyph from '../components/Glyph.svelte';
   import { cut } from '../components/paper';
@@ -22,14 +22,16 @@
 
   interface Props {
     stops: TourStop[];
+    /** Which stop to begin at. */
+    start?: number;
     /** Set the scene up for a step: open the card it is about, say. */
     onstage: (stop: TourStop) => void;
     onclose: () => void;
   }
 
-  let { stops, onstage, onclose }: Props = $props();
+  let { stops, start = 0, onstage, onclose }: Props = $props();
 
-  let index = $state(0);
+  let index = $state(untrack(() => Math.min(Math.max(0, start), stops.length - 1)));
   const stop = $derived(stops[Math.min(index, stops.length - 1)]);
   const last = $derived(index >= stops.length - 1);
   /** How far through the chapter, for its dots. */
@@ -123,7 +125,7 @@
   }
 
   onMount(() => {
-    onstage(stops[0]);
+    onstage(stops[index]);
     frame = requestAnimationFrame(track);
     requestAnimationFrame(() => next?.focus({ preventScroll: true }));
     const onKey = (e: KeyboardEvent) => {

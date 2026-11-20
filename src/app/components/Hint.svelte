@@ -10,6 +10,7 @@
    * button onto the "?" without the label vanishing on the way.
    */
   import type { Snippet } from 'svelte';
+  import Ask from './Ask.svelte';
 
   interface Props {
     label: string;
@@ -30,7 +31,7 @@
   <span class="tip" role="tooltip">
     <span class="text">{label}</span>
     {#if onhelp}
-      <button class="ask" onclick={onhelp} aria-label="Show me around: {label}" title="Show me around">?</button>
+      <Ask about={label} onclick={onhelp} size="small" />
     {/if}
   </span>
 </span>
@@ -66,7 +67,7 @@
       visibility 0s linear 0.22s;
   }
 
-  .tip:not(:has(.ask)) {
+  .tip:not(:has(button)) {
     padding-right: 0.66rem;
   }
 
@@ -158,32 +159,4 @@
     }
   }
 
-  /* The "?": a small seed of a button, warm, that wobbles when you near it. */
-  .ask {
-    display: grid;
-    place-items: center;
-    width: 1.3rem;
-    height: 1.3rem;
-    padding: 0;
-    border: none;
-    border-radius: 47% 53% 50% 50% / 52% 48% 52% 48%;
-    font-family: var(--serif);
-    font-size: 0.78rem;
-    font-weight: 700;
-    line-height: 1;
-    color: #fffaf0;
-    background: radial-gradient(120% 120% at 30% 25%, #e7b45c, #c98a2c);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset, 0 2px 6px rgba(120, 70, 10, 0.3);
-    cursor: pointer;
-    transition: transform 0.25s cubic-bezier(0.3, 1.8, 0.5, 1);
-  }
-
-  .ask:hover {
-    transform: rotate(-12deg) scale(1.14);
-  }
-
-  .ask:focus-visible {
-    outline: 2px solid #c98a2c;
-    outline-offset: 2px;
-  }
 </style>

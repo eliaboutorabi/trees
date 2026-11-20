@@ -38,6 +38,7 @@
   import { onMount, setContext, tick } from 'svelte';
   import { cubicIn } from 'svelte/easing';
   import Glyph from './Glyph.svelte';
+  import Ask from './Ask.svelte';
   import { MORE, type MoreHost } from './more';
   import { paperImage, paperPath, seedOf } from './paper';
 
@@ -58,9 +59,11 @@
     tools: Tool[];
     /** Anything else that lives in the dock — the growth controls. */
     children?: Snippet;
+    /** Open the tour at a tool's own part, from the "?" on its card. */
+    onhelp?: (id: string) => void;
   }
 
-  let { tools, children }: Props = $props();
+  let { tools, children, onhelp }: Props = $props();
 
   let hovered = $state<string | null>(null);
   let pinned = $state<string | null>(null);
@@ -391,6 +394,9 @@
             {more.label}
           </button>
         {/if}
+        {#if onhelp}
+          <span class="ask-slot" class:alone={!more}><Ask about={open.label} onclick={() => onhelp(open.id)} /></span>
+        {/if}
       </div>
       <div class="card__body">
         {@render open.panel()}
@@ -598,6 +604,15 @@
    * tool's colour at the top is all the colour it carries; the scene shows
    * through the rest of it.
    */
+  /* The "?" sits at the far end of the card's heading. */
+  .ask-slot {
+    display: inline-grid;
+    margin-left: 0.4rem;
+  }
+  .ask-slot.alone {
+    margin-left: auto;
+  }
+
   .card {
     position: fixed;
     z-index: 7;

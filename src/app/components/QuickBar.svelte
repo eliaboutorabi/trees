@@ -21,12 +21,15 @@
    * on the right: one tap each, always in reach, no card to open first.
    */
   import Glyph from './Glyph.svelte';
+  import Hint from './Hint.svelte';
 
   interface Props {
     items: Quick[];
+    /** Open the tour at one of these switches. */
+    onhelp?: (id: string) => void;
   }
 
-  let { items }: Props = $props();
+  let { items, onhelp }: Props = $props();
 
   const SHAPES = [
     ['52% 48% 55% 45% / 47% 55% 45% 53%', -2],
@@ -38,6 +41,7 @@
 
 <div class="quick" data-keep-clear data-tour="quick" role="toolbar" aria-label="Scene" aria-orientation="vertical">
   {#each items as q, i (q.id)}
+    <Hint label={q.label} side="right" onhelp={onhelp ? () => onhelp(q.id) : undefined}>
     <button
       class="pebble"
       class:on={q.on}
@@ -48,8 +52,8 @@
       onclick={q.toggle}
     >
       <Glyph name={q.icon} size={23} weight={1.75} />
-      <span class="tip">{q.label}</span>
     </button>
+    </Hint>
   {/each}
 </div>
 
@@ -123,38 +127,6 @@
     color: color-mix(in srgb, var(--tone-ink) 82%, #000 18%);
     --glyph-wash: #fffaf0;
     --glyph-wash-opacity: 0.72;
-  }
-
-  .tip {
-    position: absolute;
-    left: calc(100% + 0.6rem);
-    top: 50%;
-    transform: translate(-4px, -50%) rotate(calc(var(--tilt) * -1));
-    padding: 0.22rem 0.6rem 0.28rem;
-    border-radius: 11px 9px 12px 8px;
-    font-family: var(--serif);
-    font-size: 0.82rem;
-    font-weight: 500;
-    font-variation-settings: 'SOFT' 100;
-    white-space: nowrap;
-    color: var(--ink);
-    background: var(--sheen), var(--glass);
-    box-shadow: var(--rim), 0 6px 14px rgba(20, 14, 6, 0.16);
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      opacity 0.18s,
-      transform 0.18s;
-  }
-
-  @media (hover: hover) {
-    /* Frosted only while it shows: an invisible frost still costs a blur a frame. */
-    .pebble:hover .tip {
-      opacity: 1;
-      transform: translate(0, -50%) rotate(calc(var(--tilt) * -1));
-      backdrop-filter: var(--frost);
-      -webkit-backdrop-filter: var(--frost);
-    }
   }
 
   @media (max-width: 640px) {

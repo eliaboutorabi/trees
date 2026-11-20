@@ -126,15 +126,19 @@
    * it talks about through the dock, and puts them away when it is done.
    */
   let tour = $state<TourStop[] | null>(null);
+  let tourStart = $state(0);
   let dockApi = $state<{ show(id: string | null): void }>();
-  function startTour(chapters?: string[]) {
+  /** Play these chapters, or all of them; from the step about `at`, if given. */
+  function startTour(chapters?: string[], at?: string) {
     welcomeOpen = false;
     try {
       localStorage.setItem(WELCOMED, '1');
     } catch {
       // Remembered or not, the tour goes ahead.
     }
-    tour = stopsFor(chapters);
+    const stops = stopsFor(chapters);
+    tourStart = at ? Math.max(0, stops.findIndex((s) => s.step.target?.includes(`"${at}"`))) : 0;
+    tour = stops;
   }
   function stageTour(stop: TourStop) {
     if (stop.step.open !== undefined) dockApi?.show(stop.step.open);
@@ -702,27 +706,27 @@
       </div>
 
       <div class="actions">
-        <Hint label="Reframe the tree" align="end">
+        <Hint label="Reframe the tree" align="end" onhelp={() => startTour(['top'], 'top-reframe')}>
           <button class="round" style="--shape: 52% 48% 55% 45% / 47% 55% 45% 53%" onclick={() => studio?.frameTree(true)} aria-label="Reframe the tree" data-tour="top-reframe">
             <Glyph name="reframe" size={21} />
           </button>
         </Hint>
-        <Hint label="Save a picture" align="end">
+        <Hint label="Save a picture" align="end" onhelp={() => startTour(['top'], 'top-save')}>
           <button class="round" style="--shape: 46% 54% 49% 51% / 55% 46% 54% 45%" onclick={screenshot} aria-label="Save a picture" data-tour="top-save">
             <Glyph name="save" size={21} />
           </button>
         </Hint>
-        <Hint label={linkCopied ? 'Link copied' : 'Copy a link to this tree'} align="end">
+        <Hint label={linkCopied ? 'Link copied' : 'Copy a link to this tree'} align="end" onhelp={() => startTour(['top'], 'top-link')}>
           <button class="round" style="--shape: 55% 45% 51% 49% / 50% 56% 44% 50%" class:done={linkCopied} onclick={copyLink} aria-label="Copy a link to this tree" data-tour="top-link">
             <Glyph name={linkCopied ? 'done' : 'link'} size={21} />
           </button>
         </Hint>
-        <Hint label="Start this species over" align="end">
+        <Hint label="Start this species over" align="end" onhelp={() => startTour(['top'], 'top-reset')}>
           <button class="round" style="--shape: 49% 51% 45% 55% / 45% 50% 50% 55%" onclick={resetToDefaults} aria-label="Reset to defaults" data-tour="top-reset">
             <Glyph name="reset" size={21} />
           </button>
         </Hint>
-        <Hint label="The project on GitHub" align="end">
+        <Hint label="The project on GitHub" align="end" onhelp={() => startTour(['top'], 'top-github')}>
           <a
             class="round"
             style="--shape: 53% 47% 50% 50% / 48% 53% 47% 52%"
@@ -737,8 +741,9 @@
         </Hint>
       </div>
 
-      <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} />
+      <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
       <QuickBar
+        onhelp={(id) => startTour(['scene'], `quick-${id}`)}
         items={[
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
           { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
@@ -751,6 +756,7 @@
 
       <Dock
         bind:this={dockApi}
+        onhelp={(id) => startTour([id])}
         tools={[
           { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
@@ -778,7 +784,7 @@
 {/if}
 
 {#if tour}
-  <Tour stops={tour} onstage={stageTour} onclose={endTour} />
+  <Tour stops={tour} start={tourStart} onstage={stageTour} onclose={endTour} />
 {/if}
 
 {#snippet speciesPanel()}

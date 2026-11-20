@@ -13,6 +13,8 @@
    */
   import { onMount } from 'svelte';
   import Glyph from './Glyph.svelte';
+  import Hint from './Hint.svelte';
+  import Ask from './Ask.svelte';
 
   interface Props {
     /** 0 is a seed, 1 the grown tree. */
@@ -22,9 +24,11 @@
     holding?: boolean;
     onreplay: () => void;
     onregrow: () => void;
+    /** Open the tour at one of its parts: the bud, replay, or a new seed. */
+    onhelp?: (part: 'bud' | 'replay' | 'seed') => void;
   }
 
-  let { value, onscrub, holding = $bindable(false), onreplay, onregrow }: Props = $props();
+  let { value, onscrub, holding = $bindable(false), onreplay, onregrow, onhelp }: Props = $props();
 
   // The stem runs up a 44 × 200 box, swaying a little as it goes.
   const BOTTOM = 186;
@@ -109,7 +113,7 @@
 </script>
 
 <div class="stem" data-keep-clear data-tour="grow">
-  <span class="label">Grow</span>
+  <span class="label">Grow{#if onhelp}<span class="ask"><Ask about="Growing" onclick={() => onhelp('bud')} size="small" /></span>{/if}</span>
   <span class="end illustrated" aria-hidden="true"><Glyph name="trunk-stout" size={30} weight={1.5} /></span>
 
   <div class="track" data-tour="grow-bud">
@@ -168,12 +172,16 @@
   <span class="pct">{pct}<small>%</small></span>
 
   <div class="buttons">
-    <button onclick={onreplay} title="Watch it grow again (space)" aria-label="Replay growth" data-tour="grow-replay">
-      <Glyph name="play" size={16} weight={1.8} />
-    </button>
-    <button onclick={onregrow} title="Plant a new seed (R)" aria-label="Grow again from seed" data-tour="grow-seed">
-      <Glyph name="sprout" size={19} weight={1.8} />
-    </button>
+    <Hint label="Watch it grow again · space" side="left" onhelp={onhelp ? () => onhelp('replay') : undefined}>
+      <button onclick={onreplay} aria-label="Replay growth" data-tour="grow-replay">
+        <Glyph name="play" size={16} weight={1.8} />
+      </button>
+    </Hint>
+    <Hint label="Plant a new seed · R" side="left" onhelp={onhelp ? () => onhelp('seed') : undefined}>
+      <button onclick={onregrow} aria-label="Grow again from seed" data-tour="grow-seed">
+        <Glyph name="sprout" size={19} weight={1.8} />
+      </button>
+    </Hint>
   </div>
 </div>
 
@@ -361,6 +369,22 @@
     font-size: 0.7em;
     font-weight: 500;
     color: var(--ink-dim);
+  }
+
+  /* The "?" by the Grow label: hidden until the stem is hovered, so it does not crowd the label. */
+  .label .ask {
+    position: absolute;
+    margin: -0.35rem 0 0 0.15rem;
+    opacity: 0;
+    transform: scale(0.7);
+    transition:
+      opacity 0.2s,
+      transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .stem:hover .label .ask,
+  .label .ask:focus-within {
+    opacity: 1;
+    transform: scale(1);
   }
 
   .buttons {
