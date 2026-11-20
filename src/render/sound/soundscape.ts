@@ -61,7 +61,7 @@ export interface SoundState {
 }
 
 type Bus = 'air' | 'weather' | 'tree' | 'life' | 'music' | 'ui';
-const BUS_LEVEL: Record<Bus, number> = { air: 0.85, weather: 0.85, tree: 0.9, life: 0.8, music: 0.75, ui: 0.4 };
+const BUS_LEVEL: Record<Bus, number> = { air: 0.85, weather: 1, tree: 0.9, life: 0.8, music: 0.75, ui: 0.4 };
 
 /** Where a one-shot comes from: left–right on screen, and how loud from here. */
 export interface Placement {
@@ -106,7 +106,7 @@ class Loop {
 
   /** Where its level is heading, and over how long it gets there. */
   set(target: number, seconds = 0.35): void {
-    const t = Math.max(0, Math.min(1.5, target));
+    const t = Math.max(0, Math.min(2, target));
     if (Math.abs(t - this.target) > 0.002) {
       this.out.gain.setTargetAtTime(t, this.scape.ctx.currentTime, seconds / 3);
       this.target = t;
@@ -268,16 +268,21 @@ export class Soundscape {
     // Browsers hold audio until someone touches the page; the switch that
     // turned sound on was that touch, but a return visit with it remembered
     // on has to wait for the first.
-    const wake = () => {
-      if (this.on) void this.ctx.resume();
-    };
-    window.addEventListener('pointerdown', wake, { passive: true });
-    window.addEventListener('keydown', wake);
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) void this.ctx.suspend();
-      else if (this.on) void this.ctx.resume();
-    });
+    window.addEventListener('pointerdown', this.wake, { passive: true });
+    window.addEventListener('keydown', this.wake);
+    document.addEventListener('visibilitychange', this.onVisibility);
   }
+
+  private readonly wake = (): void => {
+    if (this.on && this.ctx.state === 'suspended') void this.ctx.resume();
+  };
+
+  /** Nothing plays in a tab nobody is looking at. */
+  private readonly onVisibility = (): void => {
+    if (this.ctx.state === 'closed') return;
+    if (document.hidden) void this.ctx.suspend();
+    else if (this.on) void this.ctx.resume();
+  };
 
   /** Sound on or off; on starts loading what the scene needs, off fades everything out. */
   setEnabled(on: boolean): void {
@@ -461,7 +466,7 @@ export class Soundscape {
     const day = 1 - s.night;
     const wet = s.rain;
     // Rain and snow mask the quiet life of the place.
-    const hush = (1 - 0.55 * wet) * (1 - 0.35 * s.snow);
+    const hush = (1 - 0.65 * wet) * (1 - 0.35 * s.snow);
     for (const name of Object.keys(this.seasons) as SeasonName[]) {
       const w = this.seasons[name];
       this.loop(`bed-${name}-day`, 'air').set(w * day * hush, 1.2);
@@ -482,10 +487,10 @@ export class Soundscape {
     this.loop('wind-bare', 'air').set((1 - s.leafy) * broadleaf * Math.min(1, wind / 0.9) * swell, 0.25);
     this.loop('wind-gale', 'air').set(gale * swell, 0.25);
 
-    // Weather.
+    // Weather. Rain, once it is falling, is the loudest thing out there.
     const heavy = smoothstep(0.45, 0.95, wet);
-    this.loop('rain-light', 'weather').set(wet * (1 - heavy) * 1.2, 0.6);
-    this.loop('rain-heavy', 'weather').set(heavy, 0.6);
+    this.loop('rain-light', 'weather').set(Math.sqrt(wet) * (1 - heavy) * 1.5, 0.6);
+    this.loop('rain-heavy', 'weather').set(heavy * 1.6, 0.6);
     this.loop('rain-pond', 'weather').set(wet * s.pondNear * (1 - s.ice), 0.6);
     this.loop('snowfall', 'weather').set(s.snow * 0.9, 0.8);
 
@@ -496,7 +501,7 @@ export class Soundscape {
     // shrinks; the rustle follows the hand in the crown.
     const grow = Math.min(1, Math.max(0, s.growthRate) / 0.3);
     const shrink = Math.min(1, Math.max(0, -s.growthRate) / 0.6);
-    this.loop('grow-texture', 'tree').set(Math.pow(grow, 0.6), 0.12);
+    this.loop('grow-texture', 'tree').set(Math.pow(grow, 0.6) * 1.3, 0.12);
     this.loop('grow-texture', 'tree', true).set(Math.pow(shrink, 0.6) * 0.8, 0.12);
     this.loop('rustle-hand', 'tree').set(s.rustle * Math.max(0.15, s.leafy), 0.1);
 
@@ -603,7 +608,11 @@ export class Soundscape {
   }
 
   dispose(): void {
+    this.on = false;
     clearInterval(this.feeder);
+    window.removeEventListener('pointerdown', this.wake);
+    window.removeEventListener('keydown', this.wake);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     for (const l of this.loops.values()) l.stop();
     void this.ctx.close();
   }
