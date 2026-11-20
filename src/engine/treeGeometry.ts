@@ -169,6 +169,8 @@ interface StrandSamples {
   arcs: number[];
   flex: number[];
   pend: number[];
+  /** Per span: leaves a fork, so is kept straight (see the bow). */
+  forked?: boolean[];
 }
 
 function resampleStrand(src: StrandSamples, minPiece: number, seed: number, out: StrandSamples): void {
@@ -198,7 +200,10 @@ function resampleStrand(src: StrandSamples, minPiece: number, seed: number, out:
     // grows from a node stays on it.
     const h = Math.sin((i + 1) * 12.9898 + seed * 78.233) * 43758.5453;
     const spin = (h - Math.floor(h)) * Math.PI * 2;
-    const bow = Math.min(r * 0.45, len * 0.04);
+    // Not the span leaving a fork, though: two limbs that share a fork, each
+    // bowing its own random way, cross over one another just above it and
+    // the fork reads as a twisted rope.
+    const bow = src.forked?.[i] ? 0 : Math.min(r * 0.45, len * 0.04);
     const sx = at(i + 1, 0) - at(i, 0);
     const sy = at(i + 1, 1) - at(i, 1);
     const sz = at(i + 1, 2) - at(i, 2);
@@ -570,15 +575,37 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan, s
     if (p >= 0) childList[cursor[p]++] = i;
   }
 
-  // The thickest child continues the strand; the rest fork off.
+  /*
+   * Which child carries the strand on through a fork; the rest fork off it.
+   *
+   * The thickest, as a rule — but not when it turns sharply away and a child
+   * nearly as thick carries straight on. Followed blindly, a limb a shade
+   * stouter than the leader drags the tube fifty degrees sideways at the
+   * fork while the real leader sets off upward from the same point, and the
+   * two cross just above it like a twisted rope. So among children close to
+   * the thickest, the one that turns least wins.
+   */
   const continuation = new Int32Array(count).fill(-1);
+  const dirOf = (from: number, to: number, out: Vector3) =>
+    out.set(pos[to * 3] - pos[from * 3], pos[to * 3 + 1] - pos[from * 3 + 1], pos[to * 3 + 2] - pos[from * 3 + 2]).normalize();
+  const inDir = new Vector3();
+  const outDir = new Vector3();
   for (let i = 0; i < count; i++) {
+    let thickest = 0;
+    for (let k = childStart[i]; k < childStart[i + 1]; k++) thickest = Math.max(thickest, radius[childList[k]]);
+    const p = parent[i];
+    if (p >= 0) dirOf(p, i, inDir);
+    else inDir.set(0, 1, 0);
     let best = -1;
-    let bestR = -1;
+    let bestScore = -Infinity;
     for (let k = childStart[i]; k < childStart[i + 1]; k++) {
       const c = childList[k];
-      if (radius[c] > bestR) {
-        bestR = radius[c];
+      const near = radius[c] >= thickest * 0.8;
+      const straight = dirOf(i, c, outDir).dot(inDir);
+      // Thickness first; among the near-thickest, straightness decides.
+      const score = (near ? 10 : 0) + (near ? straight : radius[c] / Math.max(1e-9, thickest));
+      if (score > bestScore) {
+        bestScore = score;
         best = c;
       }
     }
@@ -589,7 +616,7 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan, s
   const maxArc = Math.max(1e-5, skel.maxArc);
   const heightRef = Math.max(0.5, skel.height);
 
-  const raw = { centers: [] as number[], radii: [] as number[], arcs: [] as number[], flex: [] as number[], pend: [] as number[] };
+  const raw = { centers: [] as number[], radii: [] as number[], arcs: [] as number[], flex: [] as number[], pend: [] as number[], forked: [] as boolean[] };
   const smooth = { centers: [] as number[], radii: [] as number[], arcs: [] as number[], flex: [] as number[], pend: [] as number[] };
 
   const emitStrand = (ring: number[], firstRadiusCap: number, strandSeed: number, isTrunk = false) => {
@@ -600,6 +627,7 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan, s
     raw.arcs.length = 0;
     raw.flex.length = 0;
     raw.pend.length = 0;
+    raw.forked.length = 0;
     let maxR = 0;
     for (let i = 0; i < ring.length; i++) {
       const node = ring[i];
@@ -609,6 +637,7 @@ function buildBranches(skel: Skeleton, field: CanopyOcclusion, plan: RootPlan, s
       raw.arcs.push(arc[node]);
       raw.flex.push(sway.flex[node]);
       raw.pend.push(sway.pend[node]);
+      raw.forked.push(childCount[node] > 1);
       if (r > maxR) maxR = r;
     }
 
