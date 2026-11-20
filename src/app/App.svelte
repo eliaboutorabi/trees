@@ -24,6 +24,7 @@
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
   import Hint from './components/Hint.svelte';
+  import Sapling from './components/Sapling.svelte';
   import Learn from './learn/Learn.svelte';
   import Welcome from './Welcome.svelte';
   import Tour from './tour/Tour.svelte';
@@ -698,17 +699,20 @@
 
     {#if ready}
       <div class="brand" data-tour="brand">
-        <h1>
-          <button class="hello" onclick={() => (welcomeOpen = true)} title="About Arbor">
-            <Glyph name="grove" size={26} weight={1.5} />Arbor
-          </button>
-        </h1>
-        <div class="readout">
-          <span><b>{stats.fps}</b> fps</span>
-          <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
-          <span><b>{stats.branchTriangles.toLocaleString()}</b> tris</span>
-          <span><b>{stats.renderScale.toFixed(2)}</b>× {stats.adaptive ? 'auto' : 'fixed'}</span>
-          {#if stats.truncated}<span class="warn">capped</span>{/if}
+        <button class="logo" onclick={() => (welcomeOpen = true)} aria-label="About Arbor" tabindex="-1">
+          <Sapling variant="tall" />
+        </button>
+        <div class="words">
+          <h1>
+            <button class="hello" onclick={() => (welcomeOpen = true)} title="About Arbor">Arbor</button>
+          </h1>
+          <div class="readout">
+            <span><b>{stats.fps}</b> fps</span>
+            <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
+            <span><b>{stats.branchTriangles.toLocaleString()}</b> tris</span>
+            <span><b>{stats.renderScale.toFixed(2)}</b>× {stats.adaptive ? 'auto' : 'fixed'}</span>
+            {#if stats.truncated}<span class="warn">capped</span>{/if}
+          </div>
         </div>
       </div>
 
@@ -1147,15 +1151,49 @@
     position: absolute;
     top: 1.05rem;
     left: 1.3rem;
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
     color: var(--chalk);
     text-shadow: 0 1px 14px rgba(20, 14, 6, 0.45), 0 1px 2px rgba(20, 14, 6, 0.3);
     pointer-events: none;
   }
 
-  .brand h1 {
+  /*
+   * The mark: the welcome card's sapling, grown tall, standing from the line
+   * of numbers up to the top of the name. It grows in when the garden first
+   * appears, and sways a little when the pointer finds it.
+   */
+  .logo {
+    all: unset;
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    align-items: flex-end;
+    cursor: pointer;
+    pointer-events: auto;
+    filter: drop-shadow(0 1px 5px rgba(20, 14, 6, 0.45));
+  }
+
+  /* Sized outright: a width that follows from a stretched height collapses to
+     nothing, since the row is measured before the height is known. Two lines
+     tall — the name's and the numbers' — and half as wide. */
+  .logo :global(svg) {
+    height: 2.95rem;
+    width: 1.48rem;
+    margin: -0.18rem -0.05rem -0.1rem -0.1rem;
+    transform-origin: 50% 96%;
+    transition: transform 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+
+  .brand:has(.logo:hover, .hello:hover) .logo :global(svg) {
+    transform: rotate(-4deg) scale(1.04);
+  }
+
+  .words {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .brand h1 {
     font-family: var(--serif);
     font-size: 1.6rem;
     font-weight: 540;
@@ -1164,16 +1202,11 @@
     line-height: 1;
   }
 
-  .brand h1 :global(svg) {
-    filter: drop-shadow(0 1px 6px rgba(20, 14, 6, 0.4));
-  }
-
-  /* The title says hello again: the one part of the brand that takes a click. */
+  /* The title says hello again: the parts of the brand that take a click. */
   .hello {
     all: unset;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
     cursor: pointer;
     pointer-events: auto;
     transition: transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
@@ -1192,7 +1225,7 @@
   .readout {
     display: flex;
     gap: 0.7rem;
-    margin: 0.35rem 0 0 2.1rem;
+    margin: 0.35rem 0 0;
     font-size: 0.68rem;
     font-weight: 500;
     color: rgba(251, 246, 236, 0.72);
