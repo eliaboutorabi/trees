@@ -128,6 +128,8 @@
    */
   let tour = $state<TourStop[] | null>(null);
   let tourStart = $state(0);
+  /** The whole tour plays itself unless paused; one part waits for Next. */
+  let tourAuto = $state(false);
   /** The map of the tour's parts, from the button at the top. */
   let mapOpen = $state(false);
   let dockApi = $state<{ show(id: string | null): void }>();
@@ -142,6 +144,7 @@
     }
     const stops = stopsFor(chapters);
     tourStart = at ? Math.max(0, stops.findIndex((s) => s.step.target?.includes(`"${at}"`))) : 0;
+    tourAuto = !chapters;
     tour = stops;
   }
   function stageTour(stop: TourStop) {
@@ -797,7 +800,14 @@
 {/if}
 
 {#if tour}
-  <Tour stops={tour} start={tourStart} onstage={stageTour} onclose={endTour} />
+  <Tour
+    stops={tour}
+    start={tourStart}
+    autoplay={tourAuto}
+    locate={(what) => (what === 'tree' || what === 'pond' ? (studio?.screenBox(what) ?? null) : null)}
+    onstage={stageTour}
+    onclose={endTour}
+  />
 {/if}
 
 {#snippet speciesPanel()}

@@ -533,6 +533,54 @@ export class TreeStudio {
    * where a jump would undo the whole point of growing the new one in. Any
    * drag of your own cancels the glide.
    */
+  /**
+   * Where something in the scene is on screen, as a box in client pixels:
+   * the tree's crown and trunk, or the pond. For the tour's spotlight, which
+   * otherwise only knows how to find buttons. Null when it is out of view.
+   */
+  screenBox(what: 'tree' | 'pond'): { x: number; y: number; w: number; h: number } | null {
+    const pts: Vector3[] = [];
+    if (what === 'tree') {
+      const r = this.treeRadius * 0.82;
+      const h = this.treeHeight;
+      for (const y of [0, h * 0.35, h * 0.7, h]) {
+        const k = y === 0 ? 0.25 : y === h ? 0.45 : 1;
+        for (let a = 0; a < 8; a++) pts.push(new Vector3(Math.cos((a / 8) * Math.PI * 2) * r * k, y, Math.sin((a / 8) * Math.PI * 2) * r * k));
+      }
+    } else {
+      for (let a = 0; a < 16; a++) {
+        const t = (a / 16) * Math.PI * 2;
+        const u = Math.cos(t) * POND.rx;
+        const v = Math.sin(t) * POND.rz;
+        pts.push(new Vector3(POND.x + u * Math.cos(POND.angle) - v * Math.sin(POND.angle), POND.level, POND.z + u * Math.sin(POND.angle) + v * Math.cos(POND.angle)));
+      }
+    }
+    const rect = this.canvas.getBoundingClientRect();
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let seen = 0;
+    for (const p of pts) {
+      p.project(this.camera);
+      if (p.z > 1 || p.z < -1) continue;
+      seen++;
+      const x = rect.left + ((p.x + 1) / 2) * rect.width;
+      const y = rect.top + ((1 - p.y) / 2) * rect.height;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    if (seen < 3) return null;
+    minX = Math.max(rect.left + 8, minX);
+    minY = Math.max(rect.top + 8, minY);
+    maxX = Math.min(rect.right - 8, maxX);
+    maxY = Math.min(rect.bottom - 8, maxY);
+    if (maxX - minX < 20 || maxY - minY < 20) return null;
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+  }
+
   frameTree(smooth = false): void {
     const h = this.treeHeight;
 

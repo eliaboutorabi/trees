@@ -24,12 +24,18 @@
     stops: TourStop[];
     /** Which stop to begin at. */
     start?: number;
+    /** Step on by itself, a reading's length at each stop. */
+    autoplay?: boolean;
+    /** Where a thing in the scene (`@tree`, `@pond`) is on screen. */
+    locate?: (what: string) => { x: number; y: number; w: number; h: number } | null;
     /** Set the scene up for a step: open the card it is about, say. */
     onstage: (stop: TourStop) => void;
     onclose: () => void;
   }
 
-  let { stops, start = 0, onstage, onclose }: Props = $props();
+  let { stops, start = 0, autoplay = false, locate, onstage, onclose }: Props = $props();
+
+  let auto = $state(untrack(() => autoplay));
 
   let index = $state(untrack(() => Math.min(Math.max(0, start), stops.length - 1)));
   const stop = $derived(stops[Math.min(index, stops.length - 1)]);
@@ -50,6 +56,10 @@
   function measure(): Box | null {
     const sel = stop.step.target;
     if (!sel) return null;
+    if (sel.startsWith('@')) {
+      const box = locate?.(sel.slice(1));
+      return box ? { x: box.x - PAD, y: box.y - PAD, w: box.w + PAD * 2, h: box.h + PAD * 2 } : null;
+    }
     const el = document.querySelector<HTMLElement>(sel);
     if (!el) return null;
     const r = el.getBoundingClientRect();
@@ -147,6 +157,9 @@
     };
   });
 
+  /** How long a stop stays when the tour plays itself: enough to read it twice. */
+  const dwell = $derived(Math.min(11000, Math.max(4200, 2600 + stop.step.body.length * 40)));
+
   /** The body's `*bold*` marks, as markup. The text is ours, not the user's. */
   function rich(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\*([^*]+)\*/g, '<b>$1</b>');
@@ -193,7 +206,27 @@
           <p>{@html rich(stop.step.body)}</p>
         </div>
       {/key}
+      {#if auto && !last}
+        {#key index}
+          <!-- The reading time, filling; pauses while the pointer rests on the card. -->
+          <span class="dwell" style="--dwell: {dwell}ms" onanimationend={() => go(index + 1)} aria-hidden="true"></span>
+        {/key}
+      {/if}
       <div class="foot">
+        <button
+          class="play"
+          class:on={auto}
+          onclick={() => (auto = !auto)}
+          aria-pressed={auto}
+          aria-label={auto ? 'Stop playing by itself' : 'Play by itself'}
+          title={auto ? 'Pause' : 'Play by itself'}
+        >
+          {#if auto}
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9M11 3.5v9" /></svg>
+          {:else}
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 3.4l7 4.6-7 4.6z" /></svg>
+          {/if}
+        </button>
         <span class="count">{index + 1} / {stops.length}</span>
         {#if index > 0}
           <button class="back" onclick={() => go(index - 1)}>Back</button>
@@ -416,8 +449,68 @@
     margin-top: 0.9rem;
   }
 
+  /* Hands-free: a fine line filling under the words for as long as the stop stays. */
+  .dwell {
+    display: block;
+    height: 2px;
+    margin-top: 0.75rem;
+    border-radius: 1px;
+    background: linear-gradient(90deg, #8fb34f, #5f8b38) 0 0 / 0% 100% no-repeat, rgba(95, 139, 56, 0.12);
+    animation: dwell var(--dwell) linear forwards;
+  }
+
+  .card:hover .dwell {
+    animation-play-state: paused;
+  }
+
+  @keyframes dwell {
+    to {
+      background-size:
+        100% 100%,
+        auto;
+    }
+  }
+
+  .play {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: none;
+    border-radius: 50% 46% 52% 48%;
+    color: #4d7330;
+    background: rgba(95, 139, 56, 0.12);
+    cursor: pointer;
+    transition:
+      background 0.2s,
+      transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .play:hover {
+    background: rgba(95, 139, 56, 0.2);
+    transform: scale(1.06);
+  }
+  .play.on {
+    color: #fbf7ee;
+    background: #6f9a42;
+  }
+  .play svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .play:focus-visible {
+    outline: 2px solid #5f8b38;
+    outline-offset: 2px;
+  }
+
   .count {
     margin-right: auto;
+    margin-left: 0.15rem;
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
     color: var(--ink-faint);

@@ -11,7 +11,11 @@
 import type { GlyphName } from '../components/glyphs';
 
 export interface TourStep {
-  /** A selector for what to point at: a `data-tour` name, or a list of them. Nothing means the whole scene. */
+  /**
+   * What to point at: a selector for a `data-tour` name, or a list of them;
+   * or `@tree` or `@pond`, for where those are in the scene. Nothing means
+   * the scene as a whole.
+   */
   target?: string;
   /** Which side of it the card sits on, if it matters. */
   side?: 'top' | 'bottom' | 'left' | 'right';
@@ -145,7 +149,7 @@ export const CHAPTERS: TourChapter[] = [
     'Species',
     'grove',
     'Nine trees, each its own grammar.',
-    'Nine trees, each grown from a grammar of its own.',
+    'Nine trees, each grown from a grammar of its own. Hover here and the card opens; click to keep it open while you use it.',
     'Pick one',
     'Oak, willow, pine, birch, sakura, apple, rowan, baobab, and the *textbook bush* from The Algorithmic Beauty of Plants. The tree you have grows back into the ground while the new one grows out of it.',
   ),
@@ -154,7 +158,7 @@ export const CHAPTERS: TourChapter[] = [
     'Seasons',
     'year-summer',
     'The same tree through the year.',
-    'The same tree through the year.',
+    'The same tree through the year, the light, the meadow and the pond changing with it. The icon is the year’s wheel, the season you are in coloured in.',
     'Spring to winter',
     'Blossom and ducklings in spring, full green in summer, turning and falling leaves in autumn, snow and a frozen pond in winter. The light changes with them.',
   ),
@@ -163,7 +167,7 @@ export const CHAPTERS: TourChapter[] = [
     'Weather',
     'weather-rain',
     'Rain, snow and cloud.',
-    'What the sky is doing.',
+    'What the sky is doing. The icon shows the weather you have now.',
     'Rain, snow, cloud',
     'Rain rings the pond and darkens the bark; snow settles on the branches, the grass and the ground. Close the clouds over and the sun’s strength and colour go with them.',
   ),
@@ -172,7 +176,7 @@ export const CHAPTERS: TourChapter[] = [
     'Wildlife',
     'wildlife',
     'Birds, butterflies and ducks.',
-    'Who lives here.',
+    'Who lives in the garden, and how many of them.',
     'Birds, butterflies, ducks',
     'How many doves and how big, the butterflies over the meadow, and the mallards and their ducklings on the pond. *Shoo* the birds and they wheel round the tree and come back.',
   ),
@@ -181,7 +185,7 @@ export const CHAPTERS: TourChapter[] = [
     'Shape',
     'twig',
     'How the tree branches.',
-    'How the tree branches.',
+    'How the tree branches: the grammar’s own numbers, behind a few friendly pictures.',
     'Grow it differently',
     'Droop or reach, how branchy, how stout a trunk. The exact numbers open beside the card: generations, branch angle, internode length, tropism.',
   ),
@@ -190,7 +194,7 @@ export const CHAPTERS: TourChapter[] = [
     'Foliage',
     'leaf',
     'The leaves, and how they turn.',
-    'The leaves.',
+    'The leaves, on whatever tree is growing.',
     'Leaves',
     'A bare crown or a full one, leaf size, how far they have turned, and how much sun glows through them.',
   ),
@@ -199,7 +203,7 @@ export const CHAPTERS: TourChapter[] = [
     'Bloom & fruit',
     'bloom',
     'Flowers and fruit, on any tree.',
-    'Any tree can flower and fruit.',
+    'Any tree can flower and fruit, whatever its species does in the wild.',
     'Flowers and fruit',
     'Petals and their colour, fruit and its skin, ripeness, the sun’s blush on a cheek and the waxy bloom on a plum. Touch the tree and ripe fruit falls.',
   ),
@@ -208,7 +212,7 @@ export const CHAPTERS: TourChapter[] = [
     'Light',
     'sunset',
     'The sun, the sky and the haze.',
-    'The sun and the sky.',
+    'The sun and the sky, and the hour of the day with them.',
     'Sun dial',
     'Drag the sun round the dial to set its height and bearing: low and golden, or high noon. Its strength, the haze, the colour and the sky’s own light are here too.',
   ),
@@ -217,7 +221,7 @@ export const CHAPTERS: TourChapter[] = [
     'Wind',
     'wind',
     'How hard, how gusty, which way.',
-    'How the air moves.',
+    'How the air moves through the garden.',
     'Wind',
     'Its strength, how restless the gusts are, and which way it blows. Leaves flutter, branches sway, and the willow’s curtains swing.',
   ),
@@ -226,7 +230,7 @@ export const CHAPTERS: TourChapter[] = [
     'Look',
     'frame',
     'How the picture is drawn.',
-    'How the picture is drawn.',
+    'How the picture is drawn, as a photographer would set a camera.',
     'The finish',
     'Film grain, smooth edges, the glow round bright light, and how fast the tree grows when it is redrawn.',
   ),
@@ -235,7 +239,7 @@ export const CHAPTERS: TourChapter[] = [
     'Grammar',
     'quill',
     'The L-system itself, and learning to write one.',
-    'The tree itself.',
+    'The tree itself, written out as the grammar it grows from.',
     'Its L-system',
     'This is the sentence the tree grows from: an *axiom*, and *rules* that rewrite it generation after generation. Change a rule and the tree regrows to match.',
     [
@@ -254,11 +258,13 @@ export const CHAPTERS: TourChapter[] = [
     icon: 'butterfly-many',
     steps: [
       {
+        target: '@tree',
         title: 'Touch the tree',
         body: 'Move your pointer through the crown and the leaves *part* round it. Rustle it quickly and leaves shake loose; touch ripe fruit and it falls.',
         open: null,
       },
       {
+        target: '@pond',
         title: 'The pond',
         body: 'Hold your pointer over the water and the *fish* swim over to see you. Now and then one rises to kiss the surface.',
       },
