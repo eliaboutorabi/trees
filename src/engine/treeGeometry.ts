@@ -246,9 +246,10 @@ function resampleStrand(src: StrandSamples, minPiece: number, seed: number, out:
         out.centers[o + 1] += by * lift;
         out.centers[o + 2] += bz * lift;
       }
-      // Radius eases between nodes rather than stepping, never past either.
-      const e = f * f * (3 - 2 * f);
-      out.radii.push(radii[i] + (radii[i + 1] - radii[i]) * e);
+      // Radius runs straight from one node's to the next: an eased step held
+      // flat at both ends and steep between, which is what this used to do,
+      // turns a long tapering span into a column with a waist in it.
+      out.radii.push(radii[i] + (radii[i + 1] - radii[i]) * f);
       out.arcs.push(arcs[i] + (arcs[i + 1] - arcs[i]) * f);
       out.flex.push(flex[i] + (flex[i + 1] - flex[i]) * f);
       out.pend.push(pend[i] + (pend[i + 1] - pend[i]) * f);

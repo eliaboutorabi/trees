@@ -66,6 +66,8 @@ export interface TurtleOptions {
   autoLeaves: boolean;
   /** Stop growth that reaches the soil. See `GROUND_CLEARANCE`. */
   ground?: boolean;
+  /** How much thicker wood is toward the base than the pipe model alone makes it. See `applyTaper`. */
+  taper?: number;
   rng: Rng;
   maxSegments?: number;
 }
@@ -308,6 +310,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   const posArr = Float32Array.from(pos);
 
   if (opts.pipeModel) applyPipeModel(parentArr, radiusArr, count, opts.pipeExponent, fixed);
+  if (opts.taper) applyTaper(parentArr, posArr, radiusArr, count, fixed, opts.taper);
   normalizeRadii(radiusArr, count, opts.trunkRadius);
 
   // Sink the root below ground, so the trunk's curve carries on under the soil
@@ -364,6 +367,39 @@ function applyPipeModel(parent: Int32Array, radius: Float32Array, count: number,
     if (p >= 0) accum[p] += Math.pow(own, e);
   }
   radius[0] = accum[0] > 0 ? Math.pow(accum[0], 1 / e) : 1;
+}
+
+/**
+ * Taper: wood thins steadily all the way up, not only where it forks.
+ *
+ * The pipe model only changes a radius where a branch leaves, so between
+ * forks a stem is a cylinder — and a tree's clear trunk, which is one long
+ * stretch with no forks at all, comes out as a post, as thick at head height
+ * as at the ground. Real stems thicken toward their base continuously,
+ * because every year's growth is a new sheath laid over the whole of what is
+ * below it, so the oldest wood carries the most rings.
+ *
+ * So each node's radius is scaled by how much tree there is beyond it: the
+ * longest path from it out to a tip, as a fraction of the whole tree's. That
+ * falls steadily along every path from the root, so radii still never grow
+ * going outward — a child is never thicker than its parent — and the base of
+ * the trunk gains the most. Widths given explicitly are left alone.
+ */
+function applyTaper(parent: Int32Array, pos: Float32Array, radius: Float32Array, count: number, fixed: number[], strength: number): void {
+  const reach = new Float64Array(count);
+  for (let i = count - 1; i >= 1; i--) {
+    const p = parent[i];
+    if (p < 0) continue;
+    const seg = Math.hypot(pos[i * 3] - pos[p * 3], pos[i * 3 + 1] - pos[p * 3 + 1], pos[i * 3 + 2] - pos[p * 3 + 2]);
+    if (reach[i] + seg > reach[p]) reach[p] = reach[i] + seg;
+  }
+  let top = 0;
+  for (let i = 0; i < count; i++) if (reach[i] > top) top = reach[i];
+  if (top <= 0) return;
+  for (let i = 0; i < count; i++) {
+    if (fixed[i] > 0) continue;
+    radius[i] *= 1 + strength * Math.pow(reach[i] / top, 1.3);
+  }
 }
 
 function normalizeRadii(radius: Float32Array, count: number, trunkRadius: number): void {

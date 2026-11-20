@@ -18,6 +18,9 @@ import { findPerches, type Perch } from './perches';
 import { buildTreeGeometry, type FruitSite } from './treeGeometry';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
+/** How much thicker a trunk's foot is than the pipe model alone would make it: see `applyTaper`. */
+const TAPER = 0.9;
+
 export interface TreeStructure {
   axiom: string;
   rules: string;
@@ -70,7 +73,8 @@ export interface TreeData {
 
 export function computeTree(params: TreeStructure, limits: BuildLimits): TreeData {
   // A tree stands in a meadow, so nothing of it may grow into the soil.
-  const build = buildTree({ ...params, maxModules: limits.maxModules, ground: true });
+  // And its wood thickens toward the ground, as grown wood does.
+  const build = buildTree({ ...params, maxModules: limits.maxModules, ground: true, taper: TAPER });
   const empty = {
     branches: null,
     foliage: null,

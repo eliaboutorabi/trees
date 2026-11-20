@@ -23,6 +23,8 @@ export interface TreeConfig {
   autoLeaves?: boolean;
   /** Stop anything that grows down to the soil from going into it. Trees want this; flat drawings do not. */
   ground?: boolean;
+  /** Extra thickening toward the base, on top of the pipe model. Trees want it; flat drawings do not. */
+  taper?: number;
   maxModules?: number;
   maxSegments?: number;
   /** Hand back the derived word as well, for showing it. */
@@ -92,6 +94,7 @@ export function buildTree(cfg: TreeConfig): TreeBuild {
     leafScale: cfg.leafScale,
     autoLeaves: cfg.autoLeaves ?? true,
     ground: cfg.ground ?? false,
+    taper: cfg.taper ?? 0,
     rng,
     maxSegments: cfg.maxSegments,
   });
