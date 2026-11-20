@@ -23,6 +23,7 @@
   import TreeGlyph from './components/TreeGlyph.svelte';
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
+  import Hint from './components/Hint.svelte';
   import Learn from './learn/Learn.svelte';
   import Welcome from './Welcome.svelte';
   import type { Planting } from './learn/lessons';
@@ -676,28 +677,38 @@
       </div>
 
       <div class="actions">
-        <button class="round" onclick={() => studio?.frameTree(true)} title="Reframe the tree" aria-label="Reframe the tree">
-          <Glyph name="reframe" size={21} />
-        </button>
-        <button class="round" onclick={screenshot} title="Save a picture" aria-label="Save a picture">
-          <Glyph name="save" size={21} />
-        </button>
-        <button class="round" class:done={linkCopied} onclick={copyLink} title="Copy a link to this tree" aria-label="Copy a link to this tree">
-          <Glyph name={linkCopied ? 'done' : 'link'} size={21} />
-        </button>
-        <button class="round" onclick={resetToDefaults} title="Start this species over" aria-label="Reset to defaults">
-          <Glyph name="reset" size={21} />
-        </button>
-        <a
-          class="round"
-          href="https://github.com/eliaboutorabi/trees"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="The project on GitHub"
-          aria-label="Open the project on GitHub"
-        >
-          <Glyph name="github" size={21} />
-        </a>
+        <Hint label="Reframe the tree" align="end">
+          <button class="round" style="--shape: 52% 48% 55% 45% / 47% 55% 45% 53%" onclick={() => studio?.frameTree(true)} aria-label="Reframe the tree">
+            <Glyph name="reframe" size={21} />
+          </button>
+        </Hint>
+        <Hint label="Save a picture" align="end">
+          <button class="round" style="--shape: 46% 54% 49% 51% / 55% 46% 54% 45%" onclick={screenshot} aria-label="Save a picture">
+            <Glyph name="save" size={21} />
+          </button>
+        </Hint>
+        <Hint label={linkCopied ? 'Link copied' : 'Copy a link to this tree'} align="end">
+          <button class="round" style="--shape: 55% 45% 51% 49% / 50% 56% 44% 50%" class:done={linkCopied} onclick={copyLink} aria-label="Copy a link to this tree">
+            <Glyph name={linkCopied ? 'done' : 'link'} size={21} />
+          </button>
+        </Hint>
+        <Hint label="Start this species over" align="end">
+          <button class="round" style="--shape: 49% 51% 45% 55% / 45% 50% 50% 55%" onclick={resetToDefaults} aria-label="Reset to defaults">
+            <Glyph name="reset" size={21} />
+          </button>
+        </Hint>
+        <Hint label="The project on GitHub" align="end">
+          <a
+            class="round"
+            style="--shape: 53% 47% 50% 50% / 48% 53% 47% 52%"
+            href="https://github.com/eliaboutorabi/trees"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open the project on GitHub"
+          >
+            <Glyph name="github" size={21} />
+          </a>
+        </Hint>
       </div>
 
       <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} />
@@ -1163,11 +1174,9 @@
       background 0.25s;
   }
 
-  .round:nth-child(1) { border-radius: 52% 48% 55% 45% / 47% 55% 45% 53%; }
-  .round:nth-child(2) { border-radius: 46% 54% 49% 51% / 55% 46% 54% 45%; }
-  .round:nth-child(3) { border-radius: 55% 45% 51% 49% / 50% 56% 44% 50%; }
-  .round:nth-child(4) { border-radius: 49% 51% 45% 55% / 45% 50% 50% 55%; }
-  .round:nth-child(5) { border-radius: 53% 47% 50% 50% / 48% 53% 47% 52%; }
+  .round {
+    border-radius: var(--shape, 50%);
+  }
 
   .round:hover {
     transform: translateY(-2px) rotate(-4deg);
