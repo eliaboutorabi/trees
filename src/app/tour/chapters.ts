@@ -113,7 +113,7 @@ export const CHAPTERS: TourChapter[] = [
   {
     id: 'scene',
     title: 'Scene switches',
-    blurb: 'Orbit, focus blur, rainbow and aurora, night.',
+    blurb: 'Orbit, focus blur, rainbow and aurora, night, sound.',
     icon: 'orbit',
     steps: [
       { target: at('quick'), side: 'right', title: 'Switches for the whole scene', body: 'One tap each, always in reach.' },
@@ -126,6 +126,12 @@ export const CHAPTERS: TourChapter[] = [
         body: 'By day, a rainbow arcs over the hills. At night the same button lights the *aurora*.',
       },
       { target: at('quick-night'), side: 'right', title: 'Night', body: 'Dusk falls: the stars come out, the moon rises, and fireflies drift over the meadow.' },
+      {
+        target: at('quick-sound'),
+        side: 'right',
+        title: 'Sound',
+        body: 'Hear the garden: the air of each season by day and by night, the wind in the crown, rain, the pond and its creatures, the tree growing, and a little music when the sky changes. Off until you turn it on.',
+      },
     ],
   },
   {

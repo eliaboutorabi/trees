@@ -164,7 +164,27 @@
    * wants sound never makes an audio context or fetches a file.
    */
   const SOUND_ON = 'arbor.sound.v1';
+  const VOLUME = 'arbor.volume.v1';
   let soundOn = $state(false);
+  /** How loud, 0–1; yours, so kept here rather than in a shared link. */
+  let volume = $state(storedVolume());
+  function storedVolume(): number {
+    try {
+      const v = Number(localStorage.getItem(VOLUME));
+      return localStorage.getItem(VOLUME) !== null && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8;
+    } catch {
+      return 0.8;
+    }
+  }
+  $effect(() => {
+    const v = volume;
+    sound?.setVolume(v);
+    try {
+      localStorage.setItem(VOLUME, String(v));
+    } catch {
+      // Kept for this visit only.
+    }
+  });
   let sound = $state.raw<Soundscape | null>(null);
   function soundRemembered(): boolean {
     try {
@@ -1066,6 +1086,7 @@
   </div>
   <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from="glow-off" to="glow-on" hint="Bloom: bright light spills softly around itself" />
   <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from="snail" to="swift" />
+  <PicSlider label="Volume" bind:value={volume} min={0} max={1} from="sound-off" to="sound" hint={soundOn ? 'How loud the garden is' : 'Turn sound on with the speaker on the left'} />
   <Fold>
     <p class="help">Sharpness. <b>Auto</b> draws at your screen's full density, and gives a little up only if the frame rate stays low — currently {stats.renderScale.toFixed(2)}×.</p>
     <div class="segmented" use:cut={{ seed: 'sharpness', inset: 1.5, radius: [10, 16], bulge: [-0.3, 1.2] }}>
