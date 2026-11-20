@@ -222,7 +222,7 @@ export const CHAPTERS: TourChapter[] = [
     'wind',
     'How hard, how gusty, which way.',
     'How the air moves through the garden.',
-    'Wind',
+    'How it blows',
     'Its strength, how restless the gusts are, and which way it blows. Leaves flutter, branches sway, and the willow’s curtains swing.',
   ),
   tool(
