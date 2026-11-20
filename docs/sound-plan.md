@@ -217,14 +217,28 @@ like an app beeping.
 
 ## 4. Budget
 
-About **75 sound-effect files** (~620 s of audio in all; beds are most of it)
-and **10 music cues** (~3.5 min). At 40 credits a second, one take of every
-effect is ~25,000 credits; two takes of the beds and the important one-shots
-roughly doubles that. Music is about 3.5 minutes a pass, inside a Creator
-plan's allowance with room for retakes. Free-plan music has no API, so the
-music needs Starter or above; on a free plan I would make the musical
-moments with the sound-effects model instead, which v3 handles reasonably,
-up to 30 s.
+The key is on the **Starter** plan: 40,000 credits a month, about **23,900
+left** (checked 20 Nov 2026), resetting around 10 December. Starter includes
+the music API (17 minutes of generation a month).
+
+At ~40 credits a second of sound effects, 23,900 credits is roughly ten
+minutes of generated audio. That is less than the full list above in two
+takes, so the first pass is trimmed to what matters most, with room left for
+retakes once you have listened:
+
+| first pass | files | seconds | ≈ credits |
+|---|---|---|---|
+| Beds: 8 season × hour, at 20 s instead of 30 (the engine crossfade-loops them) | 8 | 160 | 6,400 |
+| Wind, rustle, rain, snow, pond beds, at 20 s | 9 | 180 | 7,200 |
+| Growth texture, seed, bloom, sink | 4 | 20 | 800 |
+| Creatures and the tree's one-shots, one or two takes each, most-heard first | ~25 | ~65 | 2,600 |
+| **Total** | ~46 | ~425 | **~17,000** |
+
+That leaves about 7,000 credits for remaking whatever you do not like. The
+interface sounds, the rarer creatures (geese, crows, thunder, owl) and extra
+takes wait for the next month's credits, or are made from these. The music
+cues go through the music allowance, starting with the rainbow and the
+aurora.
 
 ## 5. Build order
 
