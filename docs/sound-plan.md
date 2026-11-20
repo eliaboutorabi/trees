@@ -5,9 +5,11 @@ files with the app, and played by a small Web Audio engine that follows the
 scene exactly: every gain is driven by the same eased values the picture
 uses, and every one-shot fires from the same event the picture shows.
 
-Nothing here is generated yet. This is the list of what to make, how, and
-how each sound is tied to the app. Mark it up and I will adjust before
-spending any credits.
+**Status (20 November 2026): built.** All 85 files are made (both tiers),
+levelled and in `public/sounds/`; the engine, the switch, the volume slider
+and the tour step are in. What follows is the plan as written. The README's
+*How the garden sounds* describes what was actually built and what changed
+on the way.
 
 ---
 

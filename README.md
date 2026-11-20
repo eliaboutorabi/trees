@@ -4,8 +4,9 @@
 
 Arbor is a tree-growing studio built on parametric L-systems and rendered with
 three.js on WebGPU. You pick a species and it grows from a seed. You rewrite its
-grammar and the tree rearranges itself. You shake its crown and the doves leave.
-Everything on screen, down to the bark furrows and the stars, is generated.
+grammar and the tree rearranges itself. You shake its crown and the doves leave; turn the
+sound on and you hear them go. Everything on screen, down to the bark furrows
+and the stars, is generated.
 There isn't a single texture file in the project.
 
 **Try it:** [eliaboutorabi.github.io/trees](https://eliaboutorabi.github.io/trees/)
@@ -467,6 +468,109 @@ Grass works because of two tricks from games:
   very warm. Interpolating between a "summer" and a "winter" number would give
   neither.
 
+## How the garden sounds
+
+The speaker at the bottom of the left column turns the sound on (it is off
+until asked for, then remembered). What you hear is the scene, not a
+soundtrack over it:
+
+- **The air of the place**: eight beds, one per season by day and by night
+  (spring frogs, summer crickets, the muffled hush of snow), crossfaded on the
+  same eased values the picture uses, so dusk falls in the ears as it falls on
+  the screen.
+- **The wind in the tree**: leaves, bare twigs, pine needles, and a gale over
+  the top. Which one you hear depends on how much of the crown is in leaf and
+  whether it is a conifer. The level swells with the gust computed from the
+  *same three sines the crown sways to*, so the sound rises as you see the
+  branches bend.
+- **Weather and water**: light and heavy rain, rain on the pond, falling snow,
+  far thunder in a downpour under heavy cloud. The pond laps louder the nearer
+  the camera stands, goes silent when it freezes, and creaks as the ice closes
+  over.
+- **Creatures**: doves coo from the crown and clatter up when you shake it, a
+  fish's rise is a plop at its ring, the hen dabbles, ducklings peep, the
+  winter robin calls from the stones. Songbirds, bees, crows, geese and an owl
+  keep their seasons and hours.
+- **The tree**: growing has a sound that runs as fast as the growth and plays
+  backwards when it shrinks, so scrubbing the stem scrubs the sound. A seed
+  goes in, the crown settles, an old tree sinks. A hand moving through the
+  leaves rustles them. Fruit you knock down **lands when it lands**: the tree
+  reports how long each fall takes from the same constants its material
+  draws the fall with, and the thud is scheduled for that moment, apple, berry
+  or cone by the fruit's shape.
+- **A little music** when the sky changes: dusk, dawn, a rainbow, the aurora.
+  The air and the creatures make room under it. The welcome has a tune and the
+  full tour a quiet underscore.
+
+### The engine
+
+[`render/sound/soundscape.ts`](src/render/sound/soundscape.ts) is a small Web
+Audio graph: buses for the air, the weather, the tree, the creatures, music
+and the interface, through a gentle compressor. The studio does two things for
+it. Each frame it fills in a snapshot of what it is already easing for the
+picture. And everything that *happens* in the scene, a dove leaving a twig, a
+fish rising, a fruit let go, is reported through one small event channel
+([`render/events.ts`](src/render/events.ts)) with where it happened. The
+creatures know nothing about sound; they just say what they did. Where it
+happened becomes a pan (which side of the view it is on, behind the camera
+included) and a level (how far it is, relative to the point the camera is
+looking at).
+
+- **Loops cross over themselves.** A long sound plays from a random point and
+  crossfades into a fresh copy a second and a half before it ends, equal-power.
+  A take whose seam isn't perfect never clicks, and two beds never phase.
+- **One-shots come in pools.** Several takes per sound, never the same one
+  twice running, each a few percent off in pitch and level, stored mono since
+  they are panned anyway. A burst of the same event, a whole flock going up in
+  the same half second, is one sound, not twelve.
+- **Handfuls, not every leaf.** Autumn sheds a few leaves a second all day.
+  A count that leaks away over a second only speaks past half a dozen, so the
+  trickle stays quiet and a gust or a hand in the crown is heard.
+- **Nothing is fetched until sound is on**, a long sound's audio is let go a
+  minute after it falls silent, and the context suspends in a hidden tab. The
+  loops are fed on a clock of their own, so they carry on, quieter, under the
+  Learn page while the scene is paused.
+
+### Where the sounds came from
+
+Every sound was made with [ElevenLabs](https://elevenlabs.io): Sound Effects
+v3 for the beds and one-shots (asked for as seamless loops where they loop),
+and the Music model for the cues.
+[`render/sound/manifest.ts`](src/render/sound/manifest.ts) lists each one with
+the prompt that made it, its length, its number of takes and its place in the
+mix, so the prompt lives beside the code that plays it.
+[`scripts/sounds/generate.ts`](scripts/sounds/generate.ts) walks that list:
+
+```bash
+npm run sounds -- --dry                  # what would be made, and roughly what it costs
+npm run sounds -- --only fish-plop --force
+npm run sounds -- --tier all --process   # re-level everything from the cache, free
+```
+
+It reads `ELEVENLABS_API_KEY` from `.env.local` (git-ignored) and keeps what
+comes back untouched in `.sound-cache/`. It trims one-shots so they sound the
+instant they're triggered, measures each file's loudness (EBU R128) and brings
+it to its layer's level with a plain gain. A compressor would disturb a loop's
+seam. On the dev server, [`/sounds.html`](sounds.html) is a board of every
+sound and take with its prompt, for listening through them.
+
+### Things the sounds taught
+
+- **You can check a sound you can't hear.** Spectrograms show a loop that is
+  three seconds of silence before it starts (the first growth sound was, and
+  growth only lasts three seconds), a bed with a loud landmark that would come
+  round every twenty, or music that isn't in the key it was asked for. Steady
+  tones turned up at 16–20 kHz in most takes: measured, they sat 40–50 dB under
+  the content, so they were left alone.
+- **The slider's middle is not the default.** The wind runs to 1.5 and a
+  summer breeze is 0.35, so the first mapping, which treated 1 as an ordinary
+  breeze, put the tree's voice at a third of what it should have been.
+- **A realistic flock is a racket.** The doves come and go between grass and
+  twigs all day. A flutter for every landing was one a second, so only
+  landings in the crown are heard, a few seconds apart at most.
+- **Two at a time.** The plan allows two requests in flight. The script
+  waits and retries when told it is asking too fast.
+
 ## Changing your mind, smoothly
 
 Nothing snaps:
@@ -905,6 +1009,7 @@ src/
     tree.ts     the Tree class: meshes plus uniforms, nothing else
     index.ts    the entire public surface
   render/   this app: studio, sky, aurora, landscape, meadow, birds, pond, weather, post
+    sound/      the soundscape, and the manifest of every sound and its prompt
   app/      Svelte 5 UI: dock, cards, glyphs, hand-cut paper
     learn/    the Learn page: lessons, and the ink-on-paper drawing board
   lib/      rng, baked noise texture
