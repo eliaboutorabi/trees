@@ -8,6 +8,7 @@
    */
   import { onMount } from 'svelte';
   import { cut } from './components/paper';
+  import Glyph from './components/Glyph.svelte';
 
   interface Props {
     onclose: () => void;
@@ -90,7 +91,7 @@
       <h2 id="welcome-title">Welcome to Arbor</h2>
       <p class="lede">A little garden where trees grow from sentences.</p>
       <p>
-        Every tree here is an <b>L-system</b>: a few rewriting rules, applied over and over, that a turtle then walks
+        Every tree here is an <a href="https://en.wikipedia.org/wiki/L-system" target="_blank" rel="noopener noreferrer"><b>L-system</b></a>: a few rewriting rules, applied over and over, that a turtle then walks
         into trunk, branches and leaves. Pick a species, turn the seasons, or rewrite its grammar and watch it grow
         again.
       </p>
@@ -100,11 +101,14 @@
           Start growing
         </button>
         <button class="around" onclick={ontour} use:cut={{ seed: 'welcome-around', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
+          <span class="map" aria-hidden="true"><Glyph name="map" size={20} weight={1.8} /></span>
           Show me around
         </button>
       </div>
 
-      <p class="credit">Made with care by <b>Elham Aboutorabi</b></p>
+      <p class="credit">
+        Made with care by <a href="https://eliaboutorabi.github.io/" target="_blank" rel="noopener noreferrer"><b>Elham Aboutorabi</b></a>
+      </p>
     </div>
   </div>
 </div>
@@ -247,13 +251,21 @@
     margin: 0.3rem 0 1rem;
   }
 
+  /*
+   * The way into the tour: warm honey, the colour of the little "?" seeds
+   * that open it from everywhere else, so the two read as one thing. An equal
+   * partner to Start growing, not a pale afterthought beside it.
+   */
   .around {
-    padding: 0.7rem 1.3rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.35rem 0.7rem 1.1rem;
     font: inherit;
     font-weight: 650;
     font-size: 1rem;
-    color: #4d7330;
-    background: linear-gradient(180deg, #eef3dc, #dfe9c4);
+    color: #fffaf0;
+    background: linear-gradient(180deg, #e2ad55, #c4842a);
     border: 0;
     cursor: pointer;
     transition:
@@ -261,14 +273,59 @@
       filter 0.18s ease;
   }
 
+  .around .map {
+    display: grid;
+    place-items: center;
+    color: #fffaf0;
+    --glyph-wash: #fff3d6;
+    --glyph-wash-opacity: 0.45;
+    transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1);
+  }
+
   .around:hover {
     transform: translateY(-1px) scale(1.03);
-    filter: brightness(1.03);
+    filter: brightness(1.06);
+  }
+
+  .around:hover .map {
+    transform: rotate(-10deg) scale(1.12);
+  }
+
+  .around:active,
+  .go:active {
+    transform: scale(0.98);
   }
 
   .around:focus-visible {
-    outline: 2px solid #5f8b38;
+    outline: 2px solid #c4842a;
     outline-offset: 3px;
+  }
+
+  /* The two links: the ink's own colour, underlined softly in green. */
+  a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(95, 139, 56, 0.45);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+    transition:
+      color 0.2s,
+      text-decoration-color 0.2s;
+  }
+
+  a:hover {
+    color: #4d7330;
+    text-decoration-color: #5f8b38;
+  }
+
+  a:hover b {
+    color: #4d7330;
+  }
+
+  a:focus-visible {
+    outline: 2px solid #5f8b38;
+    outline-offset: 2px;
+    border-radius: 3px;
   }
 
   .go {
