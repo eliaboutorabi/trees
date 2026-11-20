@@ -19,6 +19,7 @@
  * because it is the transport already proven here — see `createFruitMaterial`
  * for the sync it needs.
  */
+import type { SceneListener } from './events';
 import {
   BufferAttribute,
   BufferGeometry,
@@ -441,6 +442,8 @@ export interface FlockOptions {
 
 export class Flock {
   readonly mesh: Mesh;
+  /** Told when a dove takes off or settles; see `SceneEvent`. */
+  onEvent: SceneListener | null = null;
 
   private readonly doves: Dove[] = [];
   private readonly rig: Rig;
@@ -577,6 +580,13 @@ export class Flock {
     if (d.mode === 'flying' && d.curve) d.pos.copy(d.curve.getPointAt(along(d.t, d.ramp)));
     d.mode = 'flying';
     this.launch(d, []);
+  }
+
+  /** How many doves are sitting in the tree. */
+  get perched(): number {
+    let n = 0;
+    for (const d of this.doves) if (d.mode === 'perched') n++;
+    return n;
   }
 
   startle(point: Vector3): void {
@@ -782,6 +792,7 @@ export class Flock {
   /** Up together and round the tree, then back down. */
   private wheel(d: Dove): void {
     d.flushIn = -1;
+    if (d.mode === 'perched' || d.mode === 'ground') this.onEvent?.({ kind: 'dove-takeoff', x: d.pos.x, y: d.pos.y, z: d.pos.z });
     if (d.mode === 'perched' && d.perch >= 0) this.taken.delete(d.perch);
     const radius = Math.max(4.5, this.tree.radius * 2.2) + this.rng() * 2.5;
     const height = Math.max(5, this.tree.height * 0.85) + this.rng() * 2.5;
@@ -866,6 +877,7 @@ export class Flock {
       d.rest = 4 + this.rng() * 14;
       return;
     }
+    this.onEvent?.({ kind: 'dove-land', x: d.pos.x, y: d.pos.y, z: d.pos.z, detail: d.landing === 'perch' && d.perch >= 0 ? 1 : 0 });
     if (d.landing === 'perch' && d.perch >= 0) {
       d.mode = 'perched';
       // Across the branch, facing whichever way it came in.

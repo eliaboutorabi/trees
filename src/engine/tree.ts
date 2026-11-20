@@ -25,7 +25,7 @@ import { computeTree, unpackTreeData, type BuildLimits, type PackedTreeData, typ
 import type { Palette, Preset } from './lsystem/presets';
 import { createBarkMaterial } from './materials/bark';
 import { createLeafMaterial } from './materials/leaf';
-import { createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
+import { FRUIT_GRAVITY, FRUIT_REST, createFlowerMaterial, createFruitMaterial, fruitSpecularFor } from './materials/ornament';
 import {
   createTreeUniforms,
   LEAF_SLOTS,
@@ -140,6 +140,15 @@ export class Tree {
   /** Add this to your scene. */
   readonly group = new Group();
   readonly uniforms: TreeUniforms;
+
+  /**
+   * Called for each fruit shaken loose, with where it was hanging and how
+   * many seconds it takes to reach the ground — for anything that wants to
+   * mark the moment it lands.
+   */
+  onFruitFall: ((x: number, y: number, z: number, landsIn: number) => void) | null = null;
+  /** Leaves let go since the tree was made; read the difference across a frame for how many just fell. */
+  leavesShed = 0;
 
   private readonly options: Required<TreeOptions>;
   private readonly materials: MeshStandardNodeMaterial[];
@@ -424,6 +433,9 @@ export class Tree {
         this.fallTimes[f.id] = now;
         this.fallDirty = true;
         knocked++;
+        // The same fall the fruit material draws, to the same resting height.
+        const rest = FRUIT_REST + this.uniforms.fruitHang.value * this.uniforms.fruitSize.value;
+        this.onFruitFall?.(f.x, f.y, f.z, Math.sqrt(Math.max(0, f.y - rest) / FRUIT_GRAVITY));
         continue;
       }
       this.hangingFruit[write++] = f;
@@ -587,6 +599,7 @@ export class Tree {
   private release(id: number, at: number): void {
     this.setRelease(id, at);
     this.fallen[id] = 1;
+    this.leavesShed++;
   }
 
   /** The next leaf in the shuffled order that is still up there. */
@@ -672,8 +685,7 @@ export class Tree {
     }
     const u = this.uniforms;
     const now = u.fallClock.value;
-    const t = u.windPhase.value;
-    const gust = 0.5 * Math.sin(t) + 0.3 * Math.sin(1.63 * t + 1.3) + 0.2 * Math.sin(0.37 * t);
+    const gust = this.gust() * 2 - 1;
     const breeze = Math.max(0, 0.38 + 0.62 * gust) * u.wind.value;
     const visible = this.leafCount * u.leafCull.value;
     const at = () => now - dt * this.rng();
@@ -703,6 +715,17 @@ export class Tree {
       }
     }
     this.shakeEnergy *= decay;
+  }
+
+  /**
+   * How hard the wind is gusting at the trunk this moment, 0–1: the same
+   * three sines the crown sways to (see `swayed`), so whatever follows it —
+   * leaves coming off, the sound of the wind — rises and falls with the
+   * branches you can see bending.
+   */
+  gust(): number {
+    const t = this.uniforms.windPhase.value;
+    return 0.5 + 0.5 * (0.5 * Math.sin(t) + 0.3 * Math.sin(1.63 * t + 1.3) + 0.2 * Math.sin(0.37 * t));
   }
 
   /**

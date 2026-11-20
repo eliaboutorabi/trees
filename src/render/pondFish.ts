@@ -16,6 +16,7 @@
  * when the ice closes over they sink to the bottom and barely move till
  * spring.
  */
+import type { SceneListener } from './events';
 import { Vector3, Vector4 } from 'three';
 import { mulberry32 } from '../lib/rng';
 import { groundAt, POND, pondField } from './pondShape';
@@ -62,6 +63,8 @@ function turnTo(a: number, b: number): number {
 }
 
 export class PondFish {
+  /** Told when a fish rises; see `SceneEvent`. */
+  onEvent: SceneListener | null = null;
   /** For the water: where each fish is and which way it faces, x, z, fx, fz. */
   readonly pose: Vector4[] = Array.from({ length: MAX_FISH }, () => new Vector4());
   /** And how it looks: depth below the surface, length, tail beat. */
@@ -234,6 +237,7 @@ export class PondFish {
           // Where its mouth is, which is where the ring starts.
           f.ringX = f.x + Math.sin(f.heading) * f.length * 0.45;
           f.ringZ = f.z + Math.cos(f.heading) * f.length * 0.45;
+          this.onEvent?.({ kind: 'fish-rise', x: f.ringX, y: POND.level, z: f.ringZ });
         }
       }
       f.depth = ease(f.depth, target, f.rising ? 0.5 : 2.5, dt);

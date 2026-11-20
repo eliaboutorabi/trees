@@ -83,6 +83,11 @@ export interface FruitMaterial {
   syncFall(): boolean;
 }
 
+/** How fast fallen fruit falls, in the tree's units a second squared; slower than life, to be seen. */
+export const FRUIT_GRAVITY = 4.6;
+/** How far above the ground a fallen fruit's anchor comes to rest, before its own hang. */
+export const FRUIT_REST = 0.06;
+
 /**
  * @param fallTimes One slot per fruit site, indexed by the static `aFruitId`
  *   attribute: the clock reading when that fruit was knocked loose, or -1 while
@@ -138,8 +143,8 @@ export function createFruitMaterial(u: TreeUniforms, fallTimes: number[]): Fruit
   const loose = step(0, fall);
   const anchor = vec3Attribute('aCenter');
 
-  const GRAVITY = 4.6;
-  const REST = 0.06;
+  const GRAVITY = FRUIT_GRAVITY;
+  const REST = FRUIT_REST;
   // Stop when the *tip* reaches the ground. Clamping the anchor there instead
   // plants the whole cone underground, since the body hangs below it — which is
   // exactly what the first version did: they fell, and vanished.

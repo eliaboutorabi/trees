@@ -16,6 +16,7 @@
  * stand in the water's reflection, and hand their positions to the water so
  * it can trail a V behind each one.
  */
+import type { SceneListener } from './events';
 import {
   BufferGeometry,
   CatmullRomCurve3,
@@ -207,6 +208,8 @@ const wrap = (a: number) => a - Math.PI * 2 * Math.round(a / (Math.PI * 2));
 
 export class PondLife {
   readonly group = new Group();
+  /** Told when the hen up-ends and when the robin hops; see `SceneEvent`. */
+  onEvent: SceneListener | null = null;
   /** Where each duck is and which way and how fast it is going, for the water's wakes: x, z, vx, vz. */
   readonly wakes: Vector4[] = Array.from({ length: MAX_DUCKS }, () => new Vector4());
 
@@ -287,6 +290,8 @@ export class PondLife {
     if (this.stateTime <= 0) {
       this.dabbling = !this.dabbling;
       this.stateTime = this.dabbling ? 2 + this.rng() * 2.5 : 6 + this.rng() * 9;
+      const hen = this.ducks[0];
+      if (this.dabbling && open > 0.5 && hen.shown > 0.5) this.onEvent?.({ kind: 'duck-dabble', x: hen.pos.x, y: hen.pos.y, z: hen.pos.z });
     }
     const speed = this.dabbling ? 0 : 0.22;
     this.along = (this.along + (speed * dt * open) / this.length) % 1;
@@ -366,6 +371,7 @@ export class PondLife {
     let from = perches[this.robinSpot % perches.length];
     if (this.robinWait <= 0 && this.robinHop === 0) {
       this.robinHop = 0.0001;
+      if (this.robinShown > 0.5) this.onEvent?.({ kind: 'robin-hop', x: from.x, y: from.y, z: from.z });
     }
     let pos = from.clone();
     let facing = this.robin.rotation.y;

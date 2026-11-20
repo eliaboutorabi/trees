@@ -8,6 +8,7 @@
  * bank (`pondShore.ts`), lilies and fallen leaves on the surface
  * (`pondSurface.ts`).
  */
+import type { SceneListener } from './events';
 import { BufferAttribute, BufferGeometry, Group, Mesh, Sphere, Vector3, type Object3D, type PerspectiveCamera, type Scene, type Texture } from 'three';
 import { MeshPhysicalNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import {
@@ -416,6 +417,8 @@ export interface Pond {
   update(dt: number, season: DuckSeason, lure: Vector3 | null): void;
   /** How many ducklings the hen has, in their season, and how big the ducks are. */
   setDucks(ducklings: number, size: number): void;
+  /** Hear about the pond's goings-on: fish rising, the hen feeding, the robin hopping. */
+  listen(listener: SceneListener | null): void;
   /** Leave these out of the water's reflection: too small to read in it, or not standing in the world. */
   hideFromReflection(...objects: Object3D[]): void;
   /** Draw the reflection for this frame's view, before the frame itself. */
@@ -459,6 +462,10 @@ export function createPond(u: TreeUniforms, sky: SkyUniforms): Pond {
     uniforms,
     setDucks(ducklings, size) {
       life.setDucks(ducklings, size);
+    },
+    listen(listener) {
+      life.onEvent = listener;
+      fish.onEvent = listener;
     },
     update(dt, season, lure) {
       life.update(dt, season, uniforms.ice.value, perches);
