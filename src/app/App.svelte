@@ -27,6 +27,7 @@
   import Learn from './learn/Learn.svelte';
   import Welcome from './Welcome.svelte';
   import Tour from './tour/Tour.svelte';
+  import TourMap from './tour/TourMap.svelte';
   import { stopsFor, type TourStop } from './tour/chapters';
   import type { Planting } from './learn/lessons';
   import { MAX_BIRDS } from '../render/birds';
@@ -127,10 +128,13 @@
    */
   let tour = $state<TourStop[] | null>(null);
   let tourStart = $state(0);
+  /** The map of the tour's parts, from the button at the top. */
+  let mapOpen = $state(false);
   let dockApi = $state<{ show(id: string | null): void }>();
   /** Play these chapters, or all of them; from the step about `at`, if given. */
   function startTour(chapters?: string[], at?: string) {
     welcomeOpen = false;
+    mapOpen = false;
     try {
       localStorage.setItem(WELCOMED, '1');
     } catch {
@@ -726,6 +730,11 @@
             <Glyph name="reset" size={21} />
           </button>
         </Hint>
+        <Hint label="The map: every part, explained" align="end" onhelp={() => startTour(['top'], 'top-map')}>
+          <button class="round" style="--shape: 47% 53% 52% 48% / 53% 47% 53% 47%" onclick={() => (mapOpen = true)} aria-label="The map of the tour" data-tour="top-map">
+            <Glyph name="map" size={22} />
+          </button>
+        </Hint>
         <Hint label="The project on GitHub" align="end" onhelp={() => startTour(['top'], 'top-github')}>
           <a
             class="round"
@@ -781,6 +790,10 @@
 
 {#if welcomeOpen}
   <Welcome onclose={closeWelcome} ontour={() => startTour()} />
+{/if}
+
+{#if mapOpen}
+  <TourMap onplay={(chapters) => startTour(chapters)} onclose={() => (mapOpen = false)} />
 {/if}
 
 {#if tour}

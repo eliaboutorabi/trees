@@ -630,6 +630,19 @@ export const GLYPHS = {
   // A little tree on its patch of ground, and the path you take around it: the
   // far side of the loop passes behind the trunk, the near side comes round
   // in front with the arrow.
+  // A folded map, a dotted trail across it, and a pin where it ends.
+  map: [
+    { d: 'M3.4 6.3l5.3-2.1 6.6 2.3 5.3-2.1v13.5l-5.3 2.1-6.6-2.3-5.3 2.1z', k: 'both', c: 'sky' },
+    { d: 'M8.7 4.3c-.1 4.5.1 9 0 13.4M15.3 6.6c.1 4.4-.1 8.9 0 13.3', k: 'ink', o: 0.55, w: 0.8 },
+    ...[
+      [5.7, 15.6],
+      [7.5, 14.1],
+      [9.7, 13.5],
+      [11.8, 12.9],
+      [13.4, 12.0],
+    ].map(([x, y]) => ({ d: ring(x, y, 0.62), k: 'dot' as const })),
+    { d: 'M16.6 7.9c1.5 0 2.5 1.1 2.5 2.4 0 1.8-2.5 4.1-2.5 4.1s-2.5-2.3-2.5-4.1c0-1.3 1-2.4 2.5-2.4z', k: 'both', c: 'fruit', o: 2.2 },
+  ],
   orbit: [
     { d: 'M3 15.7c.2-2 4.1-3.6 9-3.6 5.1 0 9.1 1.6 9.1 3.6s-4.1 3.5-9.1 3.5c-4.9 0-8.9-1.5-9-3.5z', k: 'wash', c: 'earth', o: 0.7 },
     { d: 'M3 15.6c.4-1.8 3.4-3.1 7.6-3.4M13.6 12.2c4.4.2 7.3 1.6 7.5 3.5', k: 'ink', o: 0.45, w: 0.85 },
