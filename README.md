@@ -64,6 +64,14 @@ Branch thickness isn't taken from the grammar. Radii are recomputed bottom-up
 with **da Vinci's pipe model**: a limb is as thick as its children combined. The
 *Taper* slider is the exponent.
 
+The pipe model only changes a radius where a branch leaves, so on its own a
+clear trunk comes out as a post, as thick at head height as at the ground. So
+each node is also thickened by how much tree there is beyond it: the longest
+path out to a tip, as a fraction of the whole tree's. Every year's growth is a
+new sheath laid over everything below it, so the oldest wood carries the most
+rings. Every path still thins steadily outward, and no child is ever thicker
+than its parent.
+
 ### Act III: meshes, off the main thread
 
 The skeleton becomes:
@@ -509,6 +517,39 @@ children.** Opacity below 1 makes the parent a backdrop root, so a frosted card
 fading in rendered unfrosted for its first frames, then *snapped* frosted. The
 cards fade their layers individually through a registered `--fade` property
 instead.
+
+### Welcome, the tour, and the map
+
+A first visit opens a small paper card over the garden
+([`Welcome.svelte`](src/app/Welcome.svelte)). A sapling draws itself on it,
+trunk first and then branch by branch the way the turtle grows a tree, and
+leafs out. It says what this is and who made it, and offers to **Show me
+around**.
+
+The tour ([`tour/`](src/app/tour)) dims the scene and walks through every
+part of the app with a spotlight and a card beside it. It covers the top row,
+the scene switches, the growth stem, every card in the dock (opened as it is
+described) and what the tree and the pond do when touched. Some details:
+
+- **The spotlight is one box with an enormous shadow.** The shadow is the dim,
+  so moving to the next part is a single eased slide of position and size. Its
+  ring breathes so the eye finds it.
+- **What's under the spotlight still works.** A transparent layer holds the
+  rest of the scene still, clipped with an even-odd polygon so the spotlit
+  window lets the pointer through. You can try the switch you're reading about.
+- **Targets are named, not positioned.** Each step points at a `data-tour`
+  attribute on the element itself and measures it every frame, so a card
+  rising into place is followed while it moves. The tree and the pond aren't
+  elements, so the studio projects their bounds through the camera
+  (`screenBox`) and the spotlight lands on them in the scene.
+- **It's told in chapters.** Every part can be played on its own. A small
+  warm **?** opens the tour at exactly that part: in the heading of every dock
+  card, and on the glassy labels along the top, down the left and on the
+  growth stem. A folded-map button at the top lays every part out as a plot to
+  pick from, with a banner to take the whole walk.
+- **The whole walk plays itself.** Each stop stays for about twice its reading
+  time, a fine line filling under the words. Resting the pointer on the card
+  holds it, and the arrow keys and Esc work throughout.
 
 ---
 
