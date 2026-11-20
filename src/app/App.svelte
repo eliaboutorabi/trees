@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
+  import { Soundscape } from '../render/sound/soundscape';
   import { applyPreset, params, paramsFromPreset, presets, SCENE_KEYS, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
@@ -136,6 +137,7 @@
   let dockApi = $state<{ show(id: string | null): void }>();
   /** Play these chapters, or all of them; from the step about `at`, if given. */
   function startTour(chapters?: string[], at?: string) {
+    tap('ask');
     welcomeOpen = false;
     mapOpen = false;
     try {
@@ -155,6 +157,52 @@
     tour = null;
     dockApi?.show(null);
   }
+
+  /**
+   * The garden's sound. Off until asked for, then remembered. The soundscape
+   * is only made the first time it is switched on, so a visit that never
+   * wants sound never makes an audio context or fetches a file.
+   */
+  const SOUND_ON = 'arbor.sound.v1';
+  let soundOn = $state(false);
+  let sound = $state.raw<Soundscape | null>(null);
+  function soundRemembered(): boolean {
+    try {
+      return localStorage.getItem(SOUND_ON) === '1';
+    } catch {
+      return false;
+    }
+  }
+  function setSound(on: boolean) {
+    soundOn = on;
+    try {
+      localStorage.setItem(SOUND_ON, on ? '1' : '0');
+    } catch {
+      // Not remembered; it is still on for now.
+    }
+    if (on && !sound) {
+      sound = new Soundscape();
+      studio?.attachSound(sound);
+    }
+    sound?.setEnabled(on);
+  }
+  let cardUp = false;
+  /** A small sound for the interface, if sound is on. */
+  function tap(kind: 'pebble' | 'card' | 'ask') {
+    if (sound?.enabled) sound.ui(kind);
+  }
+  // Quieter under the Learn page, a tune for the welcome, an underscore for the whole tour.
+  $effect(() => {
+    const dim = learnOpen;
+    sound?.setDimmed(dim);
+  });
+  $effect(() => {
+    if (welcomeOpen && sound?.enabled) sound.welcome();
+  });
+  $effect(() => {
+    const touring = tour !== null && tourAuto;
+    sound?.setTour(touring);
+  });
 
   /** The Learn page: a short course in writing grammars, over the scene. */
   let learnOpen = $state(false);
@@ -507,6 +555,9 @@
     s.onGrowth = (v) => {
       if (!scrubbing) growth = v;
     };
+    // Sound switched on last time is on again; the browser holds it until
+    // the first touch of the page.
+    if (soundRemembered()) setSound(true);
 
     s.init()
       .then(() => {
@@ -549,6 +600,8 @@
       window.removeEventListener('hashchange', onHashChange);
       observer.disconnect();
       s.dispose();
+      sound?.dispose();
+      sound = null;
       studio = null;
     };
   });
@@ -760,6 +813,7 @@
       <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
       <QuickBar
         onhelp={(id) => startTour(['scene'], `quick-${id}`)}
+        onpress={(id) => id !== 'sound' && tap('pebble')}
         items={[
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
           { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
@@ -767,12 +821,18 @@
             ? { id: 'aurora', label: 'Aurora', icon: 'aurora', on: params.aurora, tone: '#9fd8bf', toneInk: '#1d5a45', toggle: toggleAurora }
             : { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow },
           { id: 'night', label: params.night ? 'Day' : 'Night', icon: params.night ? 'season-summer' : 'moon', on: params.night, tone: '#9aa6d6', toneInk: '#2c3566', toggle: () => (params.night = !params.night) },
+          { id: 'sound', label: soundOn ? 'Sound on' : 'Sound off', icon: soundOn ? 'sound' : 'sound-off', on: soundOn, tone: '#e3c98a', toneInk: '#6b4f12', toggle: () => setSound(!soundOn) },
         ]}
       />
 
       <Dock
         bind:this={dockApi}
         onhelp={(id) => startTour([id])}
+        onopen={(id) => {
+          // Only a card coming up out of nothing, not one card giving way to the next under a passing pointer.
+          if (id && !cardUp) tap('card');
+          cardUp = id !== null;
+        }}
         tools={[
           { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },

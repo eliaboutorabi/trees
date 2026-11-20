@@ -27,9 +27,11 @@
     items: Quick[];
     /** Open the tour at one of these switches. */
     onhelp?: (id: string) => void;
+    /** Any switch pressed, after it has done its work. */
+    onpress?: (id: string) => void;
   }
 
-  let { items, onhelp }: Props = $props();
+  let { items, onhelp, onpress }: Props = $props();
 
   const SHAPES = [
     ['52% 48% 55% 45% / 47% 55% 45% 53%', -2],
@@ -49,7 +51,10 @@
       aria-pressed={q.on}
       aria-label={q.label}
       data-tour="quick-{q.id}"
-      onclick={q.toggle}
+      onclick={() => {
+        q.toggle();
+        onpress?.(q.id);
+      }}
     >
       <Glyph name={q.icon} size={23} weight={1.75} />
     </button>

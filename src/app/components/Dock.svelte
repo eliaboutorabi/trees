@@ -35,7 +35,7 @@
    * fit the height there is; and a card or panel that would still not fit is
    * drawn smaller, the way a game's interface scales with its window.
    */
-  import { onMount, setContext, tick } from 'svelte';
+  import { onMount, setContext, tick, untrack } from 'svelte';
   import { cubicIn } from 'svelte/easing';
   import Glyph from './Glyph.svelte';
   import Ask from './Ask.svelte';
@@ -61,14 +61,20 @@
     children?: Snippet;
     /** Open the tour at a tool's own part, from the "?" on its card. */
     onhelp?: (id: string) => void;
+    /** A card has come up (or gone, with null). */
+    onopen?: (id: string | null) => void;
   }
 
-  let { tools, children, onhelp }: Props = $props();
+  let { tools, children, onhelp, onopen }: Props = $props();
 
   let hovered = $state<string | null>(null);
   let pinned = $state<string | null>(null);
   const openId = $derived(hovered ?? pinned);
   const open = $derived(tools.find((t) => t.id === openId) ?? null);
+  $effect(() => {
+    const id = openId;
+    untrack(() => onopen?.(id));
+  });
 
   let dock = $state<HTMLElement>();
   let card = $state<HTMLElement>();
