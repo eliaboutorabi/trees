@@ -274,6 +274,14 @@
     hovered = null;
   }
 
+  /** Open a tool's card and keep it open, or close whichever is open: for the tour. */
+  export function show(id: string | null) {
+    clearTimeout(enterTimer);
+    clearTimeout(leaveTimer);
+    hovered = null;
+    pinned = id;
+  }
+
   // Touching the card means you are using it: keep it.
   function grab() {
     holding = true;
@@ -309,7 +317,10 @@
     let downAt: { x: number; y: number } | null = null;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      downAt = card?.contains(t) || morePanel?.contains(t) || dock?.contains(t) ? null : { x: e.clientX, y: e.clientY };
+      // Clicks on the tour's own card are not clicks on the scene: the card it
+      // opened stays open while it talks about it.
+      const touring = t instanceof Element && t.closest('[data-tour-ui]');
+      downAt = touring || card?.contains(t) || morePanel?.contains(t) || dock?.contains(t) ? null : { x: e.clientX, y: e.clientY };
     };
     const onUp = (e: PointerEvent) => {
       holding = false;
@@ -351,6 +362,7 @@
       role="dialog"
       aria-label={open.label}
       tabindex="-1"
+      data-tour="card"
       onpointerenter={stay}
       onpointerleave={leave}
       onpointerdown={grab}
@@ -437,6 +449,7 @@
       onclick={() => toggle(tool.id)}
       aria-label={tool.label}
       aria-expanded={openId === tool.id}
+      data-tour="tool-{tool.id}"
     >
       <Glyph name={tool.icon} size={29} weight={1.8} />
       <span class="tip">{tool.label}</span>

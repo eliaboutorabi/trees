@@ -26,6 +26,8 @@
   import Hint from './components/Hint.svelte';
   import Learn from './learn/Learn.svelte';
   import Welcome from './Welcome.svelte';
+  import Tour from './tour/Tour.svelte';
+  import { stopsFor, type TourStop } from './tour/chapters';
   import type { Planting } from './learn/lessons';
   import { MAX_BIRDS } from '../render/birds';
   import { MAX_BUTTERFLIES } from '../render/meadow';
@@ -117,6 +119,29 @@
     } catch {
       // Private browsing: it will just say hello again next time.
     }
+  }
+
+  /**
+   * The tour: all of it, or just the chapters asked for. It opens the cards
+   * it talks about through the dock, and puts them away when it is done.
+   */
+  let tour = $state<TourStop[] | null>(null);
+  let dockApi = $state<{ show(id: string | null): void }>();
+  function startTour(chapters?: string[]) {
+    welcomeOpen = false;
+    try {
+      localStorage.setItem(WELCOMED, '1');
+    } catch {
+      // Remembered or not, the tour goes ahead.
+    }
+    tour = stopsFor(chapters);
+  }
+  function stageTour(stop: TourStop) {
+    if (stop.step.open !== undefined) dockApi?.show(stop.step.open);
+  }
+  function endTour() {
+    tour = null;
+    dockApi?.show(null);
   }
 
   /** The Learn page: a short course in writing grammars, over the scene. */
@@ -661,7 +686,7 @@
     {/if}
 
     {#if ready}
-      <div class="brand">
+      <div class="brand" data-tour="brand">
         <h1>
           <button class="hello" onclick={() => (welcomeOpen = true)} title="About Arbor">
             <Glyph name="grove" size={26} weight={1.5} />Arbor
@@ -678,22 +703,22 @@
 
       <div class="actions">
         <Hint label="Reframe the tree" align="end">
-          <button class="round" style="--shape: 52% 48% 55% 45% / 47% 55% 45% 53%" onclick={() => studio?.frameTree(true)} aria-label="Reframe the tree">
+          <button class="round" style="--shape: 52% 48% 55% 45% / 47% 55% 45% 53%" onclick={() => studio?.frameTree(true)} aria-label="Reframe the tree" data-tour="top-reframe">
             <Glyph name="reframe" size={21} />
           </button>
         </Hint>
         <Hint label="Save a picture" align="end">
-          <button class="round" style="--shape: 46% 54% 49% 51% / 55% 46% 54% 45%" onclick={screenshot} aria-label="Save a picture">
+          <button class="round" style="--shape: 46% 54% 49% 51% / 55% 46% 54% 45%" onclick={screenshot} aria-label="Save a picture" data-tour="top-save">
             <Glyph name="save" size={21} />
           </button>
         </Hint>
         <Hint label={linkCopied ? 'Link copied' : 'Copy a link to this tree'} align="end">
-          <button class="round" style="--shape: 55% 45% 51% 49% / 50% 56% 44% 50%" class:done={linkCopied} onclick={copyLink} aria-label="Copy a link to this tree">
+          <button class="round" style="--shape: 55% 45% 51% 49% / 50% 56% 44% 50%" class:done={linkCopied} onclick={copyLink} aria-label="Copy a link to this tree" data-tour="top-link">
             <Glyph name={linkCopied ? 'done' : 'link'} size={21} />
           </button>
         </Hint>
         <Hint label="Start this species over" align="end">
-          <button class="round" style="--shape: 49% 51% 45% 55% / 45% 50% 50% 55%" onclick={resetToDefaults} aria-label="Reset to defaults">
+          <button class="round" style="--shape: 49% 51% 45% 55% / 45% 50% 50% 55%" onclick={resetToDefaults} aria-label="Reset to defaults" data-tour="top-reset">
             <Glyph name="reset" size={21} />
           </button>
         </Hint>
@@ -705,6 +730,7 @@
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Open the project on GitHub"
+            data-tour="top-github"
           >
             <Glyph name="github" size={21} />
           </a>
@@ -724,6 +750,7 @@
       />
 
       <Dock
+        bind:this={dockApi}
         tools={[
           { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
@@ -747,7 +774,11 @@
 {/if}
 
 {#if welcomeOpen}
-  <Welcome onclose={closeWelcome} />
+  <Welcome onclose={closeWelcome} ontour={() => startTour()} />
+{/if}
+
+{#if tour}
+  <Tour stops={tour} onstage={stageTour} onclose={endTour} />
 {/if}
 
 {#snippet speciesPanel()}
@@ -955,7 +986,7 @@
 {/snippet}
 
 {#snippet grammarPanel()}
-  <button class="learn" onclick={() => (learnOpen = true)} use:cut={{ seed: 'learn-button', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
+  <button class="learn" data-tour="learn" onclick={() => (learnOpen = true)} use:cut={{ seed: 'learn-button', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
     <span class="illustrated"><Glyph name="learn" size={26} weight={1.5} /></span>
     <span class="learn__text"><b>Learn to write a tree</b>From a turtle drawing a square to the oak, one idea at a time</span>
     <span class="learn__go" aria-hidden="true">→</span>

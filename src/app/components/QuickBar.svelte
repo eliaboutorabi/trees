@@ -36,7 +36,7 @@
   ] as const;
 </script>
 
-<div class="quick" data-keep-clear role="toolbar" aria-label="Scene" aria-orientation="vertical">
+<div class="quick" data-keep-clear data-tour="quick" role="toolbar" aria-label="Scene" aria-orientation="vertical">
   {#each items as q, i (q.id)}
     <button
       class="pebble"
@@ -44,6 +44,7 @@
       style="--tone: {q.tone}; --tone-ink: {q.toneInk}; --shape: {SHAPES[i % SHAPES.length][0]}; --tilt: {SHAPES[i % SHAPES.length][1]}deg"
       aria-pressed={q.on}
       aria-label={q.label}
+      data-tour="quick-{q.id}"
       onclick={q.toggle}
     >
       <Glyph name={q.icon} size={23} weight={1.75} />

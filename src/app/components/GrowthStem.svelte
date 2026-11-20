@@ -108,11 +108,11 @@
   }
 </script>
 
-<div class="stem" data-keep-clear>
+<div class="stem" data-keep-clear data-tour="grow">
   <span class="label">Grow</span>
   <span class="end illustrated" aria-hidden="true"><Glyph name="trunk-stout" size={30} weight={1.5} /></span>
 
-  <div class="track">
+  <div class="track" data-tour="grow-bud">
     <svg
       bind:this={svg}
       viewBox="0 0 44 200"
@@ -168,10 +168,10 @@
   <span class="pct">{pct}<small>%</small></span>
 
   <div class="buttons">
-    <button onclick={onreplay} title="Watch it grow again (space)" aria-label="Replay growth">
+    <button onclick={onreplay} title="Watch it grow again (space)" aria-label="Replay growth" data-tour="grow-replay">
       <Glyph name="play" size={16} weight={1.8} />
     </button>
-    <button onclick={onregrow} title="Plant a new seed (R)" aria-label="Grow again from seed">
+    <button onclick={onregrow} title="Plant a new seed (R)" aria-label="Grow again from seed" data-tour="grow-seed">
       <Glyph name="sprout" size={19} weight={1.8} />
     </button>
   </div>

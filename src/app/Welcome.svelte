@@ -11,9 +11,11 @@
 
   interface Props {
     onclose: () => void;
+    /** Close, and start the tour. */
+    ontour: () => void;
   }
 
-  let { onclose }: Props = $props();
+  let { onclose, ontour }: Props = $props();
 
   let button = $state<HTMLButtonElement>();
   /** Where focus was before, to hand it back on the way out. */
@@ -93,9 +95,14 @@
         again.
       </p>
 
-      <button bind:this={button} class="go" onclick={close} use:cut={{ seed: 'welcome-go', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
-        Start growing
-      </button>
+      <div class="choices">
+        <button bind:this={button} class="go" onclick={close} use:cut={{ seed: 'welcome-go', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
+          Start growing
+        </button>
+        <button class="around" onclick={ontour} use:cut={{ seed: 'welcome-around', inset: 1.5, radius: [12, 20], bulge: [-0.4, 1.6] }}>
+          Show me around
+        </button>
+      </div>
 
       <p class="credit">Made with care by <b>Elham Aboutorabi</b></p>
     </div>
@@ -232,8 +239,39 @@
     color: var(--ink);
   }
 
-  .go {
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
     margin: 0.3rem 0 1rem;
+  }
+
+  .around {
+    padding: 0.7rem 1.3rem;
+    font: inherit;
+    font-weight: 650;
+    font-size: 1rem;
+    color: #4d7330;
+    background: linear-gradient(180deg, #eef3dc, #dfe9c4);
+    border: 0;
+    cursor: pointer;
+    transition:
+      transform 0.18s cubic-bezier(0.3, 1.6, 0.5, 1),
+      filter 0.18s ease;
+  }
+
+  .around:hover {
+    transform: translateY(-1px) scale(1.03);
+    filter: brightness(1.03);
+  }
+
+  .around:focus-visible {
+    outline: 2px solid #5f8b38;
+    outline-offset: 3px;
+  }
+
+  .go {
     padding: 0.7rem 1.6rem;
     font: inherit;
     font-weight: 650;
