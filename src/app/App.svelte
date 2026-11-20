@@ -24,6 +24,7 @@
   import Swatch from './components/Swatch.svelte';
   import Slider from './components/Slider.svelte';
   import Learn from './learn/Learn.svelte';
+  import Welcome from './Welcome.svelte';
   import type { Planting } from './learn/lessons';
   import { MAX_BIRDS } from '../render/birds';
   import { MAX_BUTTERFLIES } from '../render/meadow';
@@ -93,6 +94,29 @@
     renderScale: 1,
     adaptive: true,
   });
+
+  /**
+   * The welcome card, shown over the garden on a first visit once the tree
+   * has started growing; the Arbor title brings it back. Remembered in local
+   * storage, which can be missing or refuse, so a failure means showing it.
+   */
+  const WELCOMED = 'arbor.welcomed.v1';
+  let welcomeOpen = $state(false);
+  function welcomedBefore(): boolean {
+    try {
+      return localStorage.getItem(WELCOMED) === '1';
+    } catch {
+      return false;
+    }
+  }
+  function closeWelcome() {
+    welcomeOpen = false;
+    try {
+      localStorage.setItem(WELCOMED, '1');
+    } catch {
+      // Private browsing: it will just say hello again next time.
+    }
+  }
 
   /** The Learn page: a short course in writing grammars, over the scene. */
   let learnOpen = $state(false);
@@ -459,6 +483,8 @@
         });
         ready = true;
         doRebuild(true);
+        // A moment after the tree starts growing, so it is growing behind it.
+        if (!welcomedBefore()) setTimeout(() => (welcomeOpen = true), 700);
       })
       .catch((err: unknown) => {
         fatal = err instanceof Error ? err.message : String(err);
@@ -635,7 +661,11 @@
 
     {#if ready}
       <div class="brand">
-        <h1><Glyph name="grove" size={26} weight={1.5} />Arbor</h1>
+        <h1>
+          <button class="hello" onclick={() => (welcomeOpen = true)} title="About Arbor">
+            <Glyph name="grove" size={26} weight={1.5} />Arbor
+          </button>
+        </h1>
         <div class="readout">
           <span><b>{stats.fps}</b> fps</span>
           <span><b>{stats.leaves.toLocaleString()}</b> leaves</span>
@@ -703,6 +733,10 @@
 
 {#if learnOpen}
   <Learn onclose={() => (learnOpen = false)} onplant={plantLesson} />
+{/if}
+
+{#if welcomeOpen}
+  <Welcome onclose={closeWelcome} />
 {/if}
 
 {#snippet speciesPanel()}
@@ -1061,6 +1095,27 @@
 
   .brand h1 :global(svg) {
     filter: drop-shadow(0 1px 6px rgba(20, 14, 6, 0.4));
+  }
+
+  /* The title says hello again: the one part of the brand that takes a click. */
+  .hello {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+
+  .hello:hover {
+    transform: translateY(-1px) rotate(-1deg);
+  }
+
+  .hello:focus-visible {
+    outline: 2px solid var(--chalk);
+    outline-offset: 4px;
+    border-radius: 8px;
   }
 
   .readout {
