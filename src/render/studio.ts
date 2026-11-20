@@ -30,6 +30,8 @@ import { createRainfall, createSnowfall } from './weather';
 import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
 import { createFireflies } from './fireflies';
+import type { SceneEvent } from './events';
+import type { Placement, Soundscape, SoundState } from './sound/soundscape';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
 export type StructureParams = TreeStructure;
@@ -307,6 +309,36 @@ export class TreeStudio {
   private readonly hoverTarget = new Vector3(0, -1000, 0);
   private hoverStrength = 0;
   private hoverWanted = 0;
+  /** How briskly the pointer is moving through the crown, 0–1; see `updateHover`. */
+  private rustleNow = 0;
+
+  // Sound: what the scene tells it each frame, and what it remembers to do so.
+  private sound: Soundscape | null = null;
+  private seasonId: Season = 'summer';
+  private needles = false;
+  private grownLast = 0;
+  private leavesHeard = 0;
+  private leafHandful = 0;
+  /** A growth playing out from the ground, to be marked when it finishes. */
+  private growingUp = false;
+  private readonly soundState: SoundState = {
+    season: 'summer',
+    night: 0,
+    rain: 0,
+    snow: 0,
+    overcast: 0,
+    wind: 0,
+    gust: 0,
+    leafy: 1,
+    needles: false,
+    ice: 0,
+    pondNear: 0,
+    growthRate: 0,
+    rustle: 0,
+    perched: 0,
+    ducks: 1,
+    ducklings: 0,
+  };
 
   stats: StudioStats = {
     modules: 0,
@@ -352,6 +384,16 @@ export class TreeStudio {
     this.scene.add(this.rainfall);
     this.scene.add(this.flock.mesh);
     this.scene.add(this.tree.group);
+
+    // What happens out there is reported here, and passed on to the sound.
+    const heard = (e: SceneEvent) => this.emit(e);
+    this.flock.onEvent = heard;
+    this.pond.listen(heard);
+    this.tree.onFruitFall = (x, y, z, landsIn) => {
+      const u = this.tree.uniforms;
+      const shape = u.fruitCone.value > 0.5 ? 2 : u.fruitMarkings.value > 0.5 ? 1 : 0;
+      this.emit({ kind: 'fruit-fall', x, y, z, delay: landsIn, detail: shape });
+    };
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -433,6 +475,7 @@ export class TreeStudio {
 
   /** Re-derives the L-system and rebuilds the tree, here and now. */
   rebuild(params: StructureParams): TreeInfo {
+    this.needles = params.leafShape === 1;
     return this.adopt(this.tree.rebuild(params));
   }
 
@@ -446,6 +489,7 @@ export class TreeStudio {
     const token = ++this.buildToken;
     const data = await this.tree.prepare(params);
     if (token !== this.buildToken) return null;
+    this.needles = params.leafShape === 1;
     const before = { h: this.treeHeight, r: this.treeRadius };
     // Blended: where the structure is unchanged, the old shape morphs into
     // the new one rather than being swapped for it.
@@ -471,6 +515,7 @@ export class TreeStudio {
     const token = ++this.buildToken;
     const [data] = await Promise.all([this.tree.prepare(params), this.ungrow()]);
     if (token !== this.buildToken) return null;
+    this.needles = params.leafShape === 1;
     const info = this.adopt(this.tree.apply(data, params));
     this.applyPalette(palette);
     this.frameTree(true);
@@ -488,6 +533,8 @@ export class TreeStudio {
 
   /** Run the growth back to nothing; resolves when it gets there. */
   private ungrow(): Promise<void> {
+    if (this.growth > 0.2 && this.growthTarget !== 0) this.emit({ kind: 'tree-sink', x: 0, y: 0, z: 0 });
+    this.growingUp = false;
     this.growthTarget = 0;
     this.growthSpeed = UNGROW_SPEED;
     if (this.growth <= 0) return Promise.resolve();
@@ -668,6 +715,7 @@ export class TreeStudio {
    * palette, the snow, and how much of the meadow is still in flower.
    */
   private applySeason(id: Season): void {
+    this.seasonId = id;
     const season = getSeason(id);
     const t = this.seasonTarget;
     t.leafDry = season.leafDry;
@@ -737,6 +785,7 @@ export class TreeStudio {
 
   /** Show or hide the rainbow; it fades either way. */
   setRainbow(on: boolean): void {
+    if (on && this.rainbowTarget === 0) this.emit({ kind: 'rainbow', x: 0, y: 0, z: 0 });
     this.rainbowTarget = on ? 1 : 0;
     // Turning it off goes back to the view from before it was shown: the
     // rainbow view looks up at the sky from the grass, and leaving you there
@@ -770,6 +819,8 @@ export class TreeStudio {
 
   /** Show or hide the aurora (it only shows at night); it fades either way. */
   setAurora(on: boolean): void {
+    // Only at night is there one to see.
+    if (on && this.auroraTarget === 0 && this.nightTarget === 1) this.emit({ kind: 'aurora', x: 0, y: 0, z: 0 });
     this.auroraTarget = on ? 1 : 0;
     if (on && !this.auroraSky && this.renderer) {
       // Built and compiled the first time it is wanted, off to one side, and
@@ -983,6 +1034,7 @@ export class TreeStudio {
 
   /** Day or night; the change takes a few seconds, like a dusk. */
   setNight(on: boolean): void {
+    if ((on ? 1 : 0) !== this.nightTarget) this.emit({ kind: on ? 'nightfall' : 'daybreak', x: 0, y: 0, z: 0 });
     this.nightTarget = on ? 1 : 0;
     this.flock.roost(on);
   }
@@ -995,6 +1047,78 @@ export class TreeStudio {
     this.post.setNight(this.nightness);
     this.fireflies.visible = this.nightness > 0.01;
     if (this.skyNow) this.applySkyNow(this.skyNow);
+  }
+
+  // ---------------------------------------------------------------- sound
+
+  /**
+   * Let the garden be heard: each frame the soundscape is told what the scene
+   * is doing, and each thing that happens is passed on with where it happened.
+   * The studio knows nothing of sound beyond this; pass null to stop.
+   */
+  attachSound(sound: Soundscape | null): void {
+    this.sound = sound;
+    this.leavesHeard = this.tree.leavesShed;
+  }
+
+  private emit(e: SceneEvent): void {
+    if (!this.sound?.enabled) return;
+    this.sound.happen(e, this.placeOf(e.x, e.y, e.z));
+  }
+
+  /**
+   * Where a sound at this point sits for the listener at the camera: left or
+   * right of the view, and louder or quieter than one at the point the camera
+   * is looking at. Behind the camera still pans by its side.
+   */
+  private placeOf(x: number, y: number, z: number): Placement {
+    const v = _v1.set(x, y, z).applyMatrix4(this.camera.matrixWorldInverse);
+    const side = v.x / (Math.abs(v.x) + Math.abs(v.z) + 1e-3);
+    const near = this.camera.position.distanceTo(this.controls.target);
+    const far = Math.max(1, v.length());
+    return {
+      pan: MathUtils.clamp(side * 1.3, -1, 1) * 0.85,
+      gain: MathUtils.clamp(Math.pow(near / far, 0.7), 0.2, 1.3),
+    };
+  }
+
+  /** One frame of what the scene sounds like. */
+  private hear(dt: number): void {
+    const sound = this.sound;
+    if (!sound?.enabled || dt <= 0) return;
+    const u = this.tree.uniforms;
+    const s = this.soundState;
+    s.season = this.seasonId;
+    s.night = this.nightness;
+    s.rain = u.rainfall.value;
+    s.snow = u.snowfall.value;
+    s.overcast = this.skyNow?.overcast ?? 0;
+    s.wind = u.wind.value;
+    s.gust = this.tree.gust();
+    // In leaf, and grown enough for the leaves to be out.
+    s.leafy = MathUtils.clamp(u.leafCull.value, 0, 1) * MathUtils.smoothstep(this.growth, 0.5, 0.95);
+    s.needles = this.needles;
+    s.ice = this.pond.uniforms.ice.value;
+    const toPond = Math.hypot(this.camera.position.x - POND.x, this.camera.position.z - POND.z);
+    s.pondNear = 1 - MathUtils.smoothstep(toPond, 6, 40);
+    s.growthRate = (this.growth - this.grownLast) / dt;
+    this.grownLast = this.growth;
+    s.rustle = this.hoverStrength * this.rustleNow;
+    s.perched = this.flock.perched;
+    s.ducks = 1 - s.ice;
+    s.ducklings = this.seasonTarget.ducks.ducklings * (1 - s.ice);
+    sound.update(s, dt);
+
+    // Leaves are heard by the handful: a count that leaks away over a second,
+    // so autumn's steady trickle stays quiet and a gust or a hand in the
+    // crown, bringing down a shower, is heard.
+    this.leafHandful = this.leafHandful * Math.exp(-dt / 0.8) + (this.tree.leavesShed - this.leavesHeard);
+    this.leavesHeard = this.tree.leavesShed;
+    if (this.leafHandful >= 6) {
+      const at = this.hoverStrength > 0.3 ? this.hoverPoint : _v2.set(0, this.treeHeight * 0.6, 0);
+      this.emit({ kind: 'leaves-fall', x: at.x, y: at.y, z: at.z, detail: this.leafHandful });
+      this.leafHandful = 0;
+    }
   }
 
   // --------------------------------------------------------------- growth
@@ -1011,6 +1135,11 @@ export class TreeStudio {
     this.growthTarget = 1;
     this.growthSpeed = speed;
     this.tree.setGrowth(this.growth);
+    // Not a growth set going from part-way: that is a scrub let go.
+    this.growingUp = this.growth < 0.3;
+    if (this.growingUp) this.emit({ kind: 'grow-start', x: 0, y: 0, z: 0 });
+    // Jumping back to the ground is not heard as shrinking.
+    this.grownLast = this.growth;
   }
 
   get currentGrowth(): number {
@@ -1171,6 +1300,7 @@ export class TreeStudio {
     const motion = this.pointer.distanceTo(this.lastPointer) / Math.max(dt, 1e-3);
     this.lastPointer.copy(this.pointer);
     const rustle = this.dragging ? 0 : MathUtils.clamp(motion / 1.6, 0, 1);
+    this.rustleNow = rustle;
     // Wider than the parting: a hand in the crown shakes the branch it is on,
     // and the branch is longer than the hand.
     this.tree.shakeLeaves(this.hoverPoint, Math.max(1.3, radius * 0.5), this.hoverStrength * (0.12 + 0.88 * rustle));
@@ -1206,6 +1336,10 @@ export class TreeStudio {
           : Math.max(this.growthTarget, this.growth - step);
       this.tree.setGrowth(this.growth);
       this.onGrowth?.(this.growth);
+      if (this.growingUp && this.growth >= 1) {
+        this.growingUp = false;
+        this.emit({ kind: 'grow-done', x: 0, y: 0, z: 0 });
+      }
     }
     if (this.growth <= 0 && this.ungrown.length) {
       const waiting = this.ungrown;
@@ -1244,6 +1378,7 @@ export class TreeStudio {
 
     this.easeSky(dt);
     this.easeNight(dt);
+    this.hear(dt);
     this.post.tick(dt);
     this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
     this.sky.setRainbow(this.rainbow);
