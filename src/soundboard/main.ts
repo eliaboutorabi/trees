@@ -11,11 +11,13 @@ import { SOUNDS, filesOf, type SoundSpec } from '../render/sound/manifest';
 const GROUPS: [string, (s: SoundSpec) => boolean][] = [
   ['The air of the place', (s) => s.id.startsWith('bed-')],
   ['Wind and the tree’s voice', (s) => s.id.startsWith('wind-') || s.id.startsWith('rustle-')],
+  ['The places around, heard from where they are', (s) => /^(frogs|insects|crickets|woods)/.test(s.id)],
   ['Weather', (s) => /^(rain|snow|thunder)/.test(s.id)],
   ['The pond', (s) => /^(pond|fish|duck-dabble|duck-paddle|ice)/.test(s.id)],
   ['Creatures', (s) => /^(dove|songbird|chickadee|duck-quack|drake|duckling|bee|crow|geese|owl)/.test(s.id)],
   ['The tree', (s) => /^(grow|tree|leaf|apple|berry|cone)/.test(s.id)],
-  ['Music', (s) => s.kind === 'music'],
+  ['The garden’s music', (s) => s.id.startsWith('garden-')],
+  ['Music for the moments', (s) => s.kind === 'music' && !s.id.startsWith('garden-')],
   ['Interface', (s) => s.id.startsWith('ui-')],
 ];
 

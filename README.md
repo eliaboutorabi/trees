@@ -471,13 +471,18 @@ Grass works because of two tricks from games:
 ## How the garden sounds
 
 The speaker at the bottom of the left column turns the sound on (it is off
-until asked for, then remembered). What you hear is the scene, not a
-soundtrack over it:
+until asked for, then remembered). Hover it and a little mixer comes out:
+how loud in all, and each part on its own. What you hear is the scene, not a
+soundtrack over it, and **every sound comes from where it is**: the ears are
+the camera's, so turning round the tree turns the garden round you.
 
 - **The air of the place**: eight beds, one per season by day and by night
-  (spring frogs, summer crickets, the muffled hush of snow), crossfaded on the
+  (the muffled hush of snow, a summer night's stillness), crossfaded on the
   same eased values the picture uses, so dusk falls in the ears as it falls on
-  the screen.
+  the screen. Over them, the places, each heard from where it is: frogs in
+  the pond's reeds as the light goes, insects in patches of long grass by day
+  and crickets by night, and the distant woods with the season's birds, or
+  an owl's quiet.
 - **The wind in the tree**: leaves, bare twigs, pine needles, and a gale over
   the top. Which one you hear depends on how much of the crown is in leaf and
   whether it is a conifer. The level swells with the gust computed from the
@@ -487,10 +492,12 @@ soundtrack over it:
   far thunder in a downpour under heavy cloud. The pond laps louder the nearer
   the camera stands, goes silent when it freezes, and creaks as the ice closes
   over.
-- **Creatures**: doves coo from the crown and clatter up when you shake it, a
+- **Creatures**: doves coo from the crown, a dove is heard braking in just
+  before it is on its twig, and a flock clatters up when you shake it. A
   fish's rise is a plop at its ring, the hen dabbles, ducklings peep, the
-  winter robin calls from the stones. Songbirds, bees, crows, geese and an owl
-  keep their seasons and hours.
+  winter robin calls from the stones. A bumblebee goes past from one ear to
+  the other, geese cross high overhead in autumn, and songbirds, crows and
+  an owl keep their seasons and hours, each from somewhere.
 - **The tree**: growing has a sound that runs as fast as the growth and plays
   backwards when it shrinks, so scrubbing the stem scrubs the sound. A seed
   goes in, the crown settles, an old tree sinks. A hand moving through the
@@ -498,9 +505,14 @@ soundtrack over it:
   reports how long each fall takes from the same constants its material
   draws the fall with, and the thud is scheduled for that moment, apple, berry
   or cone by the fruit's shape.
-- **A little music** when the sky changes: dusk, dawn, a rainbow, the aurora.
-  The air and the creatures make room under it. The welcome has a tune and the
-  full tour a quiet underscore.
+- **Music, now and then.** The garden has ten quiet pieces of its own, two
+  for each season and two for the night, in one palette: felt piano, kalimba,
+  harp, warm strings, bells. One comes in after the garden has been heard on
+  its own for a while, plays out, and is followed by a long rest, the way
+  music comes and goes on a walk rather than playing over it. The sky's
+  moments (dusk, dawn, a rainbow, the aurora) have music of their own; the
+  garden's bows out for it, and the air and the creatures make room under
+  it. The welcome has a tune and the full tour a quiet underscore.
 
 ### The engine
 
@@ -516,6 +528,19 @@ happened becomes a pan (which side of the view it is on, behind the camera
 included) and a level (how far it is, relative to the point the camera is
 looking at).
 
+- **Places, and ears.** The studio tells the engine where the crown, the
+  pond, four patches of grass and three stands of the far treeline are, and
+  every frame where the camera is and which way it looks
+  ([`sound/space.ts`](src/render/sound/space.ts)). A long sound plays from a
+  place's points through a pan, a level for its distance, and a gentle
+  low-pass for whatever is behind you: the cheapest front-from-back cue
+  there is, and cheap is the point, since these never stop. One-shots,
+  which are short, get the browser's HRTF panner, and a few travel along a
+  path while they play, their level swelling as they pass.
+- **One sound from several places.** A loop played from three points round
+  the crown starts each copy somewhere else in the file. The copies don't
+  line up, so they're heard as one wide sound rather than one sound three
+  times, and each is turned down so together they are as loud as one.
 - **Loops cross over themselves.** A long sound plays from a random point and
   crossfades into a fresh copy a second and a half before it ends, equal-power.
   A take whose seam isn't perfect never clicks, and two beds never phase.
@@ -526,6 +551,9 @@ looking at).
 - **Handfuls, not every leaf.** Autumn sheds a few leaves a second all day.
   A count that leaks away over a second only speaks past half a dozen, so the
   trickle stays quiet and a gust or a hand in the crown is heard.
+- **Your levels, and what's happening.** Each layer passes through your
+  level for it, then through the ducking under music, then the compressor.
+  The mixer's meters tap each layer after both, and only while it is open.
 - **Nothing is fetched until sound is on**, a long sound's audio is let go a
   minute after it falls silent, and the context suspends in a hidden tab. The
   loops are fed on a clock of their own, so they carry on, quieter, under the
@@ -535,7 +563,7 @@ looking at).
 
 Every sound was made with [ElevenLabs](https://elevenlabs.io): Sound Effects
 v3 for the beds and one-shots (asked for as seamless loops where they loop),
-and the Music model for the cues.
+and the Music model for the cues and the garden's pieces.
 [`render/sound/manifest.ts`](src/render/sound/manifest.ts) lists each one with
 the prompt that made it, its length, its number of takes and its place in the
 mix, so the prompt lives beside the code that plays it.
@@ -566,8 +594,13 @@ sound and take with its prompt, for listening through them.
   summer breeze is 0.35, so the first mapping, which treated 1 as an ordinary
   breeze, put the tree's voice at a third of what it should have been.
 - **A realistic flock is a racket.** The doves come and go between grass and
-  twigs all day. A flutter for every landing was one a second, so only
-  landings in the crown are heard, a few seconds apart at most.
+  twigs all day. A flutter for every landing was one a second. Now each dove
+  has a voice of its own, most of them quiet, and is heard braking into the
+  crown rather than arriving on the grass. Only a flock put up by a hand
+  gets the clatter, and it gets it once.
+- **The first mix was too loud, everywhere.** Everything now sits 6 dB under
+  it, the mixer lets each part go quieter still, and fish, ducklings and
+  doves were all thinned out.
 - **Two at a time.** The plan allows two requests in flight. The script
   waits and retries when told it is asking too fast.
 
