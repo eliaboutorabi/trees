@@ -26,8 +26,8 @@ export interface SoundSpec {
   influence?: number;
   /** Where it sits in the mix relative to its layer's target loudness, in dB. */
   level?: number;
-  /** 1: the first pass. 2: when there are credits for it. */
-  tier: 1 | 2;
+  /** 1: the first pass. 2: when there were credits for it. 3: placed sound, single doves, the garden's music. */
+  tier: 1 | 2 | 3;
 }
 
 const bed = (id: string, prompt: string, extra: Partial<SoundSpec> = {}): SoundSpec => ({
@@ -111,6 +111,24 @@ export const SOUNDS: SoundSpec[] = [
   shot('geese-far', 1, 6, 'A skein of wild geese honking far overhead, passing slowly.', { tier: 2 }),
   shot('owl-hoot', 3, 4, 'A tawny owl hooting softly in the night, far off.', { tier: 2 }),
 
+  // A single dove, and only a soft one: the flock comes and goes all day, so
+  // what is heard is a bird braking into the crown and the odd one leaving it.
+  shot('dove-flutter-in', 3, 2, 'A single dove gliding in to land on a leafy branch: a few soft braking wingbeats, then a light rustle of leaves as it settles.', { tier: 3, level: -3 }),
+  shot('dove-flutter-off', 3, 1.5, 'A single dove leaving a branch: one soft wing clap and a few quick wingbeats fading away.', { tier: 3, level: -3 }),
+
+  // -------------------------------------- the places around, heard from where they are
+  // Mono-minded loops for one spot each: the pond's frogs, the meadow's
+  // insects, the woods on the horizon. Placed in the world, they turn round
+  // the listener as the camera does.
+  bed('frogs-pond', 'A few common frogs croaking softly among the reeds at the edge of a small pond in the evening, close by, sparse unhurried calls with gentle pauses.', { tier: 3 }),
+  bed('insects-meadow', 'Grasshoppers and bush crickets ticking and buzzing softly in long sunlit grass on a warm summer afternoon, close by, gentle and dry.', { tier: 3, level: -2 }),
+  bed('crickets-night', 'A handful of field crickets chirping steadily in the grass on a warm night, close by, clear individual chirps, calm.', { tier: 3, level: -2 }),
+  bed('woods-spring', 'A spring woodland heard from across an open meadow: a soft distant chorus of many small songbirds, far away and airy, a faint breeze in far trees.', { tier: 3 }),
+  bed('woods-summer', 'A summer woodland heard from across a field, steady and continuous from start to end: wood pigeons cooing far off, distant songbirds, a soft far hum of insects, warm and drowsy.', { tier: 3, influence: 0.6 }),
+  bed('woods-autumn', 'An autumn woodland heard from across empty fields: rooks and jackdaws calling far away, wind moving through distant trees, sparse.', { tier: 3 }),
+  bed('woods-winter', 'A winter forest heard from across a snowy field: a low wind in distant pine trees, a single far-off crow now and then, cold and very still.', { tier: 3 }),
+  bed('woods-night', 'A woodland at night heard from across a dark meadow: a very faint wind in far trees, a distant tawny owl once in a while, deep quiet.', { tier: 3 }),
+
   // ------------------------------------------------------------- the tree
   // Heard only while the tree grows (three seconds at the usual speed), so it
   // has to be all texture from its first instant: no build-up, no pauses.
@@ -158,6 +176,71 @@ export const SOUNDS: SoundSpec[] = [
     75,
     'Unobtrusive, curious underscore. Soft marimba ostinato, brushed bells and low warm strings, C major, 80 BPM, steady and light, no big moments, even from start to end.',
     { tier: 2 },
+  ),
+
+  // The garden's own music: one palette (felt piano, kalimba, harp, warm
+  // strings, bells), a key and a few voices for each season, two for the
+  // night. Each piece is played now and then, with long rests between, the
+  // way music comes and goes in a walk rather than playing over it.
+  music(
+    'garden-spring-1',
+    100,
+    'Gentle pastoral ambient piece for a garden on a spring morning. Kalimba plays a slow, simple, hopeful melody over soft felt piano chords, an airy alto flute answering now and then; light pizzicato strings enter halfway. G major, 72 BPM, sparse and spacious, warm natural room reverb, soft dynamics, no drums. Ends quietly on a held chord.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-spring-2',
+    100,
+    'Delicate ambient piece for a spring afternoon in a garden. Harp arpeggios drift under a warm clarinet melody, with soft string pads swelling and receding like a breeze. D major, 66 BPM, unhurried, spacious and gentle, no percussion. Fades out softly.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-summer-1',
+    100,
+    'Warm, lazy ambient piece for a summer afternoon under a tree. Fingerpicked nylon-string guitar with soft felt piano and a low cello drone, a few vibraphone notes like sunlight through leaves. C major, 70 BPM, relaxed and golden, intimate, no drums. Gentle ending.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-summer-2',
+    100,
+    'Dreamy ambient piece for a still summer day by a pond. Vibraphone and soft hand chimes over slow warm string pads, a muted horn melody once in the middle. F major, 60 BPM, slow and shimmering, lots of space, no percussion. Fades to silence.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-autumn-1',
+    100,
+    'Wistful ambient piece for an autumn afternoon as leaves fall. Solo cello sings a slow melody over soft felt piano, an oboe answers once. A minor moving to C major, 63 BPM, tender, reflective, warm and sparse. Ends softly.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-autumn-2',
+    100,
+    'Quiet, nostalgic solo piano piece for a cool autumn day. Felt piano with gentle falling figures, a soft viola joining late, close and intimate. E minor, 58 BPM, very sparse, lots of silence between phrases. Quiet ending.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-winter-1',
+    100,
+    'Crystalline ambient piece for a snowy winter garden. Celesta and music box play a slow, simple tune over a soft cold pad and glassy harmonics. D minor drifting to F major, 54 BPM, delicate, sparse and hushed, long reverb, no percussion. Fades away.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-winter-2',
+    100,
+    'Very sparse, hushed solo felt piano for a still winter day under snow. A few slow notes and chords with long pauses, warm and close, soft pedal. B-flat major, 50 BPM, calm and tender. Ends on a single held note.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-night-1',
+    100,
+    'Warm, slow ambient night piece for a garden under the stars. Soft evolving pads, a gentle felt piano playing a few notes, a distant warm French horn once. A-flat major, 52 BPM, peaceful and enveloping, deep reverb, no drums. Fades out slowly.',
+    { tier: 3 },
+  ),
+  music(
+    'garden-night-2',
+    100,
+    'Cool, mysterious ambient night piece for a moonlit garden. Glass bells and soft harmonics over low sustained strings, a faint wordless choir far away. F-sharp minor, 50 BPM, still and spacious, gentle, no percussion. Fades to silence.',
+    { tier: 3 },
   ),
 
   // ------------------------------------------------------------- interface
