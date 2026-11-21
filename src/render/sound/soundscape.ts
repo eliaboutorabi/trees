@@ -73,6 +73,9 @@ export interface Placement {
 
 const BASE = `${import.meta.env.BASE_URL}sounds/`;
 
+/** Everything sits this far under where it was first set: it was too loud. */
+const TRIM = 0.5;
+
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -336,7 +339,7 @@ export class Soundscape {
   }
 
   private level(): number {
-    return this.volume * this.volume * (this.dimmed ? 0.3 : 1);
+    return this.volume * this.volume * TRIM * (this.dimmed ? 0.3 : 1);
   }
 
   // ------------------------------------------------------------ loading
@@ -362,7 +365,7 @@ export class Soundscape {
   /** The one-shots likely to be wanted soon, so their first play is on time. */
   private preload(): void {
     for (const id of [
-      'fish-plop', 'dove-coo', 'dove-takeoff', 'dove-land', 'leaf-fall', 'apple-thud', 'berry-patter', 'cone-thud',
+      'fish-plop', 'dove-coo', 'dove-takeoff', 'dove-flutter-in', 'dove-flutter-off', 'leaf-fall', 'apple-thud', 'berry-patter', 'cone-thud',
       'grow-seed', 'grow-bloom', 'tree-sink', 'duck-quack', 'duckling-peep', 'duck-dabble', 'songbird-spring',
       'songbird-summer', 'songbird-autumn', 'chickadee', 'ice-creak',
     ]) {
@@ -545,14 +548,20 @@ export class Soundscape {
   happen(e: SceneEvent, place: Placement): void {
     if (!this.on) return;
     switch (e.kind) {
-      case 'dove-takeoff':
-        this.play('dove-takeoff', { ...place, gain: (place.gain ?? 1) * 0.85 }, 'life', 0.6);
+      case 'dove-flush':
+        // A flock put up is one clatter, however many go.
+        this.play('dove-takeoff', { ...place, gain: (place.gain ?? 1) * 0.7 }, 'life', 1.2);
         break;
-      case 'dove-land':
-        // Into the twigs, now and then: the flock comes and goes all day, and
-        // a flutter for every landing — or any for one on the grass — is a
-        // racket.
-        if (e.detail) this.play('dove-land', { ...place, gain: (place.gain ?? 1) * 0.5 }, 'life', 2.5);
+      case 'dove-takeoff':
+        // Leaving in its own time: a quiet bird is not heard at all.
+        if (Math.random() < (e.detail ?? 0.5) * 1.2) {
+          this.play('dove-flutter-off', { ...place, gain: (place.gain ?? 1) * (0.25 + 0.45 * (e.detail ?? 0.5)) }, 'life', 3);
+        }
+        break;
+      case 'dove-arrive':
+        if (Math.random() < 0.35 + 0.65 * (e.detail ?? 0.5)) {
+          this.play('dove-flutter-in', { ...place, gain: (place.gain ?? 1) * (0.25 + 0.5 * (e.detail ?? 0.5)) }, 'life', 2.5);
+        }
         break;
       case 'fish-rise':
         this.play('fish-plop', { ...place, gain: (place.gain ?? 1) * 0.75 }, 'life', 0.3);

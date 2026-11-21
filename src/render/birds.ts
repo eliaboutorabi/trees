@@ -410,6 +410,10 @@ interface Dove {
   flushIn: number;
   /** How much room the leaves are making for it, eased. */
   presence: number;
+  /** How much noise its wings make, 0–1: most doves are quiet, a few are not. */
+  voice: number;
+  /** Whether this flight's arrival has been announced yet; see `fly`. */
+  heralded: boolean;
 }
 
 const _a = new Vector3();
@@ -525,6 +529,8 @@ export class Flock {
         stride: 0,
         flushIn: -1,
         presence: 0,
+        voice: 0.15 + 0.85 * Math.pow(this.rng(), 1.8),
+        heralded: false,
       });
     }
   }
@@ -624,7 +630,7 @@ export class Flock {
 
       if (d.flushIn >= 0) {
         d.flushIn -= dt;
-        if (d.flushIn < 0) this.wheel(d);
+        if (d.flushIn < 0) this.wheel(d, true);
       }
 
       switch (d.mode) {
@@ -761,6 +767,7 @@ export class Flock {
     d.duration = MathUtils.clamp(length / speed, 0.9, 40);
     d.ramp = MathUtils.clamp(1.1 / d.duration, 0.1, 0.4);
     d.t = 0;
+    d.heralded = false;
     d.mode = 'flying';
     d.beating = true;
     d.burst = 0.6;
@@ -789,10 +796,14 @@ export class Flock {
     this.launch(d, via);
   }
 
-  /** Up together and round the tree, then back down. */
-  private wheel(d: Dove): void {
+  /** Up together and round the tree, then back down. `flushed`: put up, rather than leaving in its own time. */
+  private wheel(d: Dove, flushed = false): void {
     d.flushIn = -1;
-    if (d.mode === 'perched' || d.mode === 'ground') this.onEvent?.({ kind: 'dove-takeoff', x: d.pos.x, y: d.pos.y, z: d.pos.z });
+    if (flushed && (d.mode === 'perched' || d.mode === 'ground')) {
+      this.onEvent?.({ kind: 'dove-flush', x: d.pos.x, y: d.pos.y, z: d.pos.z, detail: d.voice });
+    } else if (d.mode === 'perched') {
+      this.onEvent?.({ kind: 'dove-takeoff', x: d.pos.x, y: d.pos.y, z: d.pos.z, detail: d.voice });
+    }
     if (d.mode === 'perched' && d.perch >= 0) this.taken.delete(d.perch);
     const radius = Math.max(4.5, this.tree.radius * 2.2) + this.rng() * 2.5;
     const height = Math.max(5, this.tree.height * 0.85) + this.rng() * 2.5;
@@ -823,6 +834,13 @@ export class Flock {
   private fly(d: Dove, dt: number): void {
     const curve = d.curve!;
     d.t = Math.min(1, d.t + dt / d.duration);
+    // Heard braking into the crown a moment before it is on the twig, which
+    // is when the wings make their noise; a landing on the grass is quiet.
+    if (!d.heralded && d.landing === 'perch' && d.perch >= 0 && (1 - d.t) * d.duration < 0.55) {
+      d.heralded = true;
+      const p = this.perches[d.perch];
+      this.onEvent?.({ kind: 'dove-arrive', x: p.x, y: p.y, z: p.z, detail: d.voice });
+    }
     const u = along(d.t, d.ramp);
     curve.getPointAt(u, d.pos);
 

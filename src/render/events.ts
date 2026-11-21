@@ -7,8 +7,12 @@
  * sound; they only report, in world space, at the moment the picture shows it.
  */
 export type SceneEventKind =
-  /** A dove leaving a twig or the grass. */
+  /** A dove leaving its twig in its own time: `detail` is how much noise its wings make, 0–1. */
   | 'dove-takeoff'
+  /** A dove put up — off the twig or the grass — by a hand in the crown: `detail` as above. */
+  | 'dove-flush'
+  /** A dove about to settle on a twig, braking in: `detail` as above. */
+  | 'dove-arrive'
   /** A dove settling: `detail` 1 on a twig, 0 on the grass. */
   | 'dove-land'
   /** A fish taking something from the surface, the moment its ring starts. */
