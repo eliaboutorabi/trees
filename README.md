@@ -505,14 +505,30 @@ the camera's, so turning round the tree turns the garden round you.
   reports how long each fall takes from the same constants its material
   draws the fall with, and the thud is scheduled for that moment, apple, berry
   or cone by the fruit's shape.
-- **Music, now and then.** The garden has ten quiet pieces of its own, two
-  for each season and two for the night, in one palette: felt piano, kalimba,
-  harp, warm strings, bells. One comes in after the garden has been heard on
-  its own for a while, plays out, and is followed by a long rest, the way
-  music comes and goes on a walk rather than playing over it. The sky's
-  moments (dusk, dawn, a rainbow, the aurora) have music of their own; the
-  garden's bows out for it, and the air and the creatures make room under
-  it. The welcome has a tune and the full tour a quiet underscore.
+- **A score, all in D.** Every piece is in one voice: felt piano, cello,
+  strings, glass harmonics, a distant horn, a large soft hall. It's
+  bittersweet and grown-up, never cute, and in D through its moods: Dorian
+  for the wistful, Aeolian for rain, Lydian for spring, major for summer,
+  minor for winter and dusk.
+  - **Change something and a little music comes in**: a season arriving,
+    rain, snow, a clearing sky, a different tree growing. It waits until
+    you've settled, so flicking through four seasons gives one piece, for
+    the one you stopped on. When changes come together (winter brings
+    snow), the one that matters most is heard.
+  - **The sky's moments** (dusk, dawn, a rainbow, the aurora) have music
+    of their own, and so do the welcome and the full tour.
+  - **The garden's own pieces** come and go between them: two per season
+    and two for the night, now and then, with long rests, the way music
+    comes and goes on a walk rather than playing over it.
+- **The interface is an instrument.** Every gesture is a quiet note of the
+  same D, through a soft hall:
+  - a row of choices is a scale, so choosing is playing;
+  - a switch rises a third coming on and falls going off;
+  - a slider ticks as it travels and settles on the note of where it
+    stopped;
+  - a card comes up with paper and its own note, so running the pointer
+    along the dock is an arpeggio;
+  - the tour climbs the scale a step at a time.
 
 ### The engine
 
@@ -559,6 +575,28 @@ looking at).
   loops are fed on a clock of their own, so they carry on, quieter, under the
   Learn page while the scene is paused.
 
+### The interface's instrument
+
+[`sound/ui-voice.ts`](src/render/sound/ui-voice.ts) plays a handful of
+recorded-sounding sounds as notes: a felt piano note, a small glass bowl, a
+low cello string. Each was measured once for its pitch, from its strongest
+partials, and the pitch is written beside its prompt in the manifest. Any
+of them can then be retuned exactly to any degree of D Dorian. A note that
+would land more than about an octave from where the sound rings is folded
+by an octave instead: the same note, without turning a bowl thin or a
+piano into a toy.
+
+[`app/sonic.ts`](src/app/sonic.ts) is the interface's side. Components call
+it for what only they know: a card's place in the dock, a tour step, a
+picture saved. Everything else is heard by one listener on the page:
+sliders moving and let go, choices in a row (tiles, segments, colours),
+switches. A control added later is heard without being told to.
+
+The interface's layer goes through a hall made rather than recorded: two
+channels of noise dying over three and a half seconds, darker as they die,
+after a short pre-delay. That is what gives a single quiet note somewhere
+to be.
+
 ### Where the sounds came from
 
 Every sound was made with [ElevenLabs](https://elevenlabs.io): Sound Effects
@@ -601,6 +639,16 @@ sound and take with its prompt, for listening through them.
 - **The first mix was too loud, everywhere.** Everything now sits 6 dB under
   it, the mixer lets each part go quieter still, and fish, ducklings and
   doves were all thinned out.
+- **Ask for a key, then check it.** Music asked for in D mostly came back
+  in D, but not always: rain in A and in G sharp, a spring piece in E,
+  autumn twice in F sharp minor. Each piece's average chroma, correlated
+  with the major and minor key profiles, says which key it is really in.
+  The strays were made again with the key named first, and the last one
+  with "begins and ends on a D minor chord, D in the bass throughout".
+- **Measure a note before you tune it.** A felt piano note asked for "in
+  the middle register" came back as a thump with a stray 1.4 kHz ring.
+  Asked for by name ("the D just above middle C") it came back as a C,
+  but a clean one, which is all that tuning needs.
 - **Two at a time.** The plan allows two requests in flight. The script
   waits and retries when told it is asking too fast.
 

@@ -130,7 +130,7 @@ export const CHAPTERS: TourChapter[] = [
         target: at('quick-sound'),
         side: 'right',
         title: 'Sound',
-        body: 'Hear the garden: the air of each season by day and by night, the wind in the crown, rain, the pond and its creatures, the tree growing, and now and then some music. Every sound comes from where it is, so turning the camera turns the garden round you. Hover the speaker for a little mixer. Off until you turn it on.',
+        body: 'Hear the garden: the air of each season by day and by night, the wind in the crown, rain, the pond and its creatures, the tree growing, and now and then some music. Every sound comes from where it is, so turning the camera turns the garden round you, and the interface itself plays quiet notes as you use it. Hover the speaker for a little mixer. Off until you turn it on.',
       },
     ],
   },
