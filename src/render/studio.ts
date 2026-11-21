@@ -31,7 +31,7 @@ import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
 import { createFireflies } from './fireflies';
 import type { SceneEvent } from './events';
-import type { Placement, Soundscape, SoundState } from './sound/soundscape';
+import type { Ears, Soundscape, SoundPlaces, SoundState } from './sound/soundscape';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
 export type StructureParams = TreeStructure;
@@ -332,9 +332,9 @@ export class TreeStudio {
     leafy: 1,
     needles: false,
     ice: 0,
-    pondNear: 0,
     growthRate: 0,
     rustle: 0,
+    hand: { x: 0, y: 3, z: 0 },
     perched: 0,
     ducks: 1,
     ducklings: 0,
@@ -555,6 +555,7 @@ export class TreeStudio {
 
     this.treeHeight = build.height;
     this.treeRadius = build.radius;
+    this.placeSound();
     this.updateShadowVolume();
     // A new tree costs a few heavy frames to arrive; they are no measure.
     this.settle(2000);
@@ -1053,34 +1054,48 @@ export class TreeStudio {
 
   /**
    * Let the garden be heard: each frame the soundscape is told what the scene
-   * is doing, and each thing that happens is passed on with where it happened.
-   * The studio knows nothing of sound beyond this; pass null to stop.
+   * is doing and where the camera is, and each thing that happens is passed
+   * on with where it happened. The studio knows nothing of sound beyond this;
+   * pass null to stop.
    */
   attachSound(sound: Soundscape | null): void {
     this.sound = sound;
     this.leavesHeard = this.tree.leavesShed;
+    this.placeSound();
   }
 
   private emit(e: SceneEvent): void {
-    if (!this.sound?.enabled) return;
-    this.sound.happen(e, this.placeOf(e.x, e.y, e.z));
+    if (this.sound?.enabled) this.sound.happen(e);
   }
 
   /**
-   * Where a sound at this point sits for the listener at the camera: left or
-   * right of the view, and louder or quieter than one at the point the camera
-   * is looking at. Behind the camera still pans by its side.
+   * Where the garden's places are, for the sound: the tree (at its present
+   * size), the pond, four patches of long grass round the tree at about the
+   * distance the camera circles, so it passes through them as it orbits, and
+   * three stands of the distant treeline, unevenly spaced, so turning round
+   * is heard as well as seen.
    */
-  private placeOf(x: number, y: number, z: number): Placement {
-    const v = _v1.set(x, y, z).applyMatrix4(this.camera.matrixWorldInverse);
-    const side = v.x / (Math.abs(v.x) + Math.abs(v.z) + 1e-3);
-    const near = this.camera.position.distanceTo(this.controls.target);
-    const far = Math.max(1, v.length());
-    return {
-      pan: MathUtils.clamp(side * 1.3, -1, 1) * 0.85,
-      gain: MathUtils.clamp(Math.pow(near / far, 0.7), 0.2, 1.3),
+  private placeSound(): void {
+    if (!this.sound) return;
+    const around = (degrees: number, r: number, y: number) => {
+      const a = MathUtils.degToRad(degrees);
+      return { x: Math.sin(a) * r, y, z: Math.cos(a) * r };
     };
+    const places: SoundPlaces = {
+      tree: { x: 0, y: 0, z: 0, height: this.treeHeight, radius: this.treeRadius },
+      pond: { x: POND.x, y: POND.level, z: POND.z, rx: POND.rx, rz: POND.rz },
+      meadow: [around(35, 15, 0.3), around(125, 12, 0.3), around(220, 16, 0.3), around(300, 13, 0.3)],
+      woods: [around(20, 105, 8), around(145, 115, 8), around(255, 100, 8)],
+    };
+    this.sound.setPlaces(places);
   }
+
+  private readonly ears: Ears = {
+    pos: { x: 0, y: 0, z: 0 },
+    forward: { x: 0, y: 0, z: -1 },
+    right: { x: 1, y: 0, z: 0 },
+    up: { x: 0, y: 1, z: 0 },
+  };
 
   /** One frame of what the scene sounds like. */
   private hear(dt: number): void {
@@ -1099,14 +1114,32 @@ export class TreeStudio {
     s.leafy = MathUtils.clamp(u.leafCull.value, 0, 1) * MathUtils.smoothstep(this.growth, 0.5, 0.95);
     s.needles = this.needles;
     s.ice = this.pond.uniforms.ice.value;
-    const toPond = Math.hypot(this.camera.position.x - POND.x, this.camera.position.z - POND.z);
-    s.pondNear = 1 - MathUtils.smoothstep(toPond, 6, 40);
     s.growthRate = (this.growth - this.grownLast) / dt;
     this.grownLast = this.growth;
     s.rustle = this.hoverStrength * this.rustleNow;
+    s.hand.x = this.hoverPoint.x;
+    s.hand.y = this.hoverPoint.y;
+    s.hand.z = this.hoverPoint.z;
     s.perched = this.flock.perched;
     s.ducks = 1 - s.ice;
     s.ducklings = this.seasonTarget.ducks.ducklings * (1 - s.ice);
+
+    // The ears are the camera's.
+    const m = this.camera.matrixWorld.elements;
+    const e = this.ears;
+    e.pos.x = m[12];
+    e.pos.y = m[13];
+    e.pos.z = m[14];
+    e.right.x = m[0];
+    e.right.y = m[1];
+    e.right.z = m[2];
+    e.up.x = m[4];
+    e.up.y = m[5];
+    e.up.z = m[6];
+    e.forward.x = -m[8];
+    e.forward.y = -m[9];
+    e.forward.z = -m[10];
+    sound.setEars(e);
     sound.update(s, dt);
 
     // Leaves are heard by the handful: a count that leaks away over a second,

@@ -3,32 +3,33 @@
  *
  * A small Web Audio engine that follows the scene rather than playing over
  * it. Every frame the studio hands it a snapshot of the values it is already
- * easing for the picture — the season, the hour, the rain, the wind and its
+ * easing for the picture (the season, the hour, the rain, the wind and its
  * gusts, the ice, how fast the tree is growing, how hard the crown is being
- * rustled — and each long sound's level chases them, so dusk falls in the
- * ears as it falls on the screen. Things that happen — a bird taking off, a
- * fish rising, an apple landing — are played the moment the picture shows
- * them, panned to where they happened.
+ * rustled), and where the camera is. Each long sound's level chases those
+ * values, so dusk falls in the ears as it falls on the screen; and each comes
+ * from somewhere: the crown, the reeds of the pond, patches of the meadow,
+ * stands of woodland on the horizon. Turn the camera and they turn round you.
+ * Things that happen (a dove braking into the crown, a fish rising, an apple
+ * landing) are played the moment the picture shows them, from where they
+ * happened, with the browser's full head-related panning.
  *
- *   beds, wind ─► air ─────┐
- *   rain, snow ─► weather ─┤
- *   growth, rustle ► tree ─┤
- *   creatures ──► life ────┼─► compressor ─► master ─► speakers
- *   cues ───────► music ───┤   (music ducks air and life while it plays)
- *   clicks ─────► ui ──────┘
+ *   air, wind, the places ─► air ─────┐
+ *   rain, snow ───────────► weather ──┤
+ *   growth, rustle ───────► tree ─────┤ each: your level ─► ducking ─┐
+ *   creatures ────────────► life ─────┤                              ├─► compressor ─► master
+ *   the moments' music ───► music ────┤                              │
+ *   clicks ───────────────► ui ───────┘ ─────────────────────────────┘
  *
- * Long sounds are looped by crossfading the file over itself, a second and a
- * half at each wrap, starting each at a random point — so a take whose seam
- * is not perfect, or an MP3's encoder padding, never clicks, and two beds
- * never phase. One-shots come in pools of takes, never the same one twice
- * running, each a few percent off in pitch and level.
- *
- * Nothing is fetched until sound is switched on, and a long sound's audio is
- * let go a while after it falls silent, so the season you are not in costs
- * no memory.
+ * Nothing is fetched until sound is switched on; a long sound's audio is let
+ * go a while after it falls silent, so the season you are not in costs no
+ * memory.
  */
 import type { SceneEvent } from '../events';
+import { Loop, type SoundBank } from './loop';
 import { SOUND_BY_ID, filesOf } from './manifest';
+import { Emitter, distanceGain, hrtf, placeListener, type Ears, type Vec3 } from './space';
+
+export type { Ears, Vec3 } from './space';
 
 export type SeasonName = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -47,12 +48,11 @@ export interface SoundState {
   leafy: number;
   needles: boolean;
   ice: number;
-  /** How close the camera is to the pond, 0–1. */
-  pondNear: number;
   /** Signed growth per second: up as it grows, down as it shrinks. */
   growthRate: number;
-  /** How hard the crown is being rustled under the pointer, 0–1. */
+  /** How hard the crown is being rustled under the pointer, 0–1, and where the hand is. */
   rustle: number;
+  hand: Vec3;
   /** Doves sitting in the tree. */
   perched: number;
   /** Ducks on the water, and how many of them are ducklings. */
@@ -60,160 +60,54 @@ export interface SoundState {
   ducklings: number;
 }
 
-type Bus = 'air' | 'weather' | 'tree' | 'life' | 'music' | 'ui';
-const BUS_LEVEL: Record<Bus, number> = { air: 0.85, weather: 1, tree: 0.9, life: 0.8, music: 0.75, ui: 0.4 };
-
-/** Where a one-shot comes from: left–right on screen, and how loud from here. */
-export interface Placement {
-  pan?: number;
-  gain?: number;
-  /** Seconds from now. */
-  delay?: number;
+/** Where the garden's places are, in the world. */
+export interface SoundPlaces {
+  /** The foot of the trunk, and the tree's size. */
+  tree: Vec3 & { height: number; radius: number };
+  /** The middle of the water, and its half-extents. */
+  pond: Vec3 & { rx: number; rz: number };
+  /** Patches of long grass where the insects are. */
+  meadow: Vec3[];
+  /** Stands of the distant woods. */
+  woods: Vec3[];
 }
 
-const BASE = `${import.meta.env.BASE_URL}sounds/`;
+export type Bus = 'air' | 'weather' | 'tree' | 'life' | 'music' | 'ui';
+export const BUSES: Bus[] = ['air', 'weather', 'life', 'tree', 'music', 'ui'];
+const BUS_LEVEL: Record<Bus, number> = { air: 0.85, weather: 1, tree: 0.9, life: 0.8, music: 0.75, ui: 0.35 };
 
 /** Everything sits this far under where it was first set: it was too loud. */
 const TRIM = 0.5;
+
+type PlaceName = 'tree' | 'pond' | 'meadow' | 'woods' | 'hand';
+/** At what distance each place is heard as loud as its sounds were made. */
+const PLACE_REF: Record<PlaceName, number> = { tree: 16, pond: 14, meadow: 10, woods: 100, hand: 10 };
+
+/** How a one-shot is played. */
+export interface Shot {
+  /** Where it is in the world; left out, it is in the middle of your head (the interface). */
+  at?: Vec3 | null;
+  /** Where it travels to while it plays. */
+  to?: Vec3;
+  gain?: number;
+  /** Seconds from now. */
+  delay?: number;
+  bus?: Bus;
+  /** No closer than this to the last of the same sound: a burst is one sound. */
+  minGap?: number;
+  /** The distance at which it is as loud as it was made. */
+  ref?: number;
+}
+
+const BASE = `${import.meta.env.BASE_URL}sounds/`;
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
-/** Equal-power fades: a crossfade between two unrelated textures dips by half otherwise. */
-const FADE_IN = Float32Array.from({ length: 64 }, (_, i) => Math.sin((i / 63) * Math.PI * 0.5));
-const FADE_OUT = Float32Array.from({ length: 64 }, (_, i) => Math.cos((i / 63) * Math.PI * 0.5));
-
-/** A long sound, crossfade-looped, its level chasing a target. */
-class Loop {
-  readonly out: GainNode;
-  private buffer: AudioBuffer | null = null;
-  private loading = false;
-  private sources: { src: AudioBufferSourceNode; env: GainNode }[] = [];
-  private nextAt = 0;
-  private running = false;
-  private silentFor = 0;
-  private target = 0;
-
-  constructor(
-    private readonly scape: Soundscape,
-    readonly file: string,
-    bus: GainNode,
-    private readonly reverse = false,
-  ) {
-    this.out = scape.ctx.createGain();
-    this.out.gain.value = 0;
-    this.out.connect(bus);
-  }
-
-  /** Where its level is heading, and over how long it gets there. */
-  set(target: number, seconds = 0.35): void {
-    const t = Math.max(0, Math.min(2, target));
-    if (Math.abs(t - this.target) > 0.002) {
-      this.out.gain.setTargetAtTime(t, this.scape.ctx.currentTime, seconds / 3);
-      this.target = t;
-    }
-  }
-
-  tick(dt: number): void {
-    const ctx = this.scape.ctx;
-    if (this.target > 0.002) {
-      this.silentFor = 0;
-      if (!this.buffer) {
-        if (!this.loading) {
-          this.loading = true;
-          void this.scape.buffer(this.file, false).then((b) => {
-            this.loading = false;
-            this.buffer = b && this.reverse ? reversed(ctx, b) : b;
-          });
-        }
-        return;
-      }
-      if (!this.running) {
-        this.running = true;
-        this.nextAt = ctx.currentTime + 0.02;
-        this.schedule(true);
-      } else {
-        this.schedule(false);
-      }
-    } else if (this.running) {
-      this.silentFor += dt;
-      // Let the level reach nothing before the sources stop.
-      if (this.silentFor > 2) this.stop();
-    } else {
-      this.silentFor += dt;
-      // A minute unheard and its audio is let go; it reloads if wanted again.
-      if (this.silentFor > 60 && this.buffer) {
-        this.buffer = null;
-        this.scape.forget(this.file);
-      }
-    }
-  }
-
-  private schedule(first: boolean): void {
-    const ctx = this.scape.ctx;
-    const b = this.buffer;
-    if (!b) return;
-    const fade = Math.min(1.5, b.duration * 0.2);
-    let offset = first ? Math.random() * Math.max(0, b.duration - fade * 3) : 0;
-    while (this.nextAt < ctx.currentTime + 2.5) {
-      const start = this.nextAt;
-      const len = b.duration - offset;
-      const src = ctx.createBufferSource();
-      src.buffer = b;
-      const env = ctx.createGain();
-      // The first starts at full — its level is the loop's own to bring up —
-      // and each after it fades in under the one before as that fades out.
-      if (first) {
-        env.gain.setValueAtTime(1, start);
-      } else {
-        env.gain.setValueAtTime(0, start);
-        env.gain.setValueCurveAtTime(FADE_IN, start, fade);
-      }
-      first = false;
-      const end = start + len;
-      env.gain.setValueAtTime(1, end - fade);
-      env.gain.setValueCurveAtTime(FADE_OUT, end - fade, fade);
-      src.connect(env).connect(this.out);
-      src.start(start, offset);
-      src.stop(end + 0.05);
-      const entry = { src, env };
-      this.sources.push(entry);
-      src.onended = () => {
-        env.disconnect();
-        this.sources = this.sources.filter((s) => s !== entry);
-      };
-      this.nextAt = end - fade;
-      offset = 0;
-    }
-  }
-
-  stop(): void {
-    const now = this.scape.ctx.currentTime;
-    for (const { src } of this.sources) {
-      try {
-        src.stop(now + 0.05);
-      } catch {
-        // Already stopped.
-      }
-    }
-    this.sources = [];
-    this.running = false;
-  }
-}
-
-function reversed(ctx: BaseAudioContext, b: AudioBuffer): AudioBuffer {
-  const out = ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate);
-  for (let c = 0; c < b.numberOfChannels; c++) {
-    const from = b.getChannelData(c);
-    const to = out.getChannelData(c);
-    for (let i = 0, n = from.length; i < n; i++) to[i] = from[n - 1 - i];
-  }
-  return out;
-}
-
-/** A one-shot's takes are mono: they are panned here, so a stereo file only doubles the memory. */
+/** A one-shot's takes are mono: they are placed here, so a stereo file only doubles the memory. */
 function mono(ctx: BaseAudioContext, b: AudioBuffer): AudioBuffer {
   if (b.numberOfChannels === 1) return b;
   const out = ctx.createBuffer(1, b.length, b.sampleRate);
@@ -226,46 +120,67 @@ function mono(ctx: BaseAudioContext, b: AudioBuffer): AudioBuffer {
   return out;
 }
 
-export class Soundscape {
+interface Channel {
+  /** Its place in the mix, times your level for it. */
+  mix: GainNode;
+  /** Made room in under music. */
+  duck: GainNode;
+  meter: AnalyserNode | null;
+  heard: number;
+}
+
+export class Soundscape implements SoundBank {
   readonly ctx: AudioContext;
   private readonly master: GainNode;
-  private readonly buses: Record<Bus, GainNode>;
+  private readonly squeeze: DynamicsCompressorNode;
+  private readonly channels = {} as Record<Bus, Channel>;
+  private readonly yours: Record<Bus, number> = { air: 1, weather: 1, tree: 1, life: 1, music: 1, ui: 1 };
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
   private readonly loops = new Map<string, Loop>();
+  private readonly emitters = new Map<string, Emitter[]>();
   private readonly lastTake = new Map<string, number>();
   private readonly lastPlayed = new Map<string, number>();
   private volume = 0.8;
   private on = false;
   private dimmed = false;
+  private places: SoundPlaces | null = null;
+  private readonly ears: Ears = {
+    pos: { x: 0, y: 2, z: 16 },
+    forward: { x: 0, y: 0, z: -1 },
+    right: { x: 1, y: 0, z: 0 },
+    up: { x: 0, y: 1, z: 0 },
+  };
 
   /** The season's blend, eased the way the picture's colours are. */
   private readonly seasons: Record<SeasonName, number> = { spring: 0, summer: 1, autumn: 0, winter: 0 };
   private seasonSet = false;
   private wasIce = 0;
+  private state: SoundState | null = null;
   /** The loops are kept fed on a clock of their own, so they carry on while the scene is paused. */
   private feeder = 0;
   private lastFeed = 0;
   /** Fruit landing: a few at once are a patter, a whole crown at once is still only a few. */
   private fruitBudget = 4;
-  private musicPlaying: { src: AudioBufferSourceNode; gain: GainNode; until: number } | null = null;
+  /** A moment's music playing, and until when. */
+  private cue: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
-    const squeeze = this.ctx.createDynamicsCompressor();
-    squeeze.threshold.value = -16;
-    squeeze.knee.value = 12;
-    squeeze.ratio.value = 3;
-    squeeze.attack.value = 0.01;
-    squeeze.release.value = 0.3;
+    this.squeeze = this.ctx.createDynamicsCompressor();
+    this.squeeze.threshold.value = -18;
+    this.squeeze.knee.value = 12;
+    this.squeeze.ratio.value = 3;
+    this.squeeze.attack.value = 0.01;
+    this.squeeze.release.value = 0.3;
     this.master = this.ctx.createGain();
     this.master.gain.value = 0;
-    squeeze.connect(this.master).connect(this.ctx.destination);
-    this.buses = {} as Record<Bus, GainNode>;
-    for (const bus of Object.keys(BUS_LEVEL) as Bus[]) {
-      const g = this.ctx.createGain();
-      g.gain.value = BUS_LEVEL[bus];
-      g.connect(squeeze);
-      this.buses[bus] = g;
+    this.squeeze.connect(this.master).connect(this.ctx.destination);
+    for (const bus of BUSES) {
+      const mix = this.ctx.createGain();
+      mix.gain.value = BUS_LEVEL[bus];
+      const duck = this.ctx.createGain();
+      mix.connect(duck).connect(this.squeeze);
+      this.channels[bus] = { mix, duck, meter: null, heard: 0 };
     }
 
     // Browsers hold audio until someone touches the page; the switch that
@@ -287,6 +202,8 @@ export class Soundscape {
     else if (this.on) void this.ctx.resume();
   };
 
+  // ------------------------------------------------------------- controls
+
   /** Sound on or off; on starts loading what the scene needs, off fades everything out. */
   setEnabled(on: boolean): void {
     if (on === this.on) return;
@@ -307,26 +224,18 @@ export class Soundscape {
         if (this.on) return;
         clearInterval(this.feeder);
         for (const l of this.loops.values()) l.stop();
-        if (this.musicPlaying) {
-          this.musicPlaying.src.stop();
-          this.musicPlaying = null;
-        }
+        this.cue?.src.stop();
+        this.cue = null;
         void this.ctx.suspend();
       }, 900);
     }
-  }
-
-  private feed(): void {
-    const now = performance.now();
-    const dt = Math.min(1, (now - this.lastFeed) / 1000);
-    this.lastFeed = now;
-    for (const l of this.loops.values()) l.tick(dt);
   }
 
   get enabled(): boolean {
     return this.on;
   }
 
+  /** The whole garden's level, 0–1. */
   setVolume(v: number): void {
     this.volume = Math.max(0, Math.min(1, v));
     if (this.on) this.master.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.1);
@@ -342,7 +251,65 @@ export class Soundscape {
     return this.volume * this.volume * TRIM * (this.dimmed ? 0.3 : 1);
   }
 
-  // ------------------------------------------------------------ loading
+  // ---------------------------------------------------------------- space
+
+  /** Where the garden's places are. Call again when the tree changes size. */
+  setPlaces(places: SoundPlaces): void {
+    this.places = places;
+    for (const [key, list] of this.emitters) {
+      const points = this.pointsOf(key.split('/')[0] as PlaceName);
+      list.forEach((e, i) => Object.assign(e.at, points[i % points.length]));
+    }
+  }
+
+  /** Where the camera is, and which way it looks. Every frame. */
+  setEars(ears: Ears): void {
+    Object.assign(this.ears.pos, ears.pos);
+    Object.assign(this.ears.forward, ears.forward);
+    Object.assign(this.ears.right, ears.right);
+    Object.assign(this.ears.up, ears.up);
+    if (!this.on) return;
+    placeListener(this.ctx, this.ears);
+    for (const list of this.emitters.values()) for (const e of list) e.aim(this.ears);
+  }
+
+  /** Where a place's emitters stand. */
+  private pointsOf(place: PlaceName): Vec3[] {
+    const p = this.places;
+    if (!p) return [{ x: 0, y: 1, z: 0 }];
+    switch (place) {
+      case 'tree': {
+        // Round the crown, so a near tree is wide and a far one a point.
+        const { x, y, z, height, radius } = p.tree;
+        return [0, 1, 2].map((k) => {
+          const a = (k / 3) * Math.PI * 2 + 0.5;
+          return { x: x + Math.cos(a) * radius * 0.65, y: y + height * 0.55, z: z + Math.sin(a) * radius * 0.65 };
+        });
+      }
+      case 'pond':
+        return [-1, 1].map((s) => ({ x: p.pond.x + s * p.pond.rx * 0.45, y: p.pond.y + 0.2, z: p.pond.z }));
+      case 'hand':
+        return [this.state?.hand ?? { x: 0, y: 3, z: 0 }];
+      default:
+        return p[place];
+    }
+  }
+
+  private emittersOf(place: PlaceName, bus: Bus): Emitter[] {
+    const key = `${place}/${bus}`;
+    let list = this.emitters.get(key);
+    if (!list) {
+      list = this.pointsOf(place).map((at) => {
+        const e = new Emitter(this.ctx, this.channels[bus].mix, { ...at }, PLACE_REF[place]);
+        e.aim(this.ears);
+        return e;
+      });
+      this.emitters.set(key, list);
+    }
+    return list;
+  }
+
+  // -------------------------------------------------------------- loading
 
   /** A decoded file, once; a one-shot's take comes back mono. */
   buffer(file: string, asMono: boolean): Promise<AudioBuffer | null> {
@@ -365,89 +332,120 @@ export class Soundscape {
   /** The one-shots likely to be wanted soon, so their first play is on time. */
   private preload(): void {
     for (const id of [
-      'fish-plop', 'dove-coo', 'dove-takeoff', 'dove-flutter-in', 'dove-flutter-off', 'leaf-fall', 'apple-thud', 'berry-patter', 'cone-thud',
-      'grow-seed', 'grow-bloom', 'tree-sink', 'duck-quack', 'duckling-peep', 'duck-dabble', 'songbird-spring',
-      'songbird-summer', 'songbird-autumn', 'chickadee', 'ice-creak',
+      'fish-plop', 'dove-coo', 'dove-takeoff', 'dove-flutter-in', 'dove-flutter-off', 'leaf-fall', 'apple-thud',
+      'berry-patter', 'cone-thud', 'grow-seed', 'grow-bloom', 'tree-sink', 'duck-quack', 'duckling-peep',
+      'duck-dabble', 'songbird-spring', 'songbird-summer', 'songbird-autumn', 'chickadee', 'ice-creak',
     ]) {
       const spec = SOUND_BY_ID[id];
       if (spec) for (const f of filesOf(spec)) void this.buffer(f, true);
     }
   }
 
-  private loop(id: string, bus: Bus, reverse = false): Loop {
-    const key = reverse ? `${id}~` : id;
+  /** A long sound: all around you, or played from a place. */
+  private loop(id: string, bus: Bus, place?: PlaceName, reverse = false): Loop {
+    const key = `${id}${reverse ? '~' : ''}@${place ?? 'all'}`;
     let l = this.loops.get(key);
     if (!l) {
-      l = new Loop(this, `${id}.mp3`, this.buses[bus], reverse);
+      const to = place ? this.emittersOf(place, bus).map((e) => e.input) : [this.channels[bus].mix];
+      l = new Loop(this, `${id}.mp3`, to, reverse);
       this.loops.set(key, l);
     }
     return l;
   }
 
-  // ----------------------------------------------------------- one-shots
+  private feed(): void {
+    const now = performance.now();
+    const dt = Math.min(1, (now - this.lastFeed) / 1000);
+    this.lastFeed = now;
+    for (const l of this.loops.values()) l.tick(dt);
+  }
 
-  /**
-   * Play a one-shot from its pool. `minGap` keeps a burst of the same event —
-   * a whole flock taking off in the same half second — to one sound.
-   */
-  play(id: string, place: Placement = {}, bus: Bus = 'life', minGap = 0): void {
+  // ------------------------------------------------------------ one-shots
+
+  /** Play a one-shot from its pool of takes, from where it happened. */
+  play(id: string, shot: Shot = {}): void {
     if (!this.on || this.ctx.state !== 'running') return;
     const spec = SOUND_BY_ID[id];
     if (!spec) return;
     const now = this.ctx.currentTime;
-    if (minGap > 0 && now - (this.lastPlayed.get(id) ?? -1e9) < minGap) return;
+    const gap = shot.minGap ?? 0;
+    if (gap > 0 && now - (this.lastPlayed.get(id) ?? -1e9) < gap) return;
     this.lastPlayed.set(id, now);
     const files = filesOf(spec);
     let k = Math.floor(Math.random() * files.length);
     if (files.length > 1 && k === this.lastTake.get(id)) k = (k + 1) % files.length;
     this.lastTake.set(id, k);
+    const bus = shot.bus ?? 'life';
     void this.buffer(files[k], true).then((b) => {
       if (!b || !this.on) return;
+      // A late decode still lands on its moment if it can, or as soon as it can.
+      const start = Math.max(this.ctx.currentTime, now + (shot.delay ?? 0));
       const src = this.ctx.createBufferSource();
       src.buffer = b;
       src.playbackRate.value = 1 + (Math.random() - 0.5) * 0.06;
       const gain = this.ctx.createGain();
-      gain.gain.value = (place.gain ?? 1) * Math.pow(10, ((Math.random() - 0.5) * 3) / 20);
-      const pan = this.ctx.createStereoPanner();
-      pan.pan.value = Math.max(-1, Math.min(1, place.pan ?? 0));
-      src.connect(gain).connect(pan).connect(this.buses[bus]);
-      // A late decode still lands on its moment if it can, or as soon as it can.
-      src.start(Math.max(this.ctx.currentTime, now + (place.delay ?? 0)));
-      src.onended = () => pan.disconnect();
+      const base = (shot.gain ?? 1) * Math.pow(10, ((Math.random() - 0.5) * 3) / 20);
+      let last: AudioNode = gain;
+      src.connect(gain);
+      if (shot.at) {
+        const ref = shot.ref ?? 12;
+        const ears = this.ears.pos;
+        const far = (p: Vec3) => distanceGain(Math.hypot(p.x - ears.x, p.y - ears.y, p.z - ears.z), ref);
+        if (shot.to) {
+          // Swelling as it passes: the level along its path, sampled.
+          const steps = 12;
+          const curve = Float32Array.from({ length: steps }, (_, i) => {
+            const t = i / (steps - 1);
+            const a = shot.at!;
+            const b2 = shot.to!;
+            return base * far({ x: a.x + (b2.x - a.x) * t, y: a.y + (b2.y - a.y) * t, z: a.z + (b2.z - a.z) * t });
+          });
+          gain.gain.setValueCurveAtTime(curve, start, b.duration);
+        } else {
+          gain.gain.value = base * far(shot.at);
+        }
+        const panner = hrtf(this.ctx, shot.at, shot.to, b.duration, start);
+        gain.connect(panner);
+        last = panner;
+      } else {
+        gain.gain.value = base;
+      }
+      last.connect(this.channels[bus].mix);
+      src.start(start);
+      src.onended = () => last.disconnect();
     });
   }
 
   /** A piece of music for a moment in the sky; the air and the creatures make room for it. */
   music(id: string): void {
-    if (!this.on || this.ctx.state !== 'running') return;
+    if (!this.on || this.ctx.state !== 'running' || this.yours.music < 0.02) return;
     void this.buffer(`${id}.mp3`, false).then((b) => {
       if (!b || !this.on) return;
       const now = this.ctx.currentTime;
       // A new cue takes over from one still playing, briefly overlapping.
-      if (this.musicPlaying) {
-        const old = this.musicPlaying;
+      if (this.cue) {
+        const old = this.cue;
         old.gain.gain.setTargetAtTime(0, now, 0.4);
         old.src.stop(now + 2);
       }
       const src = this.ctx.createBufferSource();
       src.buffer = b;
       const gain = this.ctx.createGain();
-      gain.gain.value = 1;
-      src.connect(gain).connect(this.buses.music);
+      src.connect(gain).connect(this.channels.music.mix);
       src.start(now + 0.05);
       const until = now + b.duration;
-      this.musicPlaying = { src, gain, until };
+      this.cue = { src, gain };
       src.onended = () => {
-        if (this.musicPlaying?.src === src) this.musicPlaying = null;
+        if (this.cue?.src === src) this.cue = null;
         gain.disconnect();
         this.forget(`${id}.mp3`);
       };
       // Duck the air and the creatures under it, and bring them back as it ends.
       for (const bus of ['air', 'life'] as Bus[]) {
-        const g = this.buses[bus].gain;
+        const g = this.channels[bus].duck.gain;
         g.cancelScheduledValues(now);
-        g.setTargetAtTime(BUS_LEVEL[bus] * 0.55, now, 0.5);
-        g.setTargetAtTime(BUS_LEVEL[bus], Math.max(now + 1, until - 3), 1.2);
+        g.setTargetAtTime(0.6, now, 0.5);
+        g.setTargetAtTime(1, Math.max(now + 1, until - 3), 1.2);
       }
     });
   }
@@ -456,8 +454,11 @@ export class Soundscape {
 
   /** One frame: every long sound's level, and the creatures that call on their own. */
   update(s: SoundState, dt: number): void {
+    this.state = s;
     if (!this.on) return;
     this.fruitBudget = Math.min(4, this.fruitBudget + dt * 5);
+    const hand = this.emitters.get('hand/tree');
+    if (hand) Object.assign(hand[0].at, s.hand);
 
     // The season's blend eases as the colours do.
     const k = this.seasonSet ? 1 - Math.exp(-dt / 1.2) : 1;
@@ -465,16 +466,30 @@ export class Soundscape {
     for (const name of Object.keys(this.seasons) as SeasonName[]) {
       this.seasons[name] += ((name === s.season ? 1 : 0) - this.seasons[name]) * k;
     }
+    const { spring, summer, autumn, winter } = this.seasons;
 
     const day = 1 - s.night;
     const wet = s.rain;
     // Rain and snow mask the quiet life of the place.
     const hush = (1 - 0.65 * wet) * (1 - 0.35 * s.snow);
+
+    // The air all around: the season by day and by night, under the places.
     for (const name of Object.keys(this.seasons) as SeasonName[]) {
-      const w = this.seasons[name];
-      this.loop(`bed-${name}-day`, 'air').set(w * day * hush, 1.2);
-      this.loop(`bed-${name}-night`, 'air').set(w * s.night * hush, 1.2);
+      const w = this.seasons[name] * hush * 0.7;
+      this.loop(`bed-${name}-day`, 'air').set(w * day, 1.2);
+      this.loop(`bed-${name}-night`, 'air').set(w * s.night, 1.2);
     }
+
+    // The places, heard from where they are. The woods on the horizon carry
+    // the season's birds by day and an owl's quiet by night; the meadow's
+    // grass its insects; the pond its frogs, once the light goes.
+    for (const name of Object.keys(this.seasons) as SeasonName[]) {
+      this.loop(`woods-${name}`, 'life', 'woods').set(this.seasons[name] * day * hush * 0.9, 1.5);
+    }
+    this.loop('woods-night', 'life', 'woods').set(s.night * hush * (1 - 0.5 * winter) * 0.8, 1.5);
+    this.loop('insects-meadow', 'life', 'meadow').set(day * hush * (summer + 0.35 * spring + 0.2 * autumn), 1.5);
+    this.loop('crickets-night', 'life', 'meadow').set(s.night * hush * (summer + 0.7 * autumn + 0.3 * spring), 1.5);
+    this.loop('frogs-pond', 'life', 'pond').set((spring + 0.8 * summer) * (0.15 + 0.85 * s.night) * (1 - s.ice) * hush, 1.5);
 
     // Wind in the tree, swelling with the gusts the crown is visibly taking.
     // The slider runs to 1.5: a summer breeze is about a third of that and
@@ -485,112 +500,170 @@ export class Soundscape {
     const breeze = Math.sqrt(Math.min(1, wind / 0.8));
     const gale = smoothstep(0.95, 1.5, wind);
     const broadleaf = s.needles ? 0 : 1;
-    this.loop('wind-leaves', 'air').set(s.leafy * broadleaf * breeze * swell * (1 - 0.45 * gale), 0.25);
-    this.loop('wind-pine', 'air').set((1 - broadleaf) * breeze * swell, 0.25);
-    this.loop('wind-bare', 'air').set((1 - s.leafy) * broadleaf * Math.min(1, wind / 0.9) * swell, 0.25);
+    this.loop('wind-leaves', 'air', 'tree').set(s.leafy * broadleaf * breeze * swell * (1 - 0.45 * gale), 0.25);
+    this.loop('wind-pine', 'air', 'tree').set((1 - broadleaf) * breeze * swell, 0.25);
+    this.loop('wind-bare', 'air', 'tree').set((1 - s.leafy) * broadleaf * Math.min(1, wind / 0.9) * swell, 0.25);
     this.loop('wind-gale', 'air').set(gale * swell, 0.25);
 
     // Weather. Rain, once it is falling, is the loudest thing out there.
     const heavy = smoothstep(0.45, 0.95, wet);
     this.loop('rain-light', 'weather').set(Math.sqrt(wet) * (1 - heavy) * 1.5, 0.6);
     this.loop('rain-heavy', 'weather').set(heavy * 1.6, 0.6);
-    this.loop('rain-pond', 'weather').set(wet * s.pondNear * (1 - s.ice), 0.6);
+    this.loop('rain-pond', 'weather', 'pond').set(wet * (1 - s.ice) * 1.2, 0.6);
     this.loop('snowfall', 'weather').set(s.snow * 0.9, 0.8);
 
-    // The pond: louder the nearer you stand, silent once frozen.
-    this.loop('pond-water', 'air').set(s.pondNear * (1 - s.ice) * (1 - 0.5 * wet) * 0.8, 0.5);
+    // The pond laps, quieter in the rain, silent once frozen.
+    this.loop('pond-water', 'air', 'pond').set((1 - s.ice) * (1 - 0.5 * wet) * 0.9, 0.5);
 
     // The tree. Growth is heard as fast as it happens, and backwards when it
-    // shrinks; the rustle follows the hand in the crown.
+    // shrinks; the rustle is where the hand is.
     const grow = Math.min(1, Math.max(0, s.growthRate) / 0.3);
     const shrink = Math.min(1, Math.max(0, -s.growthRate) / 0.6);
-    this.loop('grow-texture', 'tree').set(Math.pow(grow, 0.6) * 1.3, 0.12);
-    this.loop('grow-texture', 'tree', true).set(Math.pow(shrink, 0.6) * 0.8, 0.12);
-    this.loop('rustle-hand', 'tree').set(s.rustle * Math.max(0.15, s.leafy), 0.1);
+    this.loop('grow-texture', 'tree', 'tree').set(Math.pow(grow, 0.6) * 1.3, 0.12);
+    this.loop('grow-texture', 'tree', 'tree', true).set(Math.pow(shrink, 0.6) * 0.8, 0.12);
+    this.loop('rustle-hand', 'tree', 'hand').set(s.rustle * Math.max(0.15, s.leafy) * 1.2, 0.1);
 
     // Pond ice: it groans as it closes over.
-    if (s.ice > 0.35 && this.wasIce <= 0.35) this.play('ice-creak', { gain: 0.8 }, 'weather');
+    if (s.ice > 0.35 && this.wasIce <= 0.35) this.play('ice-creak', { at: this.pondPoint(), gain: 0.8, bus: 'weather', ref: 14 });
     this.wasIce = s.ice;
 
     this.chorus(s, dt);
   }
 
-  /** The creatures that call on their own, each at its own unhurried rate. */
+  // ------------------------------------------------------------- the places
+
+  private crownPoint(): Vec3 {
+    const t = this.places?.tree;
+    if (!t) return { x: 0, y: 5, z: 0 };
+    const a = Math.random() * Math.PI * 2;
+    const r = t.radius * rand(0.2, 0.7);
+    return { x: t.x + Math.cos(a) * r, y: t.y + t.height * rand(0.5, 0.85), z: t.z + Math.sin(a) * r };
+  }
+
+  private pondPoint(): Vec3 {
+    const p = this.places?.pond;
+    if (!p) return { x: -2, y: 0, z: -8 };
+    const a = Math.random() * Math.PI * 2;
+    return { x: p.x + Math.cos(a) * p.rx * rand(0, 0.6), y: p.y + 0.1, z: p.z + Math.sin(a) * p.rz * rand(0, 0.6) };
+  }
+
+  /** Somewhere out in the land, `near`–`far` metres from the tree, `up` off the ground. */
+  private around(near: number, far: number, up: number): Vec3 {
+    const a = Math.random() * Math.PI * 2;
+    const r = rand(near, far);
+    return { x: Math.cos(a) * r, y: up, z: Math.sin(a) * r };
+  }
+
+  /** The creatures that call on their own, each at its own unhurried rate, each from somewhere. */
   private chorus(s: SoundState, dt: number): void {
     const day = 1 - s.night;
     const quiet = (1 - 0.7 * s.rain) * (1 - 0.5 * s.snow);
     const chance = (perSecond: number) => Math.random() < perSecond * dt;
-    const wide = () => (Math.random() - 0.5) * 1.3;
+    const ears = this.ears;
 
     // Doves in the crown coo now and then, more of them more often.
-    if (day > 0.5 && s.perched > 0 && chance(Math.min(0.22, s.perched * 0.025) * quiet)) {
-      this.play('dove-coo', { pan: (Math.random() - 0.5) * 0.6, gain: 0.75 }, 'life', 2);
+    if (day > 0.5 && s.perched > 0 && chance(Math.min(0.2, s.perched * 0.022) * quiet)) {
+      this.play('dove-coo', { at: this.crownPoint(), gain: rand(0.4, 0.75), minGap: 2 });
     }
-    // Songbirds, by season, by day.
-    const song = { spring: ['songbird-spring', 1 / 8], summer: ['songbird-summer', 1 / 13], autumn: ['songbird-autumn', 1 / 24], winter: null }[s.season] as
+    // Songbirds, by season, by day: mostly out in the hedges, now and then from the top of the tree.
+    const song = { spring: ['songbird-spring', 1 / 9], summer: ['songbird-summer', 1 / 14], autumn: ['songbird-autumn', 1 / 26], winter: null }[s.season] as
       | [string, number]
       | null;
-    if (song && day > 0.6 && chance(song[1] * quiet)) this.play(song[0], { pan: wide(), gain: 0.55 }, 'life', 3);
+    if (song && day > 0.6 && chance(song[1] * quiet)) {
+      const at = Math.random() < 0.3 ? this.crownPoint() : this.around(25, 55, 4);
+      this.play(song[0], { at, gain: 0.6, minGap: 3, ref: 18 });
+    }
     // Ducks talk among themselves; the ducklings never stop peeping.
-    if (s.ducks > 0.5 && day > 0.3 && chance((1 / 14) * quiet)) this.play('duck-quack', { pan: -0.35, gain: 0.6 * s.pondNear + 0.25 }, 'life', 3);
-    if (s.ducklings > 0.3 && chance((1 / 5) * quiet)) this.play('duckling-peep', { pan: -0.35, gain: 0.45 * s.pondNear + 0.15 }, 'life', 2);
-    // Further off: bees in the warm months, crows in the cold, an owl at night,
-    // geese passing over in autumn, thunder in a downpour under heavy cloud.
-    if (day > 0.6 && (s.season === 'spring' || s.season === 'summer') && chance((1 / 30) * quiet)) this.play('bee-flyby', { pan: wide(), gain: 0.5 }, 'life', 8);
-    if (day > 0.6 && (s.season === 'autumn' || s.season === 'winter') && chance((1 / 40) * quiet)) this.play('crow-far', { pan: wide(), gain: 0.45 }, 'life', 10);
-    if (day > 0.6 && s.season === 'autumn' && chance(1 / 150)) this.play('geese-far', { pan: wide(), gain: 0.5 }, 'life', 60);
-    if (s.night > 0.7 && s.season !== 'summer' && chance((1 / 35) * quiet)) this.play('owl-hoot', { pan: wide(), gain: 0.5 }, 'life', 12);
-    if (s.rain > 0.7 && s.overcast > 0.6 && chance(1 / 45)) this.play('thunder-far', { pan: wide(), gain: 0.7 }, 'weather', 15);
-    if (s.ice > 0.9 && chance(1 / 28)) this.play('ice-sing', { pan: -0.3, gain: 0.5 }, 'weather', 8);
+    if (s.ducks > 0.5 && day > 0.3 && chance((1 / 14) * quiet)) this.play('duck-quack', { at: this.pondPoint(), gain: 0.55, minGap: 3, ref: 12 });
+    if (s.ducklings > 0.3 && chance((1 / 9) * quiet)) this.play('duckling-peep', { at: this.pondPoint(), gain: 0.35, minGap: 4, ref: 10 });
+    // A bumblebee goes by close, from one side of you to the other.
+    if (day > 0.6 && (s.season === 'spring' || s.season === 'summer') && chance((1 / 35) * quiet)) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const ahead = rand(1.5, 4);
+      const from = this.offset(ears, -6 * side, -1.2, ahead + rand(-1, 1));
+      const to = this.offset(ears, 6 * side, -0.8, ahead + rand(-1, 1));
+      this.play('bee-flyby', { at: from, to, gain: 0.45, minGap: 10, ref: 3 });
+    }
+    // Further off: crows in the cold months, an owl at night from the woods,
+    // geese passing high over in autumn, thunder in a downpour under heavy cloud.
+    if (day > 0.6 && (s.season === 'autumn' || s.season === 'winter') && chance((1 / 40) * quiet)) {
+      this.play('crow-far', { at: this.around(60, 110, 12), gain: 0.5, minGap: 10, ref: 80 });
+    }
+    if (day > 0.6 && s.season === 'autumn' && chance(1 / 150)) {
+      const a = Math.random() * Math.PI * 2;
+      const from = { x: Math.cos(a) * 140, y: 45, z: Math.sin(a) * 140 };
+      this.play('geese-far', { at: from, to: { x: -from.x, y: 45, z: -from.z }, gain: 0.6, minGap: 60, ref: 60 });
+    }
+    if (s.night > 0.7 && s.season !== 'summer' && chance((1 / 35) * quiet)) {
+      const woods = this.places?.woods;
+      const stand = woods?.length ? woods[Math.floor(Math.random() * woods.length)] : this.around(70, 90, 8);
+      this.play('owl-hoot', { at: { x: stand.x * 0.65, y: 9, z: stand.z * 0.65 }, gain: 0.55, minGap: 12, ref: 60 });
+    }
+    if (s.rain > 0.7 && s.overcast > 0.6 && chance(1 / 45)) {
+      this.play('thunder-far', { at: this.around(300, 500, 120), gain: 0.65, bus: 'weather', minGap: 15, ref: 400 });
+    }
+    if (s.ice > 0.9 && chance(1 / 28)) this.play('ice-sing', { at: this.pondPoint(), gain: 0.5, bus: 'weather', minGap: 8, ref: 14 });
   }
 
+  /** A point relative to the ears: right, up, ahead, in metres. */
+  private offset(ears: Ears, right: number, up: number, ahead: number): Vec3 {
+    const { pos, right: r, up: u, forward: f } = ears;
+    return {
+      x: pos.x + r.x * right + u.x * up + f.x * ahead,
+      y: pos.y + r.y * right + u.y * up + f.y * ahead,
+      z: pos.z + r.z * right + u.z * up + f.z * ahead,
+    };
+  }
+
+  // --------------------------------------------------------------- events
+
   /** Something happened in the garden, here: the sound of it, at the moment the picture shows it. */
-  happen(e: SceneEvent, place: Placement): void {
+  happen(e: SceneEvent): void {
     if (!this.on) return;
+    const at = { x: e.x, y: e.y, z: e.z };
+    const voice = e.detail ?? 0.5;
     switch (e.kind) {
       case 'dove-flush':
         // A flock put up is one clatter, however many go.
-        this.play('dove-takeoff', { ...place, gain: (place.gain ?? 1) * 0.7 }, 'life', 1.2);
+        this.play('dove-takeoff', { at, gain: 0.7, minGap: 1.2 });
         break;
       case 'dove-takeoff':
         // Leaving in its own time: a quiet bird is not heard at all.
-        if (Math.random() < (e.detail ?? 0.5) * 1.2) {
-          this.play('dove-flutter-off', { ...place, gain: (place.gain ?? 1) * (0.25 + 0.45 * (e.detail ?? 0.5)) }, 'life', 3);
-        }
+        if (Math.random() < voice * 1.2) this.play('dove-flutter-off', { at, gain: 0.25 + 0.45 * voice, minGap: 3 });
         break;
       case 'dove-arrive':
-        if (Math.random() < 0.35 + 0.65 * (e.detail ?? 0.5)) {
-          this.play('dove-flutter-in', { ...place, gain: (place.gain ?? 1) * (0.25 + 0.5 * (e.detail ?? 0.5)) }, 'life', 2.5);
-        }
+        if (Math.random() < 0.35 + 0.65 * voice) this.play('dove-flutter-in', { at, gain: 0.25 + 0.5 * voice, minGap: 2.5 });
         break;
       case 'fish-rise':
-        this.play('fish-plop', { ...place, gain: (place.gain ?? 1) * 0.75 }, 'life', 0.3);
+        // Not every rise is heard: a few fish feeding are a plop now and then.
+        if (Math.random() < 0.6) this.play('fish-plop', { at, gain: 0.55, minGap: 2.5 });
         break;
       case 'duck-dabble':
-        this.play('duck-dabble', { ...place, gain: (place.gain ?? 1) * 0.7 }, 'life', 2);
+        this.play('duck-dabble', { at, gain: 0.65, minGap: 2 });
         break;
       case 'robin-hop':
         // It does not call at every hop.
-        if (Math.random() < 0.3) this.play('chickadee', { ...place, gain: (place.gain ?? 1) * 0.6 }, 'life', 5);
+        if (Math.random() < 0.3) this.play('chickadee', { at, gain: 0.6, minGap: 5 });
         break;
       case 'fruit-fall': {
         if (this.fruitBudget < 1) break;
         this.fruitBudget -= 1;
         const id = e.detail === 2 ? 'cone-thud' : e.detail === 1 ? 'apple-thud' : 'berry-patter';
-        this.play(id, { ...place, gain: (place.gain ?? 1) * 0.8, delay: e.delay }, 'tree');
+        // Heard where it lands, which is under where it hung.
+        this.play(id, { at: { x: e.x, y: 0.1, z: e.z }, gain: 0.8, delay: e.delay, bus: 'tree' });
         break;
       }
       case 'leaves-fall':
-        this.play('leaf-fall', { ...place, gain: (place.gain ?? 1) * Math.min(1, 0.4 + (e.detail ?? 6) * 0.03) }, 'tree', 1.4);
+        this.play('leaf-fall', { at, gain: Math.min(1, 0.4 + (e.detail ?? 6) * 0.03), bus: 'tree', minGap: 1.4 });
         break;
       case 'grow-start':
-        this.play('grow-seed', { gain: 0.8 }, 'tree', 0.5);
+        this.play('grow-seed', { at: this.treeFoot(0.2), gain: 0.8, bus: 'tree', minGap: 0.5, ref: 16 });
         break;
       case 'grow-done':
-        this.play('grow-bloom', { gain: 0.7 }, 'tree', 1);
+        this.play('grow-bloom', { at: this.treeFoot(0.6), gain: 0.7, bus: 'tree', minGap: 1, ref: 16 });
         break;
       case 'tree-sink':
-        this.play('tree-sink', { gain: 0.7 }, 'tree', 1);
+        this.play('tree-sink', { at: this.treeFoot(0.3), gain: 0.7, bus: 'tree', minGap: 1, ref: 16 });
         break;
       case 'nightfall':
       case 'daybreak':
@@ -601,9 +674,14 @@ export class Soundscape {
     }
   }
 
+  private treeFoot(up: number): Vec3 {
+    const t = this.places?.tree;
+    return t ? { x: t.x, y: t.y + t.height * up, z: t.z } : { x: 0, y: 2, z: 0 };
+  }
+
   /** The interface's own small sounds, very quiet: a switch, a card, a question. */
   ui(kind: 'pebble' | 'card' | 'ask'): void {
-    this.play(`ui-${kind}`, { gain: kind === 'card' ? 0.5 : 0.7 }, 'ui', 0.06);
+    this.play(`ui-${kind}`, { gain: kind === 'card' ? 0.5 : 0.7, bus: 'ui', minGap: 0.06 });
   }
 
   /** The welcome's tune, once, if sound is on when it opens. */
