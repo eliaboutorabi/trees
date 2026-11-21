@@ -7,7 +7,7 @@
  * code that plays it), and the soundscape reads it to know what each file is.
  * It imports nothing, so the script can load it directly under Node.
  *
- * Files land in `public/sounds/`: `<id>.mp3` for a bed or a cue, and
+ * Files land in `public/sounds/`: `<id>.mp3` for a bed or a piece, and
  * `<id>-1.mp3`, `<id>-2.mp3`… for each take of a one-shot, played as a pool.
  */
 
@@ -20,14 +20,16 @@ export interface SoundSpec {
   prompt: string;
   /** Length to ask for, in seconds. */
   seconds: number;
-  /** A one-shot's number of takes, played round-robin; one for everything else. */
+  /** How many takes: a one-shot's pool, or a piece of music's versions. */
   takes?: number;
   /** How literally to follow the prompt, 0–1 (ElevenLabs' `prompt_influence`). */
   influence?: number;
   /** Where it sits in the mix relative to its layer's target loudness, in dB. */
   level?: number;
-  /** 1: the first pass. 2: when there were credits for it. 3: placed sound, single doves, the garden's music. */
-  tier: 1 | 2 | 3;
+  /** 1: the first pass. 2: when there were credits for it. 3: placed sound, single doves. 4: the score, and the interface's instrument. */
+  tier: 1 | 2 | 3 | 4;
+  /** For a sound played as notes: the pitch of each take, in Hz, as measured. */
+  pitch?: number[];
 }
 
 const bed = (id: string, prompt: string, extra: Partial<SoundSpec> = {}): SoundSpec => ({
@@ -59,6 +61,13 @@ const music = (id: string, seconds: number, prompt: string, extra: Partial<Sound
   tier: 1,
   ...extra,
 });
+
+/** The score's shared voice, appended to every piece of it. */
+const SCORE =
+  'Bittersweet and grown-up, never cute or childlike: no kalimba, no music box, no glockenspiel, no ukulele, no whistling. Intimate close-miked instruments in a large, soft hall reverb, with a gentle tape warmth.';
+
+const score = (id: string, seconds: number, prompt: string, extra: Partial<SoundSpec> = {}): SoundSpec =>
+  music(id, seconds, `${prompt} ${SCORE}`, { tier: 4, ...extra });
 
 export const SOUNDS: SoundSpec[] = [
   // ------------------------------------------------ the air of the place
@@ -146,102 +155,43 @@ export const SOUNDS: SoundSpec[] = [
   shot('cone-thud', 1, 1, 'A pine cone falling onto the ground, a woody tap and a little bounce.'),
 
   // ----------------------------------------------------------------- music
-  music(
-    'music-rainbow',
-    16,
-    'Hopeful, gentle wonder. Start with a soft harp glissando, then celesta notes and a warm slow string swell, D major, 70 BPM, airy hall reverb, no percussion. Rise once and fade out to silence.',
-  ),
-  music(
-    'music-aurora',
-    28,
-    'Ethereal, vast night sky. Slow evolving warm analogue pads, a soft wordless choir, glassy bell tones, F sharp minor drifting to A major, 56 BPM, long shimmering reverb, no drums. Fade out slowly.',
-  ),
-  music(
-    'music-nightfall',
-    12,
-    'Dusk. Solo felt piano playing three soft descending chords with a low cello underneath, warm and close-mic’d, 60 BPM, then silence.',
-  ),
-  music(
-    'music-daybreak',
-    12,
-    'Morning. Fingerpicked acoustic guitar harmonics and a light wooden flute rising, G major, 84 BPM, bright and fresh, gentle ending.',
-  ),
-  music(
-    'music-welcome',
-    24,
-    'Cosy, whimsical picture-book garden. Kalimba and soft piano with light pizzicato strings, G major, 92 BPM, warm and playful, gentle ending.',
-  ),
-  music(
-    'music-tour',
-    75,
-    'Unobtrusive, curious underscore. Soft marimba ostinato, brushed bells and low warm strings, C major, 80 BPM, steady and light, no big moments, even from start to end.',
-    { tier: 2 },
-  ),
+  //
+  // One score, all in D: Dorian, Aeolian, Lydian, major and minor for its
+  // moods, so the moments, the garden's pieces and the interface's notes
+  // (which are in D Dorian) never quarrel. One palette: felt piano, cello,
+  // strings, glass harmonics, a distant horn, a large soft hall. Bittersweet
+  // and grown-up throughout.
 
-  // The garden's own music: one palette (felt piano, kalimba, harp, warm
-  // strings, bells), a key and a few voices for each season, two for the
-  // night. Each piece is played now and then, with long rests between, the
-  // way music comes and goes in a walk rather than playing over it.
-  music(
-    'garden-spring-1',
-    100,
-    'Gentle pastoral ambient piece for a garden on a spring morning. Kalimba plays a slow, simple, hopeful melody over soft felt piano chords, an airy alto flute answering now and then; light pizzicato strings enter halfway. G major, 72 BPM, sparse and spacious, warm natural room reverb, soft dynamics, no drums. Ends quietly on a held chord.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-spring-2',
-    100,
-    'Delicate ambient piece for a spring afternoon in a garden. Harp arpeggios drift under a warm clarinet melody, with soft string pads swelling and receding like a breeze. D major, 66 BPM, unhurried, spacious and gentle, no percussion. Fades out softly.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-summer-1',
-    100,
-    'Warm, lazy ambient piece for a summer afternoon under a tree. Fingerpicked nylon-string guitar with soft felt piano and a low cello drone, a few vibraphone notes like sunlight through leaves. C major, 70 BPM, relaxed and golden, intimate, no drums. Gentle ending.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-summer-2',
-    100,
-    'Dreamy ambient piece for a still summer day by a pond. Vibraphone and soft hand chimes over slow warm string pads, a muted horn melody once in the middle. F major, 60 BPM, slow and shimmering, lots of space, no percussion. Fades to silence.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-autumn-1',
-    100,
-    'Wistful ambient piece for an autumn afternoon as leaves fall. Solo cello sings a slow melody over soft felt piano, an oboe answers once. A minor moving to C major, 63 BPM, tender, reflective, warm and sparse. Ends softly.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-autumn-2',
-    100,
-    'Quiet, nostalgic solo piano piece for a cool autumn day. Felt piano with gentle falling figures, a soft viola joining late, close and intimate. E minor, 58 BPM, very sparse, lots of silence between phrases. Quiet ending.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-winter-1',
-    100,
-    'Crystalline ambient piece for a snowy winter garden. Celesta and music box play a slow, simple tune over a soft cold pad and glassy harmonics. D minor drifting to F major, 54 BPM, delicate, sparse and hushed, long reverb, no percussion. Fades away.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-winter-2',
-    100,
-    'Very sparse, hushed solo felt piano for a still winter day under snow. A few slow notes and chords with long pauses, warm and close, soft pedal. B-flat major, 50 BPM, calm and tender. Ends on a single held note.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-night-1',
-    100,
-    'Warm, slow ambient night piece for a garden under the stars. Soft evolving pads, a gentle felt piano playing a few notes, a distant warm French horn once. A-flat major, 52 BPM, peaceful and enveloping, deep reverb, no drums. Fades out slowly.',
-    { tier: 3 },
-  ),
-  music(
-    'garden-night-2',
-    100,
-    'Cool, mysterious ambient night piece for a moonlit garden. Glass bells and soft harmonics over low sustained strings, a faint wordless choir far away. F-sharp minor, 50 BPM, still and spacious, gentle, no percussion. Fades to silence.',
-    { tier: 3 },
-  ),
+  // The sky's moments.
+  score('music-nightfall', 14, 'Dusk falling over a garden. Felt piano plays three slow descending chords over a low cello and a distant string pad, warm and bittersweet, the last light going. D minor moving to B-flat major, 56 BPM. Ends on a soft held chord.'),
+  score('music-daybreak', 14, 'First light over a garden. A soft string pad opens, felt piano plays a gentle rising phrase, a muted horn far away; tender, quietly hopeful, a little sad. D major add9, 60 BPM. Fades out.'),
+  score('music-rainbow', 18, 'A rainbow appearing after rain. Slow shimmering string harmonics and glassy textures rise over warm felt piano chords: wonder with a lump in the throat, a moment you wish would last. D major moving to B minor, 62 BPM. Rises once, then fades into the reverb.'),
+  score('music-aurora', 28, 'The aurora over a garden at night. Vast slow analogue pads evolving, a distant wordless choir, a low cello pedal, glass-like harmonics drifting; awe and solitude. D minor drifting to F major, 50 BPM. Fades out slowly.'),
+  score('music-welcome', 22, 'An opening for a quiet garden. Felt piano alone at first, a slow, tender, memorable four-note motif; then a warm string pad and a cello join beneath. Intimate, bittersweet, inviting. D Dorian, 64 BPM. Ends softly on a suspended chord.'),
+  score('music-tour', 90, 'A quiet underscore for being shown round a garden. A gentle repeating felt piano pattern, a soft string pad and an occasional cello line; steady, calm and slightly wistful, no big moments, even from start to end. D Dorian, 72 BPM.'),
+
+  // What you change: a short piece when you settle on a season, a weather,
+  // a new tree. Two takes of each, so a second visit is not the same.
+  score('moment-spring', 18, 'A short musical moment for the arrival of spring. Felt piano plays a slow, tender rising phrase over a soft string pad, a solo cello answers with a warm line: light after a long winter, hopeful yet wistful. D Lydian, 66 BPM. Builds gently, then fades into the reverb.', { takes: 2 }),
+  score('moment-summer', 18, 'A short musical moment for the height of summer. Slow warm swells of strings and a muted French horn under sparse felt piano chords, golden and nostalgic, like the end of a long afternoon you already miss. D major with suspended chords, 60 BPM. Fades into the reverb.', { takes: 2 }),
+  score('moment-autumn', 18, 'A short musical moment for autumn arriving. A solo cello sings a slow falling melody over soft felt piano and a distant string pad, leaves letting go; reflective and tender. D Dorian, 58 BPM. Ends softly, unresolved.', { takes: 2 }),
+  score('moment-winter', 18, 'A short musical moment for winter arriving. Sparse felt piano notes and glassy string harmonics over a deep, quiet low drone: cold air and stillness, solitary but warm at heart. D minor, 52 BPM. Fades into silence.', { takes: 2 }),
+  score('moment-rain', 16, 'In the key of D minor (Aeolian), centred on D throughout. A short musical moment for rain beginning to fall. Soft repeated felt piano notes like the first drops, a low cello swell beneath, a grey hush; melancholy and comforting. D Aeolian, 64 BPM. Fades out.', { takes: 2 }),
+  score('moment-snow', 16, 'In the key of D minor, centred on D throughout. A short musical moment for snow beginning to fall. Slow glassy harmonics and very soft high strings over a hushed pad, weightless and still, gently sorrowful. D minor add9, 50 BPM. Fades out.', { takes: 2 }),
+  score('moment-clear', 16, 'A short musical moment for the sky clearing after rain. A warm string chord opens up, felt piano descends gently into a resolved major chord: relief, with a trace of sadness. D major, 62 BPM. Fades out.', { takes: 2 }),
+  score('moment-tree', 16, 'A short musical moment for a young tree growing from the ground. A slow felt piano arpeggio rises over a deep cello note and a swelling string pad, patient and quietly moving, like years passing in seconds. D Dorian turning to D major, 70 BPM. Rises for the first eight seconds, then settles and fades.', { takes: 2 }),
+
+  // The garden's own pieces, played now and then with long rests between.
+  score('garden-spring-1', 100, 'In the key of D (Lydian), centred on D throughout. Slow piece for a spring morning in a garden. A tender, searching felt piano melody over a soft string quartet; a solo violin answers once, very quietly. D Lydian, 66 BPM, sparse and spacious. Ends quietly on a held chord.'),
+  score('garden-spring-2', 100, 'Ambient piece for a spring afternoon in a garden. Warm strings swelling and receding like a breeze, sparse piano notes, a clarinet in its low register singing a simple bittersweet line. D major with suspended chords, 62 BPM. Fades out softly.'),
+  score('garden-summer-1', 100, 'Slow piece for a hot summer afternoon under a tree. Fingerpicked nylon-string guitar and felt piano in quiet dialogue over a low cello drone, golden and nostalgic. D major, 68 BPM, intimate. Gentle ending.'),
+  score('garden-summer-2', 100, 'In the key of D (Mixolydian), centred on D throughout. Dreamy, still piece for a summer day by a pond. Long soft string chords, a muted French horn melody once in the middle, gentle piano reflections: heat haze and memory. D Mixolydian, 58 BPM, lots of space. Fades to silence.'),
+  score('garden-autumn-1', 100, 'Strictly in D Dorian: it begins on a D minor chord and ends on one, with D in the bass throughout. Wistful piece for an autumn afternoon as leaves fall. A solo cello melody over soft felt piano, an oboe answering once, distant strings. D Dorian, 60 BPM, tender and reflective. Ends softly.'),
+  score('garden-autumn-2', 100, 'Quiet, nostalgic solo piano piece for a cool autumn day: felt piano with gentle falling figures, a soft viola joining late. D Aeolian, 56 BPM, very sparse, silence between phrases. Quiet ending.'),
+  score('garden-winter-1', 100, 'Hushed piece for a winter garden under snow. Slow glassy string harmonics, a low warm pad, sparse felt piano: cold air and stillness, solitary but warm at heart. D minor, 50 BPM. Fades away.'),
+  score('garden-winter-2', 100, 'Very sparse solo felt piano for a still winter day: a few slow notes and chords with long pauses, soft pedal, close and warm. D minor add9, 48 BPM, calm and tender. Ends on a single held note.'),
+  score('garden-night-1', 100, 'Warm, slow piece for a garden at night under the stars. Soft evolving analogue pads, a gentle felt piano playing a few notes, a distant French horn once. D major add9, 52 BPM, peaceful and enveloping. Fades out slowly.'),
+  score('garden-night-2', 100, 'Cool, mysterious piece for a moonlit garden. Low sustained strings, soft glassy harmonics, a faint wordless choir far away. D minor, 50 BPM, still and spacious. Fades to silence.'),
 
   // ------------------------------------------------------------- interface
   shot('ui-pebble', 3, 0.5, 'A small smooth river pebble tapped softly on another, a single gentle click.', { tier: 2 }),
@@ -251,7 +201,9 @@ export const SOUNDS: SoundSpec[] = [
 
 /** The files a spec is played from. */
 export function filesOf(spec: SoundSpec): string[] {
-  if (spec.kind === 'shot') return Array.from({ length: spec.takes ?? 1 }, (_, i) => `${spec.id}-${i + 1}.mp3`);
+  if (spec.kind === 'shot' || (spec.kind === 'music' && (spec.takes ?? 1) > 1)) {
+    return Array.from({ length: spec.takes ?? 1 }, (_, i) => `${spec.id}-${i + 1}.mp3`);
+  }
   return [`${spec.id}.mp3`];
 }
 
