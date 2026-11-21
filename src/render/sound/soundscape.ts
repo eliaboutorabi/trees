@@ -17,7 +17,7 @@
  *   rain, snow ───────────► weather ──┤
  *   growth, rustle ───────► tree ─────┤ each: your level ─► ducking ─┐
  *   creatures ────────────► life ─────┤                              ├─► compressor ─► master
- *   the moments' music ───► music ────┤                              │
+ *   the garden's music, cues ► music ─┤                              │
  *   clicks ───────────────► ui ───────┘ ─────────────────────────────┘
  *
  * Nothing is fetched until sound is switched on; a long sound's audio is let
@@ -25,6 +25,7 @@
  * memory.
  */
 import type { SceneEvent } from '../events';
+import { GardenMusic } from './garden-music';
 import { Loop, type SoundBank } from './loop';
 import { SOUND_BY_ID, filesOf } from './manifest';
 import { Emitter, distanceGain, hrtf, placeListener, type Ears, type Vec3 } from './space';
@@ -140,9 +141,11 @@ export class Soundscape implements SoundBank {
   private readonly emitters = new Map<string, Emitter[]>();
   private readonly lastTake = new Map<string, number>();
   private readonly lastPlayed = new Map<string, number>();
+  private readonly garden: GardenMusic;
   private volume = 0.8;
   private on = false;
   private dimmed = false;
+  private touring = false;
   private places: SoundPlaces | null = null;
   private readonly ears: Ears = {
     pos: { x: 0, y: 2, z: 16 },
@@ -182,6 +185,7 @@ export class Soundscape implements SoundBank {
       mix.connect(duck).connect(this.squeeze);
       this.channels[bus] = { mix, duck, meter: null, heard: 0 };
     }
+    this.garden = new GardenMusic(this, this.channels.music.mix);
 
     // Browsers hold audio until someone touches the page; the switch that
     // turned sound on was that touch, but a return visit with it remembered
@@ -224,6 +228,7 @@ export class Soundscape implements SoundBank {
         if (this.on) return;
         clearInterval(this.feeder);
         for (const l of this.loops.values()) l.stop();
+        this.garden.stop();
         this.cue?.src.stop();
         this.cue = null;
         void this.ctx.suspend();
@@ -428,6 +433,7 @@ export class Soundscape implements SoundBank {
         old.gain.gain.setTargetAtTime(0, now, 0.4);
         old.src.stop(now + 2);
       }
+      this.garden.hush(rand(40, 80));
       const src = this.ctx.createBufferSource();
       src.buffer = b;
       const gain = this.ctx.createGain();
@@ -452,7 +458,7 @@ export class Soundscape implements SoundBank {
 
   // ---------------------------------------------------------------- frame
 
-  /** One frame: every long sound's level, and the creatures that call on their own. */
+  /** One frame: every long sound's level, the garden's music, and the creatures that call on their own. */
   update(s: SoundState, dt: number): void {
     this.state = s;
     if (!this.on) return;
@@ -526,6 +532,10 @@ export class Soundscape implements SoundBank {
     // Pond ice: it groans as it closes over.
     if (s.ice > 0.35 && this.wasIce <= 0.35) this.play('ice-creak', { at: this.pondPoint(), gain: 0.8, bus: 'weather', ref: 14 });
     this.wasIce = s.ice;
+
+    // The garden's own music, when nothing else has the music and anyone wants it.
+    const free = !this.cue && !this.touring && this.yours.music > 0.02;
+    this.garden.tick(dt, s.season, s.night, free);
 
     this.chorus(s, dt);
   }
@@ -689,8 +699,9 @@ export class Soundscape implements SoundBank {
     this.music('music-welcome');
   }
 
-  /** A quiet underscore while the whole tour plays itself. */
+  /** A quiet underscore while the whole tour plays itself; the garden's music waits. */
   setTour(on: boolean): void {
+    this.touring = on;
     this.loop('music-tour', 'music').set(on ? 0.55 : 0, on ? 2 : 1.5);
   }
 
@@ -701,6 +712,7 @@ export class Soundscape implements SoundBank {
     window.removeEventListener('keydown', this.wake);
     document.removeEventListener('visibilitychange', this.onVisibility);
     for (const l of this.loops.values()) l.stop();
+    this.garden.stop();
     void this.ctx.close();
   }
 }
