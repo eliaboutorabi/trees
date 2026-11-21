@@ -29,6 +29,7 @@ import { GardenMusic } from './garden-music';
 import { Loop, type SoundBank } from './loop';
 import { SOUND_BY_ID, filesOf } from './manifest';
 import { Emitter, distanceGain, hrtf, placeListener, type Ears, type Vec3 } from './space';
+import { UiVoice } from './ui-voice';
 
 export type { Ears, Vec3 } from './space';
 
@@ -112,6 +113,35 @@ const smoothstep = (a: number, b: number, x: number) => {
 };
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
+/**
+ * A hall for the interface's notes, made rather than recorded: two channels
+ * of noise dying away over a few seconds, darker as they die, after a short
+ * pre-delay — a large soft room, which is what gives a single quiet note
+ * somewhere to be.
+ */
+function hallImpulse(ctx: BaseAudioContext, seconds = 3.4): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const pre = Math.floor(0.022 * rate);
+  const n = Math.floor(seconds * rate);
+  const b = ctx.createBuffer(2, n, rate);
+  for (let c = 0; c < 2; c++) {
+    const d = b.getChannelData(c);
+    let lp = 0;
+    let energy = 0;
+    for (let i = pre; i < n; i++) {
+      const t = (i - pre) / (n - pre);
+      const k = 0.35 + 0.6 * t;
+      lp = lp * k + (Math.random() * 2 - 1) * (1 - k);
+      const v = lp * Math.pow(1 - t, 2.4) * Math.min(1, (i - pre) / (0.03 * rate));
+      d[i] = v;
+      energy += v * v;
+    }
+    const norm = 1 / Math.sqrt(energy / rate + 1e-9);
+    for (let i = 0; i < n; i++) d[i] *= norm * 0.12;
+  }
+  return b;
+}
+
 /** Music for what you change, which outranks which when several come together. */
 const MOMENT_RANK: Record<string, number> = { season: 3, tree: 3, sky: 2, weather: 1 };
 
@@ -176,7 +206,9 @@ export class Soundscape implements SoundBank {
   /** A moment asked for, waiting for you to settle; see `moment`. */
   private pending: { id: string; rank: number; duck: number } | null = null;
   private pendingTimer = 0;
-
+  private hall: ConvolverNode | null = null;
+  /** The interface's instrument. */
+  readonly voice: UiVoice;
 
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -197,6 +229,7 @@ export class Soundscape implements SoundBank {
       this.channels[bus] = { mix, duck, meter: null, heard: 0 };
     }
     this.garden = new GardenMusic(this, this.channels.music.mix);
+    this.voice = new UiVoice(this);
 
     // Browsers hold audio until someone touches the page; the switch that
     // turned sound on was that touch, but a return visit with it remembered
@@ -392,6 +425,7 @@ export class Soundscape implements SoundBank {
       'fish-plop', 'dove-coo', 'dove-takeoff', 'dove-flutter-in', 'dove-flutter-off', 'leaf-fall', 'apple-thud',
       'berry-patter', 'cone-thud', 'grow-seed', 'grow-bloom', 'tree-sink', 'duck-quack', 'duckling-peep',
       'duck-dabble', 'songbird-spring', 'songbird-summer', 'songbird-autumn', 'chickadee', 'ice-creak',
+      'ui-felt', 'ui-glass', 'ui-low', 'ui-tick', 'ui-open', 'ui-close',
     ]) {
       const spec = SOUND_BY_ID[id];
       if (spec) for (const f of filesOf(spec)) void this.buffer(f, true);
@@ -434,6 +468,7 @@ export class Soundscape implements SoundBank {
     k = Math.min(files.length - 1, Math.max(0, k));
     this.lastTake.set(id, k);
     const bus = shot.bus ?? 'life';
+    if (bus === 'ui') this.openHall();
     void this.buffer(files[k], true).then((b) => {
       if (!b || !this.on) return;
       // A late decode still lands on its moment if it can, or as soon as it can.
@@ -472,6 +507,16 @@ export class Soundscape implements SoundBank {
       src.start(start);
       src.onended = () => last.disconnect();
     });
+  }
+
+  /** The interface's hall, made the first time a note wants it: the clicks' layer, sent into it. */
+  private openHall(): void {
+    if (this.hall) return;
+    this.hall = this.ctx.createConvolver();
+    this.hall.buffer = hallImpulse(this.ctx);
+    const send = this.ctx.createGain();
+    send.gain.value = 0.55;
+    this.channels.ui.duck.connect(send).connect(this.hall).connect(this.squeeze);
   }
 
   /**

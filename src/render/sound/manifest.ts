@@ -194,9 +194,19 @@ export const SOUNDS: SoundSpec[] = [
   score('garden-night-2', 100, 'Cool, mysterious piece for a moonlit garden. Low sustained strings, soft glassy harmonics, a faint wordless choir far away. D minor, 50 BPM, still and spacious. Fades to silence.'),
 
   // ------------------------------------------------------------- interface
-  shot('ui-pebble', 3, 0.5, 'A small smooth river pebble tapped softly on another, a single gentle click.', { tier: 2 }),
-  shot('ui-card', 2, 0.8, 'A sheet of thick paper slid softly across a wooden table.', { tier: 2 }),
-  shot('ui-ask', 2, 1, 'A tiny wooden wind chime, one soft note.', { tier: 2 }),
+  //
+  // The interface plays the garden's instrument: a few real sounds, each
+  // measured for its pitch (\`pitch\`, Hz, per take) so it can be played as
+  // any note of D Dorian, through the same soft hall as the music.
+  // (A third take of the felt note was a muddle of pitches and was dropped.)
+  shot('ui-felt', 2, 1.8, 'One single clean note played softly on an upright piano with a felt mute, the D just above middle C, warm and round with a clear pitch, gentle attack and a natural decay, no other notes.', { tier: 4, influence: 0.75, pitch: [260.5, 261.8] }),
+  shot('ui-glass', 2, 2.5, 'A single soft note struck on a small crystal singing bowl, pure, clear and gentle, ringing out.', { tier: 4, influence: 0.65, pitch: [300.8, 300.4] }),
+  shot('ui-low', 2, 2, 'A single low note plucked softly on a cello, deep, warm and round, with a gentle resonant ring.', { tier: 4, influence: 0.65, pitch: [145.0, 145.0] }),
+  shot('ui-tick', 3, 0.5, 'A tiny soft wooden tick, like one fine wooden bead tapping another, very short, dry and delicate.', { tier: 4 }),
+  shot('ui-open', 2, 0.9, 'A soft airy swish of a sheet of heavy paper being lifted and opened, gentle and short.', { tier: 4 }),
+  shot('ui-close', 2, 0.7, 'A soft muted fold of heavy paper settling down onto a table, short and gentle.', { tier: 4 }),
+  shot('ui-shutter', 1, 0.6, 'The soft, muted mechanical shutter of a vintage film camera, one gentle click.', { tier: 4 }),
+  shot('ui-whoosh', 2, 1.2, 'A soft gentle airy whoosh passing by, like a breath of wind, smooth and quiet.', { tier: 4 }),
 ];
 
 /** The files a spec is played from. */
