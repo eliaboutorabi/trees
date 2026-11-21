@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sonic } from '../sonic';
   import { paperPath, seedOf } from './paper';
   /**
    * A pad with a little tree in it, and a handle to drag.
@@ -84,7 +85,13 @@
     const fy = Math.min(1, Math.max(0, (H - PAD - y) / (H - PAD * 2)));
     angle = Math.round((angleRange[0] + fx * (angleRange[1] - angleRange[0])) * 2) / 2;
     step = Math.round((stepRange[0] + fy * (stepRange[1] - stepRange[0])) * 100) / 100;
+    sonic.slide(across, fx);
+    sonic.slide(upward, fy);
+    last = fy;
   }
+  const across = {};
+  const upward = {};
+  let last = 0;
   function down(e: PointerEvent) {
     dragging = true;
     svg.setPointerCapture(e.pointerId);
@@ -96,6 +103,7 @@
   function up(e: PointerEvent) {
     dragging = false;
     svg.releasePointerCapture(e.pointerId);
+    sonic.settle(upward, last);
   }
   function key(e: KeyboardEvent) {
     if (e.key === 'ArrowLeft') angle = Math.max(angleRange[0], angle - 1);

@@ -35,6 +35,7 @@
    * fit the height there is; and a card or panel that would still not fit is
    * drawn smaller, the way a game's interface scales with its window.
    */
+  import { sonic } from '../sonic';
   import { onMount, setContext, tick, untrack } from 'svelte';
   import { cubicIn } from 'svelte/easing';
   import Glyph from './Glyph.svelte';
@@ -110,6 +111,13 @@
   $effect(() => {
     void openId;
     moreOpen = false;
+  });
+  // The exact controls coming out beside the card, and going back.
+  let moreWas = false;
+  $effect(() => {
+    const out = moreOpen;
+    if (out !== moreWas) (out ? sonic.open(9) : sonic.close());
+    moreWas = out;
   });
 
   /** Room above the dock, below the name and the buttons along the top. */

@@ -10,6 +10,7 @@
    * the tree. `direction` uses the same compass convention as the camera
    * `bearing`.
    */
+  import { sonic } from '../sonic';
   interface Props {
     direction: number;
     strength: number;
@@ -73,7 +74,11 @@
     const d = Math.min(1, Math.hypot(x, y) / R);
     strength = Math.round(d * d * max * 100) / 100;
     if (d > 0.04) direction = Math.round((((bearing + 180 - Math.atan2(x, -y) / rad) % 360) + 360) % 360);
+    sonic.slide(round, direction / 360);
+    sonic.slide(hard, strength / max);
   }
+  const round = {};
+  const hard = {};
   function down(e: PointerEvent) {
     dragging = true;
     svg.setPointerCapture(e.pointerId);
@@ -85,6 +90,7 @@
   function up(e: PointerEvent) {
     dragging = false;
     svg.releasePointerCapture(e.pointerId);
+    sonic.settle(hard, strength / max);
   }
   function key(e: KeyboardEvent) {
     if (e.key === 'ArrowUp') strength = Math.min(max, strength + 0.05);

@@ -3,6 +3,7 @@
   import { getPreset, type GrammarIssue } from '../engine';
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { Soundscape } from '../render/sound/soundscape';
+  import { sonic, sonify, useVoice } from './sonic';
   import { applyPreset, params, paramsFromPreset, presets, SCENE_KEYS, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
@@ -138,7 +139,7 @@
   let dockApi = $state<{ show(id: string | null): void }>();
   /** Play these chapters, or all of them; from the step about `at`, if given. */
   function startTour(chapters?: string[], at?: string) {
-    tap('ask');
+    sonic.begin();
     welcomeOpen = false;
     mapOpen = false;
     try {
@@ -155,6 +156,7 @@
     if (stop.step.open !== undefined) dockApi?.show(stop.step.open);
   }
   function endTour() {
+    sonic.end();
     tour = null;
     dockApi?.show(null);
   }
@@ -226,14 +228,30 @@
     if (on && !sound) {
       sound = new Soundscape();
       studio?.attachSound(sound);
+      useVoice(sound.voice);
     }
     sound?.setEnabled(on);
+    // Coming on is heard: the garden's D, opened out, once the browser lets it play.
+    if (on && sound && remembering === false) void sound.ctx.resume().then(() => sonic.awake());
   }
+  /** Set while sound comes back on by itself on arrival, which is not a gesture to answer. */
+  let remembering = false;
+  /** The card up in the dock, if any, for its note. */
   let cardUp = false;
-  /** A small sound for the interface, if sound is on. */
-  function tap(kind: 'pebble' | 'card' | 'ask') {
-    if (sound?.enabled) sound.ui(kind);
-  }
+  const DOCK_ORDER = ['species', 'season', 'weather', 'wildlife', 'shape', 'foliage', 'bloom', 'light', 'wind', 'look', 'grammar'];
+  // The map and the Learn page open like cards, and close like them.
+  let mapWas = false;
+  $effect(() => {
+    const open = mapOpen;
+    if (open !== mapWas) (open ? sonic.open(7) : sonic.close());
+    mapWas = open;
+  });
+  let learnWas = false;
+  $effect(() => {
+    const open = learnOpen;
+    if (open !== learnWas) (open ? sonic.begin() : sonic.close());
+    learnWas = open;
+  });
   // Quieter under the Learn page, a tune for the welcome, an underscore for the whole tour.
   $effect(() => {
     const dim = learnOpen;
@@ -565,12 +583,14 @@
       return;
     }
     linkCopied = true;
+    sonic.copied();
     clearTimeout(linkTimer);
     linkTimer = setTimeout(() => (linkCopied = false), 1600);
   }
 
   async function screenshot() {
     if (!studio) return;
+    sonic.shutter();
     const url = await studio.capture();
     const a = document.createElement('a');
     a.href = url;
@@ -600,7 +620,12 @@
     };
     // Sound switched on last time is on again; the browser holds it until
     // the first touch of the page.
-    if (soundRemembered()) setSound(true);
+    if (soundRemembered()) {
+      remembering = true;
+      setSound(true);
+      remembering = false;
+    }
+    const unsonify = sonify();
 
     s.init()
       .then(() => {
@@ -643,6 +668,8 @@
       window.removeEventListener('hashchange', onHashChange);
       observer.disconnect();
       s.dispose();
+      unsonify();
+      useVoice(null);
       sound?.dispose();
       sound = null;
       studio = null;
@@ -814,7 +841,10 @@
 
       <div class="actions">
         <Hint label="Reframe the tree" align="end" onhelp={() => startTour(['top'], 'top-reframe')}>
-          <button class="round" style="--shape: 52% 48% 55% 45% / 47% 55% 45% 53%" onclick={() => studio?.frameTree(true)} aria-label="Reframe the tree" data-tour="top-reframe">
+          <button class="round" style="--shape: 52% 48% 55% 45% / 47% 55% 45% 53%" onclick={() => {
+            sonic.whoosh();
+            studio?.frameTree(true);
+          }} aria-label="Reframe the tree" data-tour="top-reframe">
             <Glyph name="reframe" size={21} />
           </button>
         </Hint>
@@ -829,7 +859,10 @@
           </button>
         </Hint>
         <Hint label="Start this species over" align="end" onhelp={() => startTour(['top'], 'top-reset')}>
-          <button class="round" style="--shape: 49% 51% 45% 55% / 45% 50% 50% 55%" onclick={resetToDefaults} aria-label="Reset to defaults" data-tour="top-reset">
+          <button class="round" style="--shape: 49% 51% 45% 55% / 45% 50% 50% 55%" onclick={() => {
+            sonic.reset();
+            resetToDefaults();
+          }} aria-label="Reset to defaults" data-tour="top-reset">
             <Glyph name="reset" size={21} />
           </button>
         </Hint>
@@ -856,7 +889,6 @@
       <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
       <QuickBar
         onhelp={(id) => startTour(['scene'], `quick-${id}`)}
-        onpress={(id) => id !== 'sound' && tap('pebble')}
         items={[
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
           { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
@@ -872,8 +904,13 @@
         bind:this={dockApi}
         onhelp={(id) => startTour([id])}
         onopen={(id) => {
-          // Only a card coming up out of nothing, not one card giving way to the next under a passing pointer.
-          if (id && !cardUp) tap('card');
+          // Up out of nothing with paper and its note; from card to card under
+          // a passing pointer, only the note (the dock is a scale, left to
+          // right); put away, paper laid down.
+          const at = DOCK_ORDER.indexOf(id ?? '');
+          if (id && !cardUp) sonic.open(at);
+          else if (id) sonic.pass(at);
+          else if (cardUp) sonic.close();
           cardUp = id !== null;
         }}
         tools={[

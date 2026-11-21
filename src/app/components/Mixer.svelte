@@ -27,6 +27,7 @@
    * shows what that part is doing this moment, so you can hear a slider and
    * see what it is you are hearing.
    */
+  import { sonic } from '../sonic';
   import Ask from './Ask.svelte';
   import Glyph from './Glyph.svelte';
 
@@ -49,6 +50,7 @@
 
   $effect(() => {
     if (!open) return;
+    sonic.open(11);
     let frame = 0;
     let last = 0;
     const step = (t: number) => {
@@ -63,6 +65,7 @@
     return () => {
       cancelAnimationFrame(frame);
       levels(false);
+      sonic.close();
       heard = { air: 0, weather: 0, life: 0, tree: 0, music: 0, ui: 0 };
     };
   });

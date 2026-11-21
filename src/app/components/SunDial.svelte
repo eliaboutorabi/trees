@@ -13,6 +13,7 @@
    * whichever way the camera has been turned. `bearing` is the camera's compass
    * bearing from the tree, in the same convention as the sun's azimuth.
    */
+  import { sonic } from '../sonic';
   interface Props {
     azimuth: number;
     elevation: number;
@@ -77,7 +78,12 @@
     const p = Math.atan2(x, -y) / rad;
     elevation = Math.round(Math.min(max, Math.max(min, 90 - dist * 90)) * 2) / 2;
     azimuth = Math.round((((bearing + 180 - p) % 360) + 360) % 360);
+    // Heard as two rulers: round the dial, and up and down the sky.
+    sonic.slide(round, azimuth / 360);
+    sonic.slide(high, (elevation - min) / (max - min));
   }
+  const round = {};
+  const high = {};
 
   function down(e: PointerEvent) {
     dragging = true;
@@ -90,6 +96,7 @@
   function up(e: PointerEvent) {
     dragging = false;
     svg.releasePointerCapture(e.pointerId);
+    sonic.settle(high, (elevation - min) / (max - min));
   }
 
   function key(e: KeyboardEvent) {

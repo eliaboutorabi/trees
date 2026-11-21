@@ -14,6 +14,7 @@
    * shown often moves while it is being shown: a card rising into place, a
    * button that grows on hover.
    */
+  import { sonic } from '../sonic';
   import { onMount, tick, untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import Glyph from '../components/Glyph.svelte';
@@ -129,6 +130,7 @@
       return;
     }
     index = to;
+    sonic.step(to);
     onstage(stops[to]);
     await tick();
     next?.focus({ preventScroll: true });

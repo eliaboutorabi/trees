@@ -823,11 +823,6 @@ export class Soundscape implements SoundBank {
     return t ? { x: t.x, y: t.y + t.height * up, z: t.z } : { x: 0, y: 2, z: 0 };
   }
 
-  /** The interface's own small sounds, very quiet: a switch, a card, a question. */
-  ui(kind: 'pebble' | 'card' | 'ask'): void {
-    this.play(`ui-${kind}`, { gain: kind === 'card' ? 0.5 : 0.7, bus: 'ui', minGap: 0.06 });
-  }
-
   /** The welcome's tune, once, if sound is on when it opens. */
   welcome(): void {
     this.music('music-welcome', 0.7);
