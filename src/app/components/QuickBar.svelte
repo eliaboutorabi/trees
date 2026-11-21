@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import type { Snippet } from 'svelte';
   import type { GlyphName } from './glyphs';
 
   export interface Quick {
@@ -10,6 +11,12 @@
     tone: string;
     toneInk: string;
     toggle: () => void;
+    /**
+     * A panel that comes out beside it in place of the label: on hover or
+     * focus with a mouse, on a tap with a finger (where the panel then carries
+     * the switch). Told whether it is showing.
+     */
+    panel?: Snippet<[boolean]>;
   }
 </script>
 
@@ -33,6 +40,18 @@
 
   let { items, onhelp, onpress }: Props = $props();
 
+  // The one panel that is out, if any. It comes out after the briefest pause
+  // (so passing over the button on the way somewhere does not throw it open)
+  // and goes after a longer one (so a pointer that strays off it for a moment
+  // does not lose it).
+  let panelOut = $state<string | null>(null);
+  let timer = 0;
+  let touched = false;
+  function want(id: string | null, delay: number) {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => (panelOut = id), delay);
+  }
+
   const SHAPES = [
     ['52% 48% 55% 45% / 47% 55% 45% 53%', -2],
     ['46% 54% 49% 51% / 55% 46% 54% 45%', 2.5],
@@ -43,22 +62,51 @@
 
 <div class="quick" data-keep-clear data-tour="quick" role="toolbar" aria-label="Scene" aria-orientation="vertical">
   {#each items as q, i (q.id)}
-    <Hint label={q.label} side="right" onhelp={onhelp ? () => onhelp(q.id) : undefined}>
-    <button
-      class="pebble"
-      class:on={q.on}
-      style="--tone: {q.tone}; --tone-ink: {q.toneInk}; --shape: {SHAPES[i % SHAPES.length][0]}; --tilt: {SHAPES[i % SHAPES.length][1]}deg"
-      aria-pressed={q.on}
-      aria-label={q.label}
-      data-tour="quick-{q.id}"
-      onclick={() => {
-        q.toggle();
-        onpress?.(q.id);
-      }}
-    >
-      <Glyph name={q.icon} size={23} weight={1.75} />
-    </button>
-    </Hint>
+    {#snippet pebble(expanded?: boolean)}
+      <button
+        class="pebble"
+        class:on={q.on}
+        style="--tone: {q.tone}; --tone-ink: {q.toneInk}; --shape: {SHAPES[i % SHAPES.length][0]}; --tilt: {SHAPES[i % SHAPES.length][1]}deg"
+        aria-pressed={q.on}
+        aria-label={q.label}
+        aria-expanded={expanded}
+        data-tour="quick-{q.id}"
+        onpointerdown={(e) => (touched = e.pointerType === 'touch')}
+        onclick={() => {
+          // A finger has no hover: its tap brings the panel out, and the
+          // switch is in there.
+          if (q.panel && touched) {
+            panelOut = panelOut === q.id ? null : q.id;
+            return;
+          }
+          q.toggle();
+          onpress?.(q.id);
+        }}
+      >
+        <Glyph name={q.icon} size={23} weight={1.75} />
+      </button>
+    {/snippet}
+    {#if q.panel}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <span
+        class="popout"
+        class:out={panelOut === q.id}
+        onpointerenter={(e) => e.pointerType !== 'touch' && want(q.id, 90)}
+        onpointerleave={(e) => e.pointerType !== 'touch' && want(null, 320)}
+        onfocusin={() => want(q.id, 0)}
+        onfocusout={(e) => {
+          if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) want(null, 0);
+        }}
+        onkeydown={(e) => e.key === 'Escape' && want(null, 0)}
+      >
+        {@render pebble(panelOut === q.id)}
+        <span class="panel" role="dialog" aria-label={q.label}>{@render q.panel(panelOut === q.id)}</span>
+      </span>
+    {:else}
+      <Hint label={q.label} side="right" onhelp={onhelp ? () => onhelp(q.id) : undefined}>
+        {@render pebble()}
+      </Hint>
+    {/if}
   {/each}
 </div>
 
@@ -72,6 +120,50 @@
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
+  }
+
+  /*
+   * A panel out beside its pebble, the way the labels come out, only larger:
+   * frosted, tilted a hair, and sprung into place. An invisible bridge spans
+   * the gap so the pointer can cross to it.
+   */
+  .popout {
+    position: relative;
+    display: inline-flex;
+  }
+
+  /* It grows upward from its pebble, which is the lowest, clear of the dock below. */
+  .panel {
+    position: absolute;
+    left: calc(100% + 0.7rem);
+    bottom: -0.5rem;
+    z-index: 30;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translate(-8px, 0) rotate(0.8deg) scale(0.95);
+    transform-origin: 0 90%;
+    transition:
+      opacity 0.2s,
+      transform 0.28s cubic-bezier(0.3, 1.35, 0.5, 1),
+      visibility 0s linear 0.28s;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0 100% 0 -0.9rem;
+  }
+
+  .popout.out .panel {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate(0, 0) rotate(0.8deg);
+    transition:
+      opacity 0.2s,
+      transform 0.28s cubic-bezier(0.3, 1.35, 0.5, 1),
+      visibility 0s;
   }
 
   .pebble {

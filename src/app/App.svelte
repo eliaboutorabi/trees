@@ -26,6 +26,7 @@
   import Slider from './components/Slider.svelte';
   import Hint from './components/Hint.svelte';
   import Sapling from './components/Sapling.svelte';
+  import Mixer, { gainOf, LAYERS, MIX_REST, type Layer } from './components/Mixer.svelte';
   import Learn from './learn/Learn.svelte';
   import Welcome from './Welcome.svelte';
   import Tour from './tour/Tour.svelte';
@@ -181,6 +182,28 @@
     sound?.setVolume(v);
     try {
       localStorage.setItem(VOLUME, String(v));
+    } catch {
+      // Kept for this visit only.
+    }
+  });
+  /** Each layer's slider, where it rests unless moved; yours, like the volume. */
+  const MIX = 'arbor.mix.v1';
+  let mix = $state<Record<Layer, number>>(storedMix());
+  function storedMix(): Record<Layer, number> {
+    const rest = Object.fromEntries(LAYERS.map((l) => [l.id, MIX_REST])) as Record<Layer, number>;
+    try {
+      const saved = JSON.parse(localStorage.getItem(MIX) ?? '{}') as Partial<Record<Layer, number>>;
+      for (const l of LAYERS) if (typeof saved[l.id] === 'number') rest[l.id] = Math.min(1, Math.max(0, saved[l.id]!));
+    } catch {
+      // Nothing saved, or nothing readable: everything as set.
+    }
+    return rest;
+  }
+  $effect(() => {
+    const levels = { ...mix };
+    if (sound) for (const l of LAYERS) sound.setMix(l.id, gainOf(levels[l.id]));
+    try {
+      localStorage.setItem(MIX, JSON.stringify(levels));
     } catch {
       // Kept for this visit only.
     }
@@ -841,7 +864,7 @@
             ? { id: 'aurora', label: 'Aurora', icon: 'aurora', on: params.aurora, tone: '#9fd8bf', toneInk: '#1d5a45', toggle: toggleAurora }
             : { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow },
           { id: 'night', label: params.night ? 'Day' : 'Night', icon: params.night ? 'season-summer' : 'moon', on: params.night, tone: '#9aa6d6', toneInk: '#2c3566', toggle: () => (params.night = !params.night) },
-          { id: 'sound', label: soundOn ? 'Sound on' : 'Sound off', icon: soundOn ? 'sound' : 'sound-off', on: soundOn, tone: '#e3c98a', toneInk: '#6b4f12', toggle: () => setSound(!soundOn) },
+          { id: 'sound', label: soundOn ? 'Sound on' : 'Sound off', icon: soundOn ? 'sound' : 'sound-off', on: soundOn, tone: '#e3c98a', toneInk: '#6b4f12', toggle: () => setSound(!soundOn), panel: soundPanel },
         ]}
       />
 
@@ -1078,6 +1101,18 @@
   </Fold>
 {/snippet}
 
+{#snippet soundPanel(open: boolean)}
+  <Mixer
+    on={soundOn}
+    ontoggle={() => setSound(!soundOn)}
+    onhelp={() => startTour(['scene'], 'quick-sound')}
+    bind:volume
+    bind:mix
+    {open}
+    levels={(watch) => (sound?.enabled ? sound.meters(watch) : (sound?.meters(false), null))}
+  />
+{/snippet}
+
 {#snippet lookPanel()}
   <div class="toggles">
     <Toggle label="Film grain" icon="grain" bind:checked={params.grain} />
@@ -1086,7 +1121,6 @@
   </div>
   <PicSlider label="Glow" bind:value={params.bloom} min={0} max={1.5} from="glow-off" to="glow-on" hint="Bloom: bright light spills softly around itself" />
   <PicSlider label="Growing speed" bind:value={params.growthSpeed} min={0.05} max={1.5} from="snail" to="swift" />
-  <PicSlider label="Volume" bind:value={volume} min={0} max={1} from="sound-off" to="sound" hint={soundOn ? 'How loud the garden is' : 'Turn sound on with the speaker on the left'} />
   <Fold>
     <p class="help">Sharpness. <b>Auto</b> draws at your screen's full density, and gives a little up only if the frame rate stays low — currently {stats.renderScale.toFixed(2)}×.</p>
     <div class="segmented" use:cut={{ seed: 'sharpness', inset: 1.5, radius: [10, 16], bulge: [-0.3, 1.2] }}>

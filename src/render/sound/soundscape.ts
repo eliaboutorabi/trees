@@ -246,6 +246,12 @@ export class Soundscape implements SoundBank {
     if (this.on) this.master.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.1);
   }
 
+  /** One layer's level, as a multiple of where it sits in the mix (0 silent, 1 as set, 2 twice). */
+  setMix(bus: Bus, v: number): void {
+    this.yours[bus] = Math.max(0, Math.min(2, v));
+    this.channels[bus].mix.gain.setTargetAtTime(BUS_LEVEL[bus] * this.yours[bus], this.ctx.currentTime, 0.08);
+  }
+
   /** Quieter while something covers the scene (the Learn page). */
   setDimmed(dim: boolean): void {
     this.dimmed = dim;
@@ -254,6 +260,39 @@ export class Soundscape implements SoundBank {
 
   private level(): number {
     return this.volume * this.volume * TRIM * (this.dimmed ? 0.3 : 1);
+  }
+
+  /**
+   * How much each layer is sounding right now, 0–1, for a meter. Meters are
+   * only attached while someone is watching; call with `watch = false` to
+   * take them off.
+   */
+  meters(watch = true): Record<Bus, number> {
+    const out = {} as Record<Bus, number>;
+    const data = new Float32Array(1024);
+    for (const bus of BUSES) {
+      const c = this.channels[bus];
+      if (!watch) {
+        c.meter?.disconnect();
+        c.meter = null;
+        out[bus] = 0;
+        continue;
+      }
+      if (!c.meter) {
+        c.meter = this.ctx.createAnalyser();
+        c.meter.fftSize = 1024;
+        c.duck.connect(c.meter);
+      }
+      c.meter.getFloatTimeDomainData(data);
+      let e = 0;
+      for (let i = 0; i < data.length; i++) e += data[i] * data[i];
+      const db = 10 * Math.log10(e / data.length + 1e-12);
+      // −62 dB is nothing, −22 is a full bar; eased so a bar falls slower than it rises.
+      const v = Math.min(1, Math.max(0, (db + 62) / 40));
+      c.heard = v > c.heard ? v : c.heard * 0.86 + v * 0.14;
+      out[bus] = this.on ? c.heard : 0;
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------- space
