@@ -98,6 +98,10 @@ export interface Shot {
   minGap?: number;
   /** The distance at which it is as loud as it was made. */
   ref?: number;
+  /** Which take, rather than the next in the pool. */
+  take?: number;
+  /** Played this much faster (higher), exactly, rather than a few percent either way. */
+  rate?: number;
 }
 
 const BASE = `${import.meta.env.BASE_URL}sounds/`;
@@ -107,6 +111,9 @@ const smoothstep = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+/** Music for what you change, which outranks which when several come together. */
+const MOMENT_RANK: Record<string, number> = { season: 3, tree: 3, sky: 2, weather: 1 };
 
 /** A one-shot's takes are mono: they are placed here, so a stereo file only doubles the memory. */
 function mono(ctx: BaseAudioContext, b: AudioBuffer): AudioBuffer {
@@ -164,8 +171,12 @@ export class Soundscape implements SoundBank {
   private lastFeed = 0;
   /** Fruit landing: a few at once are a patter, a whole crown at once is still only a few. */
   private fruitBudget = 4;
-  /** A moment's music playing, and until when. */
-  private cue: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  /** A moment's music playing, and which. */
+  private cue: { src: AudioBufferSourceNode; gain: GainNode; id: string; until: number } | null = null;
+  /** A moment asked for, waiting for you to settle; see `moment`. */
+  private pending: { id: string; rank: number; duck: number } | null = null;
+  private pendingTimer = 0;
+
 
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -231,6 +242,8 @@ export class Soundscape implements SoundBank {
         this.garden.stop();
         this.cue?.src.stop();
         this.cue = null;
+        clearTimeout(this.pendingTimer);
+        this.pending = null;
         void this.ctx.suspend();
       }, 900);
     }
@@ -416,8 +429,9 @@ export class Soundscape implements SoundBank {
     if (gap > 0 && now - (this.lastPlayed.get(id) ?? -1e9) < gap) return;
     this.lastPlayed.set(id, now);
     const files = filesOf(spec);
-    let k = Math.floor(Math.random() * files.length);
-    if (files.length > 1 && k === this.lastTake.get(id)) k = (k + 1) % files.length;
+    let k = shot.take ?? Math.floor(Math.random() * files.length);
+    if (shot.take === undefined && files.length > 1 && k === this.lastTake.get(id)) k = (k + 1) % files.length;
+    k = Math.min(files.length - 1, Math.max(0, k));
     this.lastTake.set(id, k);
     const bus = shot.bus ?? 'life';
     void this.buffer(files[k], true).then((b) => {
@@ -426,7 +440,7 @@ export class Soundscape implements SoundBank {
       const start = Math.max(this.ctx.currentTime, now + (shot.delay ?? 0));
       const src = this.ctx.createBufferSource();
       src.buffer = b;
-      src.playbackRate.value = 1 + (Math.random() - 0.5) * 0.06;
+      src.playbackRate.value = shot.rate ?? 1 + (Math.random() - 0.5) * 0.06;
       const gain = this.ctx.createGain();
       const base = (shot.gain ?? 1) * Math.pow(10, ((Math.random() - 0.5) * 3) / 20);
       let last: AudioNode = gain;
@@ -460,10 +474,35 @@ export class Soundscape implements SoundBank {
     });
   }
 
-  /** A piece of music for a moment in the sky; the air and the creatures make room for it. */
-  music(id: string): void {
+  /**
+   * Music for something you changed. It waits until you have settled (a
+   * flick through four seasons is one piece, for the one you stopped on);
+   * when several changes come together (a season that brings snow), the
+   * one that matters most is the one heard.
+   */
+  moment(id: string, kind: keyof typeof MOMENT_RANK, duck = 0.75): void {
+    if (!this.on) return;
+    const rank = MOMENT_RANK[kind] ?? 1;
+    const waiting = this.pending;
+    if (waiting && waiting.rank > rank) return;
+    this.pending = { id, rank, duck };
+    clearTimeout(this.pendingTimer);
+    this.pendingTimer = window.setTimeout(() => {
+      const p = this.pending;
+      this.pending = null;
+      // The same piece, still playing, is not started again.
+      if (!p || (this.cue?.id === p.id && this.ctx.currentTime < this.cue.until - 3)) return;
+      this.music(p.id, p.duck);
+    }, 700);
+  }
+
+  /** A piece of music for a moment; the air and the creatures make room for it, and the garden's own music waits. */
+  music(id: string, duck = 0.6): void {
     if (!this.on || this.ctx.state !== 'running' || this.yours.music < 0.02) return;
-    void this.buffer(`${id}.mp3`, false).then((b) => {
+    const spec = SOUND_BY_ID[id];
+    const files = spec ? filesOf(spec) : [`${id}.mp3`];
+    const file = files[Math.floor(Math.random() * files.length)];
+    void this.buffer(file, false).then((b) => {
       if (!b || !this.on) return;
       const now = this.ctx.currentTime;
       // A new cue takes over from one still playing, briefly overlapping.
@@ -472,24 +511,26 @@ export class Soundscape implements SoundBank {
         old.gain.gain.setTargetAtTime(0, now, 0.4);
         old.src.stop(now + 2);
       }
-      this.garden.hush(rand(40, 80));
+      this.garden.hush(rand(90, 150));
       const src = this.ctx.createBufferSource();
       src.buffer = b;
       const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.85, now + 0.6);
       src.connect(gain).connect(this.channels.music.mix);
       src.start(now + 0.05);
       const until = now + b.duration;
-      this.cue = { src, gain };
+      this.cue = { src, gain, id, until };
       src.onended = () => {
         if (this.cue?.src === src) this.cue = null;
         gain.disconnect();
-        this.forget(`${id}.mp3`);
+        this.forget(file);
       };
       // Duck the air and the creatures under it, and bring them back as it ends.
       for (const bus of ['air', 'life'] as Bus[]) {
         const g = this.channels[bus].duck.gain;
         g.cancelScheduledValues(now);
-        g.setTargetAtTime(0.6, now, 0.5);
+        g.setTargetAtTime(duck, now, 0.5);
         g.setTargetAtTime(1, Math.max(now + 1, until - 3), 1.2);
       }
     });
@@ -718,7 +759,16 @@ export class Soundscape implements SoundBank {
       case 'daybreak':
       case 'rainbow':
       case 'aurora':
-        this.music(`music-${e.kind}`);
+        this.moment(`music-${e.kind}`, 'sky', 0.6);
+        break;
+      case 'season':
+        this.moment(`moment-${(['spring', 'summer', 'autumn', 'winter'] as const)[e.detail ?? 0]}`, 'season');
+        break;
+      case 'weather':
+        this.moment(`moment-${(['clear', 'rain', 'snow'] as const)[e.detail ?? 0]}`, 'weather');
+        break;
+      case 'new-tree':
+        this.moment('moment-tree', 'tree');
         break;
     }
   }
@@ -735,7 +785,7 @@ export class Soundscape implements SoundBank {
 
   /** The welcome's tune, once, if sound is on when it opens. */
   welcome(): void {
-    this.music('music-welcome');
+    this.music('music-welcome', 0.7);
   }
 
   /** A quiet underscore while the whole tour plays itself; the garden's music waits. */
@@ -747,6 +797,7 @@ export class Soundscape implements SoundBank {
   dispose(): void {
     this.on = false;
     clearInterval(this.feeder);
+    clearTimeout(this.pendingTimer);
     window.removeEventListener('pointerdown', this.wake);
     window.removeEventListener('keydown', this.wake);
     document.removeEventListener('visibilitychange', this.onVisibility);

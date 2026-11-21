@@ -315,6 +315,8 @@ export class TreeStudio {
   // Sound: what the scene tells it each frame, and what it remembers to do so.
   private sound: Soundscape | null = null;
   private seasonId: Season = 'summer';
+  /** The weather last heard (0 clear, 1 rain, 2 snow), or -1 before the first look. */
+  private weatherHeard = -1;
   private needles = false;
   private grownLast = 0;
   private leavesHeard = 0;
@@ -513,6 +515,7 @@ export class TreeStudio {
    */
   async transitionTo(params: StructureParams, palette: Palette, growthSpeed: number): Promise<TreeInfo | null> {
     const token = ++this.buildToken;
+    this.emit({ kind: 'new-tree', x: 0, y: 0, z: 0 });
     const [data] = await Promise.all([this.tree.prepare(params), this.ungrow()]);
     if (token !== this.buildToken) return null;
     this.needles = params.leafShape === 1;
@@ -676,6 +679,9 @@ export class TreeStudio {
     this.tree.applyLook(params);
     this.seasonTarget.snowfall = params.weather === 'snow' ? params.precipitation : 0;
     this.seasonTarget.rainfall = params.weather === 'rain' ? params.precipitation : 0;
+    const weather = params.weather === 'rain' ? 1 : params.weather === 'snow' ? 2 : 0;
+    if (this.weatherHeard >= 0 && weather !== this.weatherHeard) this.emit({ kind: 'weather', x: 0, y: 0, z: 0, detail: weather });
+    this.weatherHeard = weather;
     this.applySeason(params.season);
     this.wetTarget = params.weather === 'rain' ? 0.45 + 0.55 * params.precipitation : 0;
     // One slider for every surface that holds snow, so the tree, the sward and
@@ -716,6 +722,9 @@ export class TreeStudio {
    * palette, the snow, and how much of the meadow is still in flower.
    */
   private applySeason(id: Season): void {
+    if (this.seasonShown && id !== this.seasonId) {
+      this.emit({ kind: 'season', x: 0, y: 0, z: 0, detail: ['spring', 'summer', 'autumn', 'winter'].indexOf(id) });
+    }
     this.seasonId = id;
     const season = getSeason(id);
     const t = this.seasonTarget;

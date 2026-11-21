@@ -30,6 +30,12 @@ export type SceneEventKind =
   | 'grow-done'
   /** The tree going back into the ground, before another takes its place. */
   | 'tree-sink'
+  /** A season chosen (`detail`: 0 spring, 1 summer, 2 autumn, 3 winter). */
+  | 'season'
+  /** The weather changed (`detail`: 0 clear, 1 rain, 2 snow). */
+  | 'weather'
+  /** A different tree, about to grow in place of the last. */
+  | 'new-tree'
   /** The sky changing: dusk, dawn, a rainbow asked for, the aurora asked for. */
   | 'nightfall'
   | 'daybreak'
