@@ -31,6 +31,8 @@ import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
 import { createFireflies } from './fireflies';
 import type { SceneEvent } from './events';
+import { XrayView } from './xray';
+import type { SkeletonData } from '../engine';
 import type { Ears, Soundscape, SoundPlaces, SoundState } from './sound/soundscape';
 
 /** Re-exported so the UI has one place to import parameter shapes from. */
@@ -143,6 +145,8 @@ const OVERCAST_FAR = new Color(0x8f979f);
 const MAX_ORNAMENTS = 1_800;
 /** Exposure under Neutral tone mapping that matches the old default brightness. */
 const NEUTRAL_LIFT = 1.18;
+/** How much the L-system view's night page lets its tips glow. */
+const XRAY_NIGHT_GLOW = 0.3;
 /** Moonlight, and the blues of a night sky and the distance under it. */
 const MOONLIGHT = new Color(0.62, 0.72, 1.0);
 const NIGHT_FILL = new Color(0.32, 0.42, 0.72);
@@ -209,6 +213,8 @@ export class TreeStudio {
   private rainbowTarget = 0;
   private rainbow = 0;
   private readonly flock = new Flock(this.tree);
+  /** Everything of the garden, so the L-system view can put it all away at once. */
+  private readonly garden = new Group();
 
   private readonly sunDir = new Vector3();
   private readonly sunTint = new Color();
@@ -374,18 +380,19 @@ export class TreeStudio {
     // once — `refresh` updates the contents in place.
     this.scene.environment = this.sky.environment;
 
-    this.scene.add(this.landscape.group);
-    this.scene.add(this.meadow.group);
-    this.scene.add(this.pond.group);
+    this.scene.add(this.garden);
+    this.garden.add(this.landscape.group);
+    this.garden.add(this.meadow.group);
+    this.garden.add(this.pond.group);
     // The water mirrors what stands in the world; not the grass and flowers —
     // tens of thousands of instances that would not read in a ripple — nor
     // what is falling through the air.
     this.pond.hideFromReflection(...this.landscape.undergrowth, this.meadow.group, this.snowfall, this.rainfall);
-    this.scene.add(this.fireflies);
-    this.scene.add(this.snowfall);
-    this.scene.add(this.rainfall);
-    this.scene.add(this.flock.mesh);
-    this.scene.add(this.tree.group);
+    this.garden.add(this.fireflies);
+    this.garden.add(this.snowfall);
+    this.garden.add(this.rainfall);
+    this.garden.add(this.flock.mesh);
+    this.garden.add(this.tree.group);
 
     // What happens out there is reported here, and passed on to the sound.
     const heard = (e: SceneEvent) => this.emit(e);
@@ -456,6 +463,8 @@ export class TreeStudio {
 
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.addEventListener('pointerdown', this.onCanvasDown);
+    this.canvas.addEventListener('pointerup', this.onCanvasUp);
     // Anywhere on the page: a slider in a card counts as much as the camera.
     window.addEventListener('pointerdown', this.onAnyDown, true);
     window.addEventListener('pointerup', this.onAnyUp, true);
@@ -637,12 +646,19 @@ export class TreeStudio {
 
     // Fit the subject to whichever axis is tighter. A wide, low canopy in a
     // portrait viewport overflows badly if the distance comes from height alone.
-    const halfV = MathUtils.degToRad(this.camera.fov) * 0.5;
-    const halfH = Math.atan(Math.tan(halfV) * this.camera.aspect);
+    // Only the part of the picture not under a panel counts, up and down as across.
+    const tanV = Math.tan(MathUtils.degToRad(this.camera.fov) * 0.5);
+    const freeV = this.viewHeight > 0 ? Math.max(0.35, 1 - this.insetBottomTarget / this.viewHeight) : 1;
+    const halfV = Math.atan(tanV * freeV);
+    const kept = this.insetTarget + this.insetRight * 2;
+    const free = this.viewWidth > 0 ? Math.max(0.3, 1 - kept / this.viewWidth) : 1;
+    const halfH = Math.atan(tanV * this.camera.aspect * free);
+    // A diagram wants more air round it than a tree in a meadow does.
+    const margin = this.xrayOn ? 1.3 : 1.12;
     const dist = Math.max(
       3,
-      ((h * 0.6) / Math.tan(halfV)) * 1.12,
-      (this.treeRadius / Math.tan(halfH)) * 1.12,
+      ((h * 0.6) / Math.tan(halfV)) * margin,
+      (this.treeRadius / Math.tan(halfH)) * margin,
     );
 
     const dir = new Vector3().subVectors(this.camera.position, this.controls.target);
@@ -676,6 +692,7 @@ export class TreeStudio {
   }
 
   applyLook(params: LookParams): void {
+    this.lastLook = params;
     this.tree.applyLook(params);
     this.seasonTarget.snowfall = params.weather === 'snow' ? params.precipitation : 0;
     this.seasonTarget.rainfall = params.weather === 'rain' ? params.precipitation : 0;
@@ -693,6 +710,12 @@ export class TreeStudio {
     this.pond.setDucks(params.ducklings, params.duckSize);
 
     if (!this.renderer) return;
+    // The L-system view keeps its own clean picture; the look is applied on the way back.
+    if (this.xrayOn) {
+      this.orbitTarget = params.autoRotate ? ORBIT_SPEED : 0;
+      this.applyQuality(params.quality);
+      return;
+    }
     this.userExposure = params.exposure;
     this.updateExposure();
     this.post.setGlow(params.bloom);
@@ -785,6 +808,10 @@ export class TreeStudio {
    */
   private updateExposure(): void {
     if (!this.renderer) return;
+    if (this.xrayOn) {
+      this.renderer.toneMappingExposure = 1;
+      return;
+    }
     const follow = Math.pow(5 / Math.max(0.5, this.sunPower), 0.32);
     // Neutral sits a little darker in the mid-tones than AgX did; this puts
     // the default picture back where it was in brightness, with its colour.
@@ -840,7 +867,7 @@ export class TreeStudio {
       this.auroraSky = aurora;
       aurora.compile(this.scene, this.camera).then(() => {
         if (this.disposed) return;
-        this.scene.add(aurora.dome);
+        this.garden.add(aurora.dome);
         // Its picture is made for the main view; seen from under the water
         // it would be the wrong way up.
         this.pond.hideFromReflection(aurora.dome);
@@ -1044,6 +1071,8 @@ export class TreeStudio {
 
   /** Day or night; the change takes a few seconds, like a dusk. */
   setNight(on: boolean): void {
+    this.xray?.setNight(on ? 1 : 0);
+    if (this.xrayOn) this.post.setGlow(on ? XRAY_NIGHT_GLOW : 0);
     if ((on ? 1 : 0) !== this.nightTarget) this.emit({ kind: on ? 'nightfall' : 'daybreak', x: 0, y: 0, z: 0 });
     this.nightTarget = on ? 1 : 0;
     this.flock.roost(on);
@@ -1054,10 +1083,203 @@ export class TreeStudio {
     this.nightness += (this.nightTarget - this.nightness) * (1 - Math.exp(-dt / 1.3));
     if (Math.abs(this.nightTarget - this.nightness) < 2e-3) this.nightness = this.nightTarget;
     this.tree.uniforms.night.value = this.nightness;
-    this.post.setNight(this.nightness);
+    if (!this.xrayOn) this.post.setNight(this.nightness);
     this.fireflies.visible = this.nightness > 0.01;
     if (this.skyNow) this.applySkyNow(this.skyNow);
   }
+
+  // ------------------------------------------------------- the L-system view
+
+  private xray: XrayView | null = null;
+  private xrayOn = false;
+  /**
+   * Room kept clear at the sides for panels, in pixels: the picture is
+   * framed into what is left, and its centre moved there.
+   */
+  private insetTarget = 0;
+  private inset = 0;
+  private insetRight = 0;
+  /** Room kept clear along the bottom (a panel docked there, on a phone), eased the same way. */
+  private insetBottomTarget = 0;
+  private insetBottom = 0;
+  private lastLook: LookParams | null = null;
+  private pressAt: { x: number; y: number } | null = null;
+  private pointerMoved = false;
+  /** A branch picked in the L-system view (the node at the end of its segment), or -1 for none. */
+  onXrayPick: ((node: number) => void) | null = null;
+  /** The branch under the pointer in the L-system view changed. */
+  onXrayHover: ((node: number) => void) | null = null;
+
+  get inXray(): boolean {
+    return this.xrayOn;
+  }
+
+  /**
+   * The garden, or only its tree's structure. Everything of the garden is
+   * put away at once (it is one group); the background becomes a plain page,
+   * the picture loses its focus blur, grain and night grading, and the water,
+   * the sky's light probe and the shadows stop being drawn, since there is
+   * nothing to show them. Coming back puts the look back as it was.
+   */
+  setXray(on: boolean): void {
+    if (!this.renderer || on === this.xrayOn) return;
+    this.xrayOn = on;
+    const x = this.ensureXray();
+    x.group.visible = on;
+    this.garden.visible = !on;
+    // (The sun keeps casting: switching a light's shadow off releases its
+    // map, and switching it back on then fails. Nothing in the view takes a
+    // shadow, and the map is only redrawn when asked, which the view does not.)
+    this.scene.backgroundNode = on ? x.backgroundNode : this.sky.backgroundNode;
+    if (on) {
+      x.setNight(this.nightTarget);
+      x.settleTheme();
+      this.post.setFocusBlur(false);
+      this.post.setGrain(false);
+      this.post.setNight(0);
+      this.post.setColour(1);
+      this.post.setGlow(this.xrayGlow());
+      this.canvas.style.cursor = '';
+    } else {
+      this.canvas.style.cursor = '';
+      if (this.lastLook) this.applyLook(this.lastLook);
+      this.post.setNight(this.nightness);
+    }
+    this.updateExposure();
+    this.settle(1500);
+  }
+
+  /**
+   * The paper must not glow: a bright page blooms into everything drawn on
+   * it, and the drawing goes grey. Only the dark page gets a little, for the
+   * tips to shine against.
+   */
+  private xrayGlow(): number {
+    return this.nightTarget > 0.5 ? XRAY_NIGHT_GLOW : 0;
+  }
+
+  /** The view, made the first time it is wanted: it may be handed a tree before it is shown. */
+  private ensureXray(): XrayView {
+    if (!this.xray) {
+      this.xray = new XrayView();
+      this.xray.group.visible = this.xrayOn;
+      this.xray.setNight(this.nightTarget);
+      this.xray.settleTheme();
+      this.scene.add(this.xray.group);
+    }
+    return this.xray;
+  }
+
+  /** Show the tree after some rewrites, grown in over `seconds`. */
+  showSkeleton(data: SkeletonData, seconds = 1.2): void {
+    this.ensureXray().setSkeleton(data, seconds, { radius: this.treeRadius });
+  }
+
+  /** Light a branch in the L-system view, by the node at the end of one of its segments (-1: none). */
+  selectBranch(node: number): void {
+    this.xray?.select(node);
+  }
+
+  /** The branch a picked branch grows from, by the node at the end of one of its segments (-1 at the trunk). */
+  parentBranch(node: number): number {
+    return this.xray ? this.xray.parentBranch(node) : -1;
+  }
+
+  /** The nodes of the branch a node belongs to, as the view lights it. */
+  branchNodes(node: number): number[] {
+    return this.xray ? [...this.xray.branchOf(node)] : [];
+  }
+
+  /** The skeleton on show, and each node's path length from the root. */
+  get xraySkeleton(): { data: SkeletonData; arc: Float32Array } | null {
+    const x = this.xray;
+    return x?.skeleton && x.arcs ? { data: x.skeleton, arc: x.arcs } : null;
+  }
+
+  /** Leave room for panels this many pixels wide at the left and the right: the picture slides to stay centred in what is left. */
+  setInset(left: number, right = 0, bottom = 0): void {
+    this.insetTarget = Math.max(0, left - right);
+    this.insetRight = Math.max(0, right);
+    this.insetBottomTarget = Math.max(0, bottom);
+  }
+
+  private easeInset(dt: number): void {
+    const settled = Math.abs(this.insetTarget - this.inset) < 0.5 && Math.abs(this.insetBottomTarget - this.insetBottom) < 0.5;
+    if (settled) {
+      if (this.inset !== this.insetTarget || this.insetBottom !== this.insetBottomTarget) {
+        this.inset = this.insetTarget;
+        this.insetBottom = this.insetBottomTarget;
+        this.applyInset();
+      }
+      return;
+    }
+    const k = 1 - Math.exp(-dt / 0.22);
+    this.inset += (this.insetTarget - this.inset) * k;
+    this.insetBottom += (this.insetBottomTarget - this.insetBottom) * k;
+    this.applyInset();
+  }
+
+  private applyInset(): void {
+    if ((this.inset > 0.5 || this.insetBottom > 0.5) && this.viewWidth > 0) {
+      this.camera.setViewOffset(this.viewWidth, this.viewHeight, -this.inset / 2, this.insetBottom / 2, this.viewWidth, this.viewHeight);
+    } else {
+      this.camera.clearViewOffset();
+    }
+    this.camera.updateProjectionMatrix();
+  }
+
+  /** Where a point in the world is on screen, in client pixels; `visible` false when behind the camera. */
+  project(x: number, y: number, z: number): { x: number; y: number; visible: boolean } {
+    const rect = this.canvas.getBoundingClientRect();
+    _v3.set(x, y, z).project(this.camera);
+    return {
+      x: rect.left + ((_v3.x + 1) / 2) * rect.width,
+      y: rect.top + ((1 - _v3.y) / 2) * rect.height,
+      visible: _v3.z > -1 && _v3.z < 1,
+    };
+  }
+
+  /** Which way the world's x, y and z point on screen (unit-ish, y down), and how much each leans toward you. */
+  axesOnScreen(): { x: [number, number, number]; y: [number, number, number]; z: [number, number, number] } {
+    const m = this.camera.matrixWorldInverse.elements;
+    // Columns of the view rotation: a world axis, seen from the camera.
+    const axis = (i: number): [number, number, number] => [m[i], -m[i + 1], m[i + 2]];
+    return { x: axis(0), y: axis(4), z: axis(8) };
+  }
+
+  /** The branch under a point of the canvas (normalised device coordinates), or -1. */
+  private pickAt(ndc: Vector2): number {
+    if (!this.xray) return -1;
+    this.raycaster.setFromCamera(ndc, this.camera);
+    // About ten pixels either side of the pointer, at the distance of whatever is there.
+    const perUnit = (2 * Math.tan(MathUtils.degToRad(this.camera.fov) / 2)) / Math.max(1, this.viewHeight);
+    return this.xray.pick(this.raycaster.ray, perUnit * 10);
+  }
+
+  private hoverNode = -1;
+  private updateXrayHover(): void {
+    if (!this.pointerMoved) return;
+    this.pointerMoved = false;
+    const node = this.pointerInside && !this.dragging ? this.pickAt(this.pointer) : -1;
+    if (node === this.hoverNode) return;
+    this.hoverNode = node;
+    this.xray?.hover(node);
+    this.canvas.style.cursor = node >= 0 ? 'pointer' : '';
+    this.onXrayHover?.(node);
+  }
+
+  private readonly onCanvasDown = (e: PointerEvent): void => {
+    this.pressAt = { x: e.clientX, y: e.clientY };
+  };
+
+  private readonly onCanvasUp = (e: PointerEvent): void => {
+    const at = this.pressAt;
+    this.pressAt = null;
+    if (!this.xrayOn || !at || Math.hypot(e.clientX - at.x, e.clientY - at.y) > 6) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const ndc = new Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    this.onXrayPick?.(this.pickAt(ndc));
+  };
 
   // ---------------------------------------------------------------- sound
 
@@ -1210,7 +1432,7 @@ export class TreeStudio {
     this.viewWidth = width;
     this.viewHeight = height;
     this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+    this.applyInset();
     this.renderer.setSize(width, height, false);
   }
 
@@ -1228,6 +1450,7 @@ export class TreeStudio {
     );
     // Arriving from outside is not a sweep across the canvas.
     if (!this.pointerInside) this.lastPointer.copy(this.pointer);
+    this.pointerMoved = true;
     this.pointerInside = true;
     // A held button is the camera being orbited, which moves the pointer fast
     // and the tree not at all.
@@ -1411,7 +1634,8 @@ export class TreeStudio {
     }
     // One clock for anything the CPU and the shader both have to agree on.
     this.tree.tick(dt);
-    this.updateHover(dt);
+    if (this.xrayOn) this.updateXrayHover();
+    else this.updateHover(dt);
     this.flock.update(dt);
     this.meadow.update(dt);
     this.pond.update(dt, this.seasonTarget.ducks, this.pointOnWater());
@@ -1420,6 +1644,8 @@ export class TreeStudio {
 
     this.easeSky(dt);
     this.easeNight(dt);
+    if (this.xrayOn) this.xray?.tick(dt);
+    this.easeInset(dt);
     this.hear(dt);
     this.post.tick(dt);
     this.rainbow += (this.rainbowTarget - this.rainbow) * (1 - Math.exp(-dt / 1.1));
@@ -1452,13 +1678,13 @@ export class TreeStudio {
 
     // Re-render the environment cube before the frame that needs it, and only
     // when the sun has actually moved.
-    this.sky.refresh(this.renderer);
+    if (!this.xrayOn) this.sky.refresh(this.renderer);
     // The shadow map is redrawn at most thirty times a second. It does not
     // depend on the view — it is fitted to the tree and the sun — so turning
     // the camera never needs a new one; only the swaying crown does, and at
     // thirty a second that is smooth. At sixty frames a second it halves the
     // work of drawing the whole tree a second time, which is battery.
-    if (timeMs - this.shadowDrawnAt >= 1000 / 30 - 3) {
+    if (!this.xrayOn && timeMs - this.shadowDrawnAt >= 1000 / 30 - 3) {
       this.sun.shadow.needsUpdate = true;
       this.shadowDrawnAt = timeMs;
     }
@@ -1466,14 +1692,15 @@ export class TreeStudio {
     // The aurora's small picture is drawn for this frame's view first, and
     // not at all while there is none to see.
     const aurora = this.auroraSky;
-    if (aurora && this.auroraReady) {
+    if (aurora && this.auroraReady && !this.xrayOn) {
       aurora.dome.visible = this.aurora > 0.002;
       if (aurora.dome.visible) {
         aurora.dome.position.copy(this.camera.position);
         aurora.update(this.camera);
       }
     }
-    this.pond.reflect(this.renderer, this.scene, this.camera);
+    // The L-system view has no water to mirror anything in.
+    if (!this.xrayOn) this.pond.reflect(this.renderer, this.scene, this.camera);
     this.post.render();
 
     if (this.pendingCapture) {
@@ -1864,6 +2091,9 @@ export class TreeStudio {
     this.disposed = true;
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.removeEventListener('pointerdown', this.onCanvasDown);
+    this.canvas.removeEventListener('pointerup', this.onCanvasUp);
+    this.xray?.dispose();
     window.removeEventListener('pointerdown', this.onAnyDown, true);
     window.removeEventListener('pointerup', this.onAnyUp, true);
     window.removeEventListener('pointercancel', this.onAnyUp, true);
