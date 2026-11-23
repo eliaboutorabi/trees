@@ -173,6 +173,35 @@ export class UiVoice {
     this.note('ui-felt', 0, 0.36, 0.18);
   }
 
+  /** Into the L-system view: glass coming into focus, and D, A, D, F rising through it. */
+  xrayIn(): void {
+    if (!this.live) return;
+    this.scape.play('xray-in', { gain: 0.55, bus: 'ui', minGap: 0.4 });
+    [0, 4, 7, 9].forEach((d, i) => this.note('ui-glass', d, 0.12 - i * 0.015, 0.32 + i * 0.09));
+    this.note('ui-low', -7, 0.3, 0.3);
+  }
+
+  /** And back to the garden: the same, undone, falling. */
+  xrayOut(): void {
+    if (!this.live) return;
+    this.scape.play('xray-out', { gain: 0.5, bus: 'ui', minGap: 0.4 });
+    [9, 7, 4, 0].forEach((d, i) => this.note('ui-glass', d, 0.1, 0.12 + i * 0.08));
+  }
+
+  /** A branch picked: its depth as a note, the deeper the higher, over a low D. */
+  branch(depth: number, deepest: number): void {
+    const d = Math.round((Math.max(0, depth) / Math.max(1, deepest)) * 9);
+    this.note('ui-glass', d, 0.2);
+    this.note('ui-felt', d - 7, 0.22, 0.03);
+  }
+
+  /** A rewrite shown: up the scale with the steps, a little brighter at the last. */
+  rewrite(step: number, steps: number): void {
+    const d = Math.round((step / Math.max(1, steps)) * 7);
+    this.note('ui-felt', d, 0.28);
+    if (step === steps && steps > 0) this.note('ui-glass', d + 2, 0.1, 0.08);
+  }
+
   /** Sound just switched on: the garden's D, opened out. */
   awake(): void {
     this.note('ui-low', -7, 0.4, 0.15);

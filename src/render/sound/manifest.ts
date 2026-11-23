@@ -206,6 +206,11 @@ export const SOUNDS: SoundSpec[] = [
   shot('ui-open', 2, 0.9, 'A soft airy swish of a sheet of heavy paper being lifted and opened, gentle and short.', { tier: 4 }),
   shot('ui-close', 2, 0.7, 'A soft muted fold of heavy paper settling down onto a table, short and gentle.', { tier: 4 }),
   shot('ui-shutter', 1, 0.6, 'The soft, muted mechanical shutter of a vintage film camera, one gentle click.', { tier: 4 }),
+  // The L-system view: the garden drawn away to its bare structure, like a
+  // lens coming into focus, and back; and the quiet room it is studied in.
+  shot('xray-in', 2, 2.5, 'A soft, glassy, crystalline shimmer that sweeps gently upward and resolves into a clear high tone, like light passing through glass and a lens coming into focus; airy, precise and calm.', { tier: 4, level: -2 }),
+  shot('xray-out', 2, 2, 'A soft glassy shimmer that sweeps gently downward and dissolves into warm air, like a lens letting go of its focus; calm and airy.', { tier: 4, level: -3 }),
+  bed('xray-room', 'A very quiet, warm, airy room tone with a faint, slowly shifting high glassy shimmer far away; abstract, calm and still, like an empty observatory at night.', { tier: 4, seconds: 22, level: -4 }),
   shot('ui-whoosh', 2, 1.2, 'A soft gentle airy whoosh passing by, like a breath of wind, smooth and quiet.', { tier: 4 }),
 ];
 

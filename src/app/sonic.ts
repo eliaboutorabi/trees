@@ -30,6 +30,10 @@ export const sonic = {
   whoosh: () => voice?.whoosh(),
   reset: () => voice?.reset(),
   awake: () => voice?.awake(),
+  xrayIn: () => voice?.xrayIn(),
+  xrayOut: () => voice?.xrayOut(),
+  branch: (depth: number, deepest: number) => voice?.branch(depth, deepest),
+  rewrite: (step: number, steps: number) => voice?.rewrite(step, steps),
   /** A custom control being dragged (a dial, a pad): `key` is the control, `fraction` how far along. */
   slide: (key: object, fraction: number) => voice?.slide(key, fraction),
   settle: (key: object, fraction: number) => voice?.settle(key, fraction),
@@ -74,7 +78,7 @@ export function sonify(root: Document = document): () => void {
       return;
     }
     // Switches, and the scene's pebbles (but not the sound's own: it speaks for itself).
-    const flip = t.closest('.toggle, .pebble:not([data-tour="quick-sound"])');
+    const flip = t.closest('.toggle, .pebble:not([data-tour="quick-sound"]):not([data-tour="quick-xray"]):not([aria-disabled="true"])');
     if (flip) sonic.toggle(flip.getAttribute('aria-pressed') !== 'true');
   };
   root.addEventListener('input', onInput, true);

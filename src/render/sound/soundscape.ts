@@ -209,6 +209,8 @@ export class Soundscape implements SoundBank {
   private hall: ConvolverNode | null = null;
   /** The interface's instrument. */
   readonly voice: UiVoice;
+  /** In the L-system view: the garden's sound drawn back to almost nothing, under a quiet room. */
+  private away = false;
 
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -295,7 +297,25 @@ export class Soundscape implements SoundBank {
   /** One layer's level, as a multiple of where it sits in the mix (0 silent, 1 as set, 2 twice). */
   setMix(bus: Bus, v: number): void {
     this.yours[bus] = Math.max(0, Math.min(2, v));
-    this.channels[bus].mix.gain.setTargetAtTime(BUS_LEVEL[bus] * this.yours[bus], this.ctx.currentTime, 0.08);
+    this.channels[bus].mix.gain.setTargetAtTime(this.mixOf(bus), this.ctx.currentTime, 0.08);
+  }
+
+  /** A layer's level: where it sits, times yours, times how far away the garden is. */
+  private mixOf(bus: Bus): number {
+    const garden = bus === 'air' || bus === 'life' || bus === 'weather' || bus === 'tree';
+    return BUS_LEVEL[bus] * this.yours[bus] * (this.away && garden ? 0.08 : 1);
+  }
+
+  /**
+   * The L-system view: the garden's own sound (its air, weather, creatures
+   * and tree) recedes to almost nothing over a second or two, and a quiet
+   * room comes up in its place; the music and the interface stay.
+   */
+  setXray(on: boolean): void {
+    this.away = on;
+    const now = this.ctx.currentTime;
+    for (const bus of BUSES) this.channels[bus].mix.gain.setTargetAtTime(this.mixOf(bus), now, on ? 0.35 : 0.8);
+    this.loop('xray-room', 'music').set(on ? 0.7 : 0, on ? 2.5 : 1.2);
   }
 
   /** Quieter while something covers the scene (the Learn page). */
@@ -657,6 +677,13 @@ export class Soundscape implements SoundBank {
     // Pond ice: it groans as it closes over.
     if (s.ice > 0.35 && this.wasIce <= 0.35) this.play('ice-creak', { at: this.pondPoint(), gain: 0.8, bus: 'weather', ref: 14 });
     this.wasIce = s.ice;
+
+    // The creatures keep to the garden; in the L-system view there is no garden to call from.
+    if (this.away) {
+      const free = !this.cue && !this.touring && this.yours.music > 0.02;
+      this.garden.tick(dt, s.season, s.night, free);
+      return;
+    }
 
     // The garden's own music, when nothing else has the music and anyone wants it.
     const free = !this.cue && !this.touring && this.yours.music > 0.02;
