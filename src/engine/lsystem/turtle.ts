@@ -23,6 +23,8 @@ export interface Skeleton {
   order: Uint8Array;
   /** Cumulative path length from the root, in world units. */
   arc: Float32Array;
+  /** Which module of the word drew each node (its `F`), or -1 for the root and gaps. */
+  module: Int32Array;
   count: number;
 
   leaves: LeafPlacement[];
@@ -111,9 +113,13 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   const fixed: number[] = [];
   const order: number[] = [];
   const arc: number[] = [];
+  const source: number[] = [];
   const leaves: LeafPlacement[] = [];
+  /** The module being read, so each node can say which one drew it. */
+  let reading = -1;
 
   const pushNode = (p: Vector3, parentIndex: number, r: number, o: number, a: number, width = 0): number => {
+    source.push(reading);
     pos.push(p.x, p.y, p.z);
     parent.push(parentIndex);
     radius.push(r);
@@ -153,7 +159,9 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
 
   const angleOf = (m: Module) => (m.p.length > 0 ? m.p[0] : opts.angle) * DEG;
 
-  for (const m of word) {
+  for (let w = 0; w < word.length; w++) {
+    const m = word[w];
+    reading = w;
     switch (m.s) {
       case 'F':
       case 'G': {
@@ -207,6 +215,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
         state.pos.addScaledVector(heading, len);
         state.arc += len;
         // A gap breaks the tube, so start a fresh strand root here.
+        reading = -1;
         state.node = pushNode(state.pos, -1, state.radius, state.order, state.arc);
         break;
       }
@@ -331,6 +340,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
     radius: radiusArr,
     order: Uint8Array.from(order),
     arc: Float32Array.from(arc),
+    module: Int32Array.from(source),
     count,
     leaves,
     maxArc: maxArc || 1,

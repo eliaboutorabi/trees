@@ -34,7 +34,9 @@ export { Tree } from './tree';
 export type { TreeStructure, LiveParams, TreeOptions, TreeInfo } from './tree';
 
 // Grammar: parse, derive, and interpret with a 3D turtle.
-export { buildTree, getPreset, DEFAULT_PRESET_ID, PRESETS } from './lsystem';
+export { buildTree, getPreset, DEFAULT_PRESET_ID, PRESETS, Anatomy } from './lsystem';
+export { AnatomyClient } from './anatomy';
+export type { AnatomyOverview, SkeletonData, BranchDetail, LineageStep, StepSummary, Token } from './anatomy';
 export type { TreeBuild, GrammarIssue, Module, Production, Skeleton, LeafPlacement } from './lsystem';
 export type { Preset, PresetParams, Palette } from './lsystem/presets';
 

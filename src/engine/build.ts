@@ -19,7 +19,7 @@ import { buildTreeGeometry, type FruitSite } from './treeGeometry';
 
 /** Everything that forces the grammar to be re-derived and the meshes rebuilt. */
 /** How much thicker a trunk's foot is than the pipe model alone would make it: see `applyTaper`. */
-const TAPER = 0.9;
+export const TAPER = 0.9;
 
 export interface TreeStructure {
   axiom: string;
