@@ -17,6 +17,9 @@
      * the switch). Told whether it is showing.
      */
     panel?: Snippet<[boolean]>;
+    /** Laid aside: dimmed, saying why on its label, and not pressed. */
+    disabled?: boolean;
+    why?: string;
   }
 </script>
 
@@ -66,6 +69,8 @@
       <button
         class="pebble"
         class:on={q.on}
+        class:off={q.disabled}
+        aria-disabled={q.disabled}
         style="--tone: {q.tone}; --tone-ink: {q.toneInk}; --shape: {SHAPES[i % SHAPES.length][0]}; --tilt: {SHAPES[i % SHAPES.length][1]}deg"
         aria-pressed={q.on}
         aria-label={q.label}
@@ -73,6 +78,7 @@
         data-tour="quick-{q.id}"
         onpointerdown={(e) => (touched = e.pointerType === 'touch')}
         onclick={() => {
+          if (q.disabled) return;
           // A finger has no hover: its tap brings the panel out, and the
           // switch is in there.
           if (q.panel && touched) {
@@ -103,7 +109,7 @@
         <span class="panel" role="dialog" aria-label={q.label}>{@render q.panel(panelOut === q.id)}</span>
       </span>
     {:else}
-      <Hint label={q.label} side="right" onhelp={onhelp ? () => onhelp(q.id) : undefined}>
+      <Hint label={q.disabled && q.why ? `${q.label} · ${q.why}` : q.label} side="right" onhelp={onhelp && !q.disabled ? () => onhelp(q.id) : undefined}>
         {@render pebble()}
       </Hint>
     {/if}
@@ -190,7 +196,13 @@
       --tone 0.6s;
   }
 
-  .pebble:hover {
+  .pebble.off {
+    opacity: 0.38;
+    filter: saturate(0.3);
+    cursor: default;
+  }
+
+  .pebble:not(.off):hover {
     transform: translateX(2px) rotate(calc(var(--tilt) * -0.6)) scale(1.06);
     color: var(--ink);
   }

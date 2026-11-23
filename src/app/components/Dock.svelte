@@ -15,6 +15,10 @@
     /** The tool's pastel, and a deeper shade of it for ink on top. */
     tone: string;
     toneInk: string;
+    /** Laid aside: shown, dimmed, saying why, and not opened. */
+    disabled?: boolean;
+    /** Why, when disabled. */
+    why?: string;
   }
 </script>
 
@@ -463,16 +467,18 @@
       style="--tone: {tool.tone}; --tone-ink: {tool.toneInk}; --shape: {PEBBLES[i % PEBBLES.length][0]}; --tilt: {PEBBLES[i % PEBBLES.length][1]}deg"
       class:active={openId === tool.id}
       class:pinned={pinned === tool.id}
+      class:off={tool.disabled}
       bind:this={buttons[tool.id]}
-      onpointerenter={() => enter(tool.id)}
+      onpointerenter={() => !tool.disabled && enter(tool.id)}
       onpointerleave={leave}
-      onclick={() => toggle(tool.id)}
+      onclick={() => !tool.disabled && toggle(tool.id)}
+      aria-disabled={tool.disabled}
       aria-label={tool.label}
       aria-expanded={openId === tool.id}
       data-tour="tool-{tool.id}"
     >
       <Glyph name={tool.icon} size={29} weight={1.8} />
-      <span class="tip">{tool.label}</span>
+      <span class="tip">{tool.label}{#if tool.disabled && tool.why}<em> · {tool.why}</em>{/if}</span>
     </button>
   {/each}
   {#if children}
@@ -543,7 +549,22 @@
       --tone-ink 0.7s;
   }
 
-  .tool:hover,
+  /* Laid aside: still there, still saying what it is, but quiet and still. */
+  .tool.off {
+    opacity: 0.38;
+    filter: saturate(0.3);
+    cursor: default;
+  }
+  .tool.off:hover {
+    transform: rotate(var(--tilt));
+    box-shadow: var(--rim);
+  }
+  .tip em {
+    font-style: italic;
+    color: var(--ink-faint);
+  }
+
+  .tool:not(.off):hover,
   .tool.active {
     transform: translateY(-5px) rotate(calc(var(--tilt) * -0.6)) scale(1.06);
     box-shadow:

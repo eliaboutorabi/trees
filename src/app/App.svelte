@@ -4,6 +4,11 @@
   import { TreeStudio, type StudioStats } from '../render/studio';
   import { Soundscape } from '../render/sound/soundscape';
   import { sonic, sonify, useVoice } from './sonic';
+  import XrayPanel from './xray/XrayPanel.svelte';
+  import XrayOverlay from './xray/XrayOverlay.svelte';
+  import DerivationStem from './xray/DerivationStem.svelte';
+  import { XrayController } from './xray/controller.svelte';
+  import { depthColours } from '../render/xray';
   import { applyPreset, params, paramsFromPreset, presets, SCENE_KEYS, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
@@ -11,7 +16,7 @@
   import GrowthStem from './components/GrowthStem.svelte';
   import QuickBar from './components/QuickBar.svelte';
   import { cut } from './components/paper';
-  import Dock from './components/Dock.svelte';
+  import Dock, { type Tool } from './components/Dock.svelte';
   import Tile from './components/Tile.svelte';
   import PicSlider from './components/PicSlider.svelte';
   import Toggle from './components/Toggle.svelte';
@@ -263,6 +268,70 @@
   $effect(() => {
     const touring = tour !== null && tourAuto;
     sound?.setTour(touring);
+  });
+
+  /**
+   * The L-system view: the garden put away, and the tree shown as its
+   * grammar drew it, step by step. A scan sweeps the screen as it comes and
+   * goes, and the page changes under the brightest part of it. What has no
+   * meaning without the garden (the seasons, the weather, the creatures,
+   * the light) is laid aside meanwhile, still there, saying why.
+   */
+  let xrayOn = $state(false);
+  let xc = $state.raw<XrayController | null>(null);
+  let scanning = $state<'in' | 'out' | null>(null);
+  const LAID_ASIDE = new Set(['season', 'weather', 'wildlife', 'foliage', 'bloom', 'light', 'wind', 'look']);
+  const WHY = 'not in the L-system view';
+
+  /** How far the picture moves aside for the panel: past the pebbles and the panel, on a screen wide enough for both. */
+  function panelInset(): number {
+    if (window.innerWidth <= 640) return 0;
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return rem * (5.1 + (window.innerWidth <= 900 ? 19 : 24)) + 12;
+  }
+
+  function setXray(on: boolean) {
+    if (on === xrayOn || scanning || !studio) return;
+    const s = studio;
+    if (on) {
+      xc ??= new XrayController({
+        showSkeleton: (data, seconds) => s.showSkeleton(data, seconds),
+        selectBranch: (node) => s.selectBranch(node),
+      });
+      void xc.load(structureSnapshot(), 1.6);
+      dockApi?.show(null);
+      sonic.xrayIn();
+      sound?.setXray(true);
+    } else {
+      xc?.stop();
+      xc?.clear();
+      sonic.xrayOut();
+      sound?.setXray(false);
+    }
+    scanning = on ? 'in' : 'out';
+    // The page changes under the brightest part of the sweep.
+    setTimeout(() => {
+      xrayOn = on;
+      s.setXray(on);
+      const phone = window.innerWidth <= 640;
+      s.setInset(on ? panelInset() : 0, on && !phone ? 88 : 0, on && phone ? window.innerHeight * 0.4 + 90 : 0);
+      s.frameTree(true);
+    }, 360);
+    setTimeout(() => (scanning = null), 950);
+  }
+
+  /** A rewrite chosen: shown, and heard. */
+  function showStep(n: number) {
+    if (!xc) return;
+    xc.stop();
+    void xc.show(n);
+    sonic.rewrite(n, xc.steps);
+  }
+
+  // While the view is open, it follows the tree: a new species, a shape, a grammar applied.
+  $effect(() => {
+    const snapshot = structureSnapshot();
+    if (xrayOn && xc) void xc.load(snapshot, 1.2);
   });
 
   /** The Learn page: a short course in writing grammars, over the scene. */
@@ -614,6 +683,13 @@
     // Handy for poking at the scene from the console while developing.
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).arbor = s;
     s.onStats = (v) => (stats = v);
+    s.onXrayPick = (node) => {
+      if (!xc) return;
+      void xc.pick(node);
+      const sk = xc.skeleton;
+      if (node >= 0 && sk) sonic.branch(sk.order[node], xc.overview?.summary[xc.step]?.depth ?? 1);
+      else sonic.close();
+    };
     s.onBearing = (b) => (cameraBearing = b);
     s.onGrowth = (v) => {
       if (!scrubbing) growth = v;
@@ -785,7 +861,11 @@
     if (tag === 'TEXTAREA' || tag === 'INPUT') return;
     if (e.key === ' ') {
       e.preventDefault();
-      replay();
+      if (xrayOn && xc) xc.play((n) => sonic.rewrite(n, xc?.steps ?? 0));
+      else replay();
+    } else if ((e.key === 'l' || e.key === 'L') && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      setXray(!xrayOn);
     } else if (e.key === 'r' || e.key === 'R') {
       e.preventDefault();
       redraw();
@@ -886,15 +966,60 @@
         </Hint>
       </div>
 
-      <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
+      {#if xrayOn && xc}
+        <XrayOverlay
+          skeleton={xc.skeleton}
+          picked={xc.picked}
+          detail={xc.detail}
+          night={params.night}
+          left={panelInset()}
+          colours={depthColours(params.night)}
+          project={(x, y, z) => studio?.project(x, y, z) ?? { x: 0, y: 0, visible: false }}
+          axes={() => studio?.axesOnScreen() ?? { x: [1, 0, 0], y: [0, -1, 0], z: [0, 0, 1] }}
+        />
+        <XrayPanel
+          x={xc}
+          axiom={params.axiom}
+          species={activePreset.name}
+          constants={[
+            { name: 'ANG', value: `${params.angle}°` },
+            { name: 'LEN', value: String(params.step) },
+            { name: 'SHRINK', value: String(params.shrink) },
+            { name: 'N', value: String(params.iterations) },
+          ]}
+          night={params.night}
+          onstep={showStep}
+          onwider={() => {
+            if (!xc || !studio) return;
+            const node = studio.parentBranch(xc.picked);
+            void xc.pick(node);
+            const sk = xc.skeleton;
+            if (node >= 0 && sk) sonic.branch(sk.order[node], xc.overview?.summary[xc.step]?.depth ?? 1);
+          }}
+        />
+        <DerivationStem
+          step={xc.step}
+          steps={xc.steps}
+          playing={xc.playing}
+          night={params.night}
+          onstep={showStep}
+          onplay={() => xc?.play((n) => sonic.rewrite(n, xc?.steps ?? 0))}
+          onstop={() => xc?.stop()}
+        />
+      {/if}
+      <!-- Kept, only hidden, in the L-system view, so it remembers its hints were seen. -->
+      <div class="keep" class:away={xrayOn}>
+        <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
+      </div>
       <QuickBar
         onhelp={(id) => startTour(['scene'], `quick-${id}`)}
         items={[
+          { id: 'xray', label: xrayOn ? 'Back to the garden' : 'L-system view', icon: 'xray', on: xrayOn, tone: '#c4b4e6', toneInk: '#45367a', toggle: () => setXray(!xrayOn) },
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
-          { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField) },
+          { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField && !xrayOn, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField), disabled: xrayOn, why: WHY },
           params.night
-            ? { id: 'aurora', label: 'Aurora', icon: 'aurora', on: params.aurora, tone: '#9fd8bf', toneInk: '#1d5a45', toggle: toggleAurora }
-            : { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow },
+            ? { id: 'aurora', label: 'Aurora', icon: 'aurora', on: params.aurora && !xrayOn, tone: '#9fd8bf', toneInk: '#1d5a45', toggle: toggleAurora, disabled: xrayOn, why: WHY }
+            : { id: 'rainbow', label: 'Rainbow', icon: 'rainbow', on: params.rainbow && !xrayOn, tone: '#e6b3a0', toneInk: '#7a3a2a', toggle: toggleRainbow, disabled: xrayOn, why: WHY },
           { id: 'night', label: params.night ? 'Day' : 'Night', icon: params.night ? 'season-summer' : 'moon', on: params.night, tone: '#9aa6d6', toneInk: '#2c3566', toggle: () => (params.night = !params.night) },
           { id: 'sound', label: soundOn ? 'Sound on' : 'Sound off', icon: soundOn ? 'sound' : 'sound-off', on: soundOn, tone: '#e3c98a', toneInk: '#6b4f12', toggle: () => setSound(!soundOn), panel: soundPanel },
         ]}
@@ -913,7 +1038,7 @@
           else if (cardUp) sonic.close();
           cardUp = id !== null;
         }}
-        tools={[
+        tools={([
           { id: 'species', label: 'Species', icon: 'grove', panel: speciesPanel, group: 0, tone: '#93c3a0', toneInk: '#2f5f43' },
           { id: 'season', label: 'Season', icon: SEASON_ICONS[params.season], panel: seasonPanel, group: 0, tone: SEASON_TONES[params.season][0], toneInk: SEASON_TONES[params.season][1] },
           { id: 'weather', label: 'Weather', icon: WEATHER_ICONS[params.weather], panel: weatherPanel, group: 0, tone: '#9fcbc3', toneInk: '#2b625b' },
@@ -925,11 +1050,16 @@
           { id: 'wind', label: 'Wind', icon: 'wind', panel: windPanel, group: 2, tone: '#a9c4d8', toneInk: '#33566e' },
           { id: 'look', label: 'Look', icon: 'frame', panel: lookPanel, group: 3, tone: '#bba8d0', toneInk: '#544472' },
           { id: 'grammar', label: 'Grammar', icon: 'quill', panel: grammarPanel, group: 3, tone: '#d6c9b1', toneInk: '#64553b', wide: true },
-        ]}
+        ] as Tool[]).map((t) => ({ ...t, disabled: xrayOn && LAID_ASIDE.has(t.id), why: WHY }))}
       />
     {/if}
   </div>
 </div>
+
+{#if scanning}
+  <!-- The sweep the view comes and goes under: a line of light across the screen, and a veil at its brightest. -->
+  <div class="scan {scanning}" class:night={params.night} aria-hidden="true"><span class="beam"></span></div>
+{/if}
 
 {#if learnOpen}
   <Learn onclose={() => (learnOpen = false)} onplant={plantLesson} />
@@ -1764,5 +1894,82 @@
     .readout {
       display: none;
     }
+  }
+
+  /*
+   * The sweep into and out of the L-system view: a band of light crossing
+   * the screen (upward going in, downward coming back), and a veil that is
+   * thickest as the band crosses the middle, which is when the page changes.
+   */
+  .scan {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    overflow: hidden;
+    animation: veil 0.95s cubic-bezier(0.45, 0, 0.35, 1) both;
+    --veil: rgba(248, 243, 232, 0.92);
+    --beam: rgba(255, 250, 238, 0.95);
+    --edge: rgba(196, 180, 230, 0.75);
+  }
+  .scan.night {
+    --veil: rgba(16, 20, 34, 0.94);
+    --beam: rgba(214, 200, 255, 0.85);
+    --edge: rgba(150, 196, 210, 0.8);
+  }
+  .beam {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 34vh;
+    background: linear-gradient(to bottom, transparent, var(--edge) 46%, var(--beam) 50%, var(--edge) 54%, transparent);
+    filter: blur(2px);
+    mix-blend-mode: screen;
+  }
+  .scan.in .beam {
+    animation: rise 0.95s cubic-bezier(0.5, 0, 0.3, 1) both;
+  }
+  .scan.out .beam {
+    animation: fall 0.95s cubic-bezier(0.5, 0, 0.3, 1) both;
+  }
+  @keyframes veil {
+    0% {
+      background: transparent;
+    }
+    38%,
+    46% {
+      background: var(--veil);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  @keyframes rise {
+    from {
+      transform: translateY(110vh);
+    }
+    to {
+      transform: translateY(-45vh);
+    }
+  }
+  @keyframes fall {
+    from {
+      transform: translateY(-45vh);
+    }
+    to {
+      transform: translateY(110vh);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scan .beam {
+      display: none;
+    }
+  }
+
+  .keep {
+    display: contents;
+  }
+  .keep.away {
+    display: none;
   }
 </style>
