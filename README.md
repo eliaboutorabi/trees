@@ -950,6 +950,77 @@ information.
 
 ---
 
+## The L-system view
+
+The pebble at the top of the left column, or the <kbd>L</kbd> key, puts the
+garden away and leaves the tree as its grammar drew it. A band of light
+sweeps the screen, the page changes under its brightest moment, and the
+tree grows back in from the root, every `F` a segment. What means nothing
+without the garden (seasons, weather, creatures, light, wind, focus blur,
+the rainbow) is laid aside, dimmed, and says why on hover. Species, shape
+and grammar stay, and the view follows them. It has a day page and a
+night one: paper and ink by day, candle gold through sea-glass to lavender
+by night.
+
+- **Colour is depth**: how many brackets deep the turtle was when it drew
+  the segment, from the trunk out to the tips.
+- **The ladder of rewrites** stands where the growth stem does. Pick a rung
+  to see the tree as it stood after that many rewrites, or play them all
+  and watch the derivation happen.
+- **Pick a branch** (thicker limbs win among twigs) and it, and everything
+  grown from it, lights up: that is the bracketed group it is written in.
+  The page of notes on the left shows that group with the module that drew
+  your segment lit, measures the segment (its depth, its length, the angle
+  it leaves its parent at), and tells **how this branch grew**: its
+  ancestor at every step, back to the axiom, with the production that
+  rewrote it each time. Over the tree, the branch is called out with its
+  symbols, its first segments marked `F` and the angle at its fork drawn
+  in, as in a figure in a paper.
+- **The grammar** is typeset: italic letters, each family of symbols in
+  the Grammar card's colours, conditions as mathematics, the constants,
+  and a legend of only the symbols this tree uses. The rules a picked
+  branch was made by are lit.
+- **The rewriting** is a list, one row per step, each with a small drawing
+  of the tree at that step to the scale of the finished one, the word's
+  beginning and its size. With a branch picked, each row shows that
+  branch's ancestor instead.
+
+### How it knows
+
+The derivation can keep its history as it goes (same rewriting, same
+random draws): every word from the axiom on, and for each module the one
+it was rewritten from and the production that did it
+([`lsystem/derive.ts`](src/engine/lsystem/derive.ts)). The turtle records
+which module drew each segment. Together they are an `Anatomy`
+([`lsystem/anatomy.ts`](src/engine/lsystem/anatomy.ts)), held on a worker
+([`anatomy.worker.ts`](src/engine/anatomy.worker.ts)), which keeps the
+whole history (the willow's last word alone is 179,075 modules) and sends
+the page only what it is about to show. Walked again with the garden's
+own settings, its last step is the garden's tree to the last digit, node
+for node, for every species: that was checked before anything was drawn.
+
+The drawing ([`render/xray.ts`](src/render/xray.ts)) is two merged meshes,
+tubes and beads, where every vertex knows where its segment starts. That
+is what lets a tree grow in along its own paths with one uniform, and a
+picked branch swell. It is shaded as a diagram, not a material: one soft
+light and a rim, inked by day and glowing by night, with the fog off.
+
+Things it taught:
+
+- **A bright page blooms.** The first day page came out grey. Not fog, as
+  first suspected, but the glow: its threshold sits in the mid-tones, so
+  the paper itself bloomed into everything drawn on it. By day the view
+  has no glow at all.
+- **Don't switch a light's shadow off.** Turning the sun's shadows off for
+  the view released its shadow map, and turning them back on then failed
+  every frame. They stay on, and are simply never asked to redraw.
+- **A mark can hide what it marks.** The `F` on a picked twig sat exactly
+  over the twig. Marks now go beside their segment, and only where it is
+  long enough on screen to carry one; a breathing ring finds the rest.
+- **Pointing at a limb through twigs means the limb.** Nearest-to-the-ray
+  picked twigs every time. Thickness now counts, and *Step out* climbs from
+  a twig to the branch it grows from.
+
 ## The Learn page
 
 The Grammar card has a **Learn to write a tree** button. It opens a short
@@ -1084,12 +1155,12 @@ generations.
 ```
 src/
   engine/   the portable half: no renderer, camera, post or UI
-    lsystem/    expression compiler, parser, derivation, 3D turtle, presets
+    lsystem/    expression compiler, parser, derivation, 3D turtle, presets, anatomy
     materials/  bark, foliage, flowers, fruit, and the shared vertex program
     build.ts    grammar → buffers, pure data (runs in build.worker.ts)
     tree.ts     the Tree class: meshes plus uniforms, nothing else
     index.ts    the entire public surface
-  render/   this app: studio, sky, aurora, landscape, meadow, birds, pond, weather, post
+  render/   this app: studio, sky, aurora, landscape, meadow, birds, pond, weather, post, xray
     sound/      the soundscape, and the manifest of every sound and its prompt
   app/      Svelte 5 UI: dock, cards, glyphs, hand-cut paper
     learn/    the Learn page: lessons, and the ink-on-paper drawing board

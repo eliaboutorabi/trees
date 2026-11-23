@@ -113,10 +113,16 @@ export const CHAPTERS: TourChapter[] = [
   {
     id: 'scene',
     title: 'Scene switches',
-    blurb: 'Orbit, focus blur, rainbow and aurora, night, sound.',
+    blurb: 'The L-system view, orbit, focus blur, rainbow and aurora, night, sound.',
     icon: 'orbit',
     steps: [
       { target: at('quick'), side: 'right', title: 'Switches for the whole scene', body: 'One tap each, always in reach.' },
+      {
+        target: at('quick-xray'),
+        side: 'right',
+        title: 'The L-system view',
+        body: 'Put the garden away and see the tree as its grammar drew it: every *F* a segment, coloured by how deep in brackets it was drawn. Step through the rewrites one at a time, pick any branch to see the symbols that wrote it and how it grew from the axiom, rewrite by rewrite. The *L* key does the same.',
+      },
       { target: at('quick-orbit'), side: 'right', title: 'Orbit', body: 'The camera drifts slowly round the tree by itself. Lovely to leave running.' },
       { target: at('quick-focus'), side: 'right', title: 'Focus blur', body: 'A camera’s shallow depth of field: the tree sharp, the hills behind it and the flowers in front soft.' },
       {
