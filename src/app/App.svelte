@@ -144,6 +144,8 @@
   let dockApi = $state<{ show(id: string | null): void }>();
   /** Play these chapters, or all of them; from the step about `at`, if given. */
   function startTour(chapters?: string[], at?: string) {
+    // The tour shows the garden; from the L-system view it goes back there first.
+    if (xrayOn) setXray(false);
     sonic.begin();
     welcomeOpen = false;
     mapOpen = false;

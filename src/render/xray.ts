@@ -66,8 +66,8 @@ const DAY: Theme = {
   // Ink: bark brown at the trunk, through olive, to a soft sage at the tips.
   ramp: [0x5e4b36, 0x5f6236, 0x6e7d48, 0x8c9a68],
   tip: 0xd8cca4,
-  lit: 0xe0612f,
-  hover: 0xc98a4a,
+  lit: 0xe2702f,
+  hover: 0xd09a52,
   top: 0xfaf6ee,
   bottom: 0xeee5d3,
   shadow: 0x9c8a66,
@@ -357,9 +357,11 @@ class Drawing {
     let base = mix(inked, glowing, u.night);
     // What is not picked recedes toward the page while something is.
     const page = mix(pick(u, u.bottom), pick(u, u.top), 0.5);
-    base = mix(base, page, u.focus.mul(mix(float(0.42), float(0.5), u.night)).mul(lit.not().select(float(1), float(0))));
-    const glow = pick(u, u.lit).mul(float(0.85).add(lambert.mul(0.3))).add(rim.mul(0.35));
-    const warm = mix(base, pick(u, u.hover), 0.55);
+    base = mix(base, page, u.focus.mul(mix(float(0.3), float(0.46), u.night)).mul(lit.not().select(float(1), float(0))));
+    let glow = pick(u, u.lit).mul(float(0.85).add(lambert.mul(0.3))).add(rim.mul(0.35));
+    // A lit tip is the lit colour's paler self, so a lit branch has its own buds.
+    if (beads) glow = mix(glow, glow.add(0.35).min(1), attribute<'float'>('aTip', 'float').mul(0.6));
+    const warm = mix(col.mul(shade), pick(u, u.hover), 0.7);
     m.colorNode = lit.select(glow, hovered.select(warm, base));
     m.opacityNode = this.fade;
     m.transparent = true;
