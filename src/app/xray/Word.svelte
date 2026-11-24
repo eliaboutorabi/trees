@@ -21,7 +21,7 @@
     at?: number;
     /** Parameters: never, only on the lit module, or on every module. */
     params?: 'none' | 'at' | 'all';
-    /** Clip to one line with a fade, rather than wrap. */
+    /** Keep to one line, rather than wrap (cut it to fit first: see the panel's `excerpt`). */
     line?: boolean;
     size?: 'small' | 'normal' | 'large';
   }
@@ -62,8 +62,6 @@
     display: block;
     white-space: nowrap;
     overflow: hidden;
-    mask-image: linear-gradient(to right, #000 82%, transparent);
-    -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
   }
 
   .sym {

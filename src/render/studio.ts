@@ -1282,14 +1282,6 @@ export class TreeStudio {
     };
   }
 
-  /** Which way the world's x, y and z point on screen (unit-ish, y down), and how much each leans toward you. */
-  axesOnScreen(): { x: [number, number, number]; y: [number, number, number]; z: [number, number, number] } {
-    const m = this.camera.matrixWorldInverse.elements;
-    // Columns of the view rotation: a world axis, seen from the camera.
-    const axis = (i: number): [number, number, number] => [m[i], -m[i + 1], m[i + 2]];
-    return { x: axis(0), y: axis(4), z: axis(8) };
-  }
-
   /** The branch under a point of the canvas (normalised device coordinates), or -1. */
   private pickAt(ndc: Vector2): number {
     if (!this.xray) return -1;

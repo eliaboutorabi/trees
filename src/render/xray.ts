@@ -127,11 +127,6 @@ export function lensColours(lens: Lens, night: boolean): string[] {
   return (lens === 'depth' ? t.ramp : lens === 'age' ? t.ages : t.rules).map(hex);
 }
 
-/** The depth ramp, as CSS colours, for a legend drawn beside the tree. */
-export function depthColours(night: boolean): string[] {
-  return lensColours('depth', night);
-}
-
 /** A production's colour, by its index (-1 for the axiom). */
 export function ruleColour(rule: number, night: boolean): string {
   const rules = (night ? NIGHT : DAY).rules;

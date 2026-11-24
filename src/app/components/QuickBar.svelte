@@ -20,6 +20,8 @@
     /** Laid aside: dimmed, saying why on its label, and not pressed. */
     disabled?: boolean;
     why?: string;
+    /** The pointer has come to it, or the focus: a press may be coming, and whatever it needs can be got ready. */
+    intent?: () => void;
   }
 </script>
 
@@ -77,6 +79,8 @@
         aria-expanded={expanded}
         data-tour="quick-{q.id}"
         onpointerdown={(e) => (touched = e.pointerType === 'touch')}
+        onpointerenter={() => q.intent?.()}
+        onfocus={() => q.intent?.()}
         onclick={() => {
           if (q.disabled) return;
           // A finger has no hover: its tap brings the panel out, and the

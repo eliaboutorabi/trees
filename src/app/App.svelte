@@ -5,10 +5,10 @@
   import { Soundscape } from '../render/sound/soundscape';
   import { sonic, sonify, useVoice } from './sonic';
   import XrayPanel from './xray/XrayPanel.svelte';
-  import XrayOverlay from './xray/XrayOverlay.svelte';
+  import XrayTag from './xray/XrayTag.svelte';
   import DerivationStem from './xray/DerivationStem.svelte';
   import { XrayController } from './xray/controller.svelte';
-  import { depthColours } from '../render/xray';
+  import { lensColours, ruleColour, type Lens } from '../render/xray';
   import { applyPreset, params, paramsFromPreset, presets, SCENE_KEYS, weatherFields, type AppParams } from './params.svelte';
   import { getSeason, SEASONS, WEATHERS, type Season, type Weather } from '../render/season';
   import { shareUrl, takeIncomingState } from './share';
@@ -273,15 +273,23 @@
   });
 
   /**
-   * The L-system view: the garden put away, and the tree shown as its
-   * grammar drew it, step by step. A scan sweeps the screen as it comes and
-   * goes, and the page changes under the brightest part of it. What has no
-   * meaning without the garden (the seasons, the weather, the creatures,
-   * the light) is laid aside meanwhile, still there, saying why.
+   * The L-system view: the garden's tree shown as its grammar drew it, step
+   * by step. It comes in over the garden in place, the bones standing where
+   * the wood was (see `TreeStudio.setXray`); then the notes come out beside
+   * it, and the picture moves over to make room. What has no meaning without
+   * the garden (the seasons, the weather, the creatures, the light) is laid
+   * aside meanwhile, still there, saying why.
    */
+  /** The view is wanted: its pebble is pressed, and what it lays aside is laid aside. */
   let xrayOn = $state(false);
+  /** It is all there: the notes and the stem are out, and the tree can be pointed at. */
+  let xrayReady = $state(false);
+  let xrayBusy = false;
   let xc = $state.raw<XrayController | null>(null);
-  let scanning = $state<'in' | 'out' | null>(null);
+  let lens = $state<Lens>('depth');
+  /** The segment under the pointer, and where the pointer is, for its tag. */
+  let xrayHover = $state(-1);
+  let pointerAt = $state({ x: 0, y: 0 });
   const LAID_ASIDE = new Set(['season', 'weather', 'wildlife', 'foliage', 'bloom', 'light', 'wind', 'look']);
   const WHY = 'not in the L-system view';
 
@@ -289,37 +297,68 @@
   function panelInset(): number {
     if (window.innerWidth <= 640) return 0;
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    return rem * (5.1 + (window.innerWidth <= 900 ? 19 : 24)) + 12;
+    return rem * (5.1 + (window.innerWidth <= 900 ? 19 : 23)) + 12;
   }
 
-  function setXray(on: boolean) {
-    if (on === xrayOn || scanning || !studio) return;
+  function controller(): XrayController {
+    const s = studio!;
+    xc ??= new XrayController({
+      showSkeleton: (data, seconds) => s.showSkeleton(data, seconds),
+      selectBranch: (node) => s.selectBranch(node),
+    });
+    return xc;
+  }
+
+  /** The pointer is on the way to the view's pebble: read the grammar now, so the view can come straight in. */
+  function prepareXray() {
+    if (!studio || xrayOn) return;
+    void controller().load(structureSnapshot(), 0);
+  }
+
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  async function setXray(on: boolean) {
+    if (on === xrayOn || xrayBusy || !studio) return;
     const s = studio;
-    if (on) {
-      xc ??= new XrayController({
-        showSkeleton: (data, seconds) => s.showSkeleton(data, seconds),
-        selectBranch: (node) => s.selectBranch(node),
-      });
-      void xc.load(structureSnapshot(), 1.6);
-      dockApi?.show(null);
-      sonic.xrayIn();
-      sound?.setXray(true);
-    } else {
-      xc?.stop();
-      xc?.clear();
-      sonic.xrayOut();
-      sound?.setXray(false);
+    xrayBusy = true;
+    try {
+      if (on) {
+        const x = controller();
+        xrayOn = true;
+        dockApi?.show(null);
+        sonic.xrayIn();
+        sound?.setXray(true);
+        s.setXrayLens(lens);
+        // The bones must be ready before the scan can lay them over the wood.
+        await x.load(structureSnapshot(), 0);
+        if (x.step !== x.steps) await x.show(x.steps, 0);
+        await s.setXray(true);
+        xrayReady = true;
+        const phone = window.innerWidth <= 640;
+        s.setInset(panelInset(), phone ? 0 : 88, phone ? window.innerHeight * 0.38 + 90 : 0);
+        s.frameTree(true);
+      } else {
+        const x = xc;
+        xrayReady = false;
+        xrayHover = -1;
+        x?.stop();
+        x?.clear();
+        s.showMadeBy(null);
+        sonic.xrayOut();
+        sound?.setXray(false);
+        xrayOn = false;
+        s.setInset(0, 0, 0);
+        s.frameTree(true);
+        // The garden's tree is the last step: the view turns back into it before it goes.
+        if (x && x.step !== x.steps) {
+          await x.show(x.steps);
+          await wait(420);
+        }
+        await s.setXray(false);
+      }
+    } finally {
+      xrayBusy = false;
     }
-    scanning = on ? 'in' : 'out';
-    // The page changes under the brightest part of the sweep.
-    setTimeout(() => {
-      xrayOn = on;
-      s.setXray(on);
-      const phone = window.innerWidth <= 640;
-      s.setInset(on ? panelInset() : 0, on && !phone ? 88 : 0, on && phone ? window.innerHeight * 0.4 + 90 : 0);
-      s.frameTree(true);
-    }, 360);
-    setTimeout(() => (scanning = null), 950);
   }
 
   /** A rewrite chosen: shown, and heard. */
@@ -333,7 +372,13 @@
   // While the view is open, it follows the tree: a new species, a shape, a grammar applied.
   $effect(() => {
     const snapshot = structureSnapshot();
-    if (xrayOn && xc) void xc.load(snapshot, 1.2);
+    if (xrayReady && xc) void xc.load(snapshot, 0.45);
+  });
+
+  // What colour says on the tree. (Read first: after `studio?.` it would not be subscribed to.)
+  $effect(() => {
+    const l = lens;
+    studio?.setXrayLens(l);
   });
 
   /** The Learn page: a short course in writing grammars, over the scene. */
@@ -685,6 +730,7 @@
     // Handy for poking at the scene from the console while developing.
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).arbor = s;
     s.onStats = (v) => (stats = v);
+    s.onXrayHover = (node) => (xrayHover = node);
     s.onXrayPick = (node) => {
       if (!xc) return;
       void xc.pick(node);
@@ -858,6 +904,9 @@
 </script>
 
 <svelte:window
+  onpointermove={(e) => {
+    if (xrayReady) pointerAt = { x: e.clientX, y: e.clientY };
+  }}
   onkeydown={(e) => {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === 'TEXTAREA' || tag === 'INPUT') return;
@@ -968,17 +1017,10 @@
         </Hint>
       </div>
 
-      {#if xrayOn && xc}
-        <XrayOverlay
-          skeleton={xc.skeleton}
-          picked={xc.picked}
-          detail={xc.detail}
-          night={params.night}
-          left={panelInset()}
-          colours={depthColours(params.night)}
-          project={(x, y, z) => studio?.project(x, y, z) ?? { x: 0, y: 0, visible: false }}
-          axes={() => studio?.axesOnScreen() ?? { x: [1, 0, 0], y: [0, -1, 0], z: [0, 0, 1] }}
-        />
+      {#if xrayReady && xc}
+        {#if xrayHover >= 0}
+          <XrayTag skeleton={xc.skeleton} node={xrayHover} x={pointerAt.x} y={pointerAt.y} night={params.night} colourOf={lens === 'rule' ? (r) => ruleColour(r, params.night) : null} />
+        {/if}
         <XrayPanel
           x={xc}
           axiom={params.axiom}
@@ -990,6 +1032,10 @@
             { name: 'N', value: String(params.iterations) },
           ]}
           night={params.night}
+          {lens}
+          colours={lensColours(lens, params.night)}
+          onlens={(l) => (lens = l)}
+          onrule={(r) => studio?.showMadeBy(r)}
           onstep={showStep}
           onwider={() => {
             if (!xc || !studio) return;
@@ -1010,13 +1056,13 @@
         />
       {/if}
       <!-- Kept, only hidden, in the L-system view, so it remembers its hints were seen. -->
-      <div class="keep" class:away={xrayOn}>
+      <div class="keep" class:away={xrayReady}>
         <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
       </div>
       <QuickBar
         onhelp={(id) => startTour(['scene'], `quick-${id}`)}
         items={[
-          { id: 'xray', label: xrayOn ? 'Back to the garden' : 'L-system view', icon: 'xray', on: xrayOn, tone: '#c4b4e6', toneInk: '#45367a', toggle: () => setXray(!xrayOn) },
+          { id: 'xray', label: xrayOn ? 'Back to the garden' : 'L-system view', icon: 'xray', on: xrayOn, tone: '#c4b4e6', toneInk: '#45367a', toggle: () => setXray(!xrayOn), intent: prepareXray },
           { id: 'orbit', label: 'Orbit', icon: 'orbit', on: params.autoRotate, tone: '#a9c4d8', toneInk: '#33566e', toggle: () => (params.autoRotate = !params.autoRotate) },
           { id: 'focus', label: 'Focus blur', icon: 'lens', on: params.depthOfField && !xrayOn, tone: '#bba8d0', toneInk: '#544472', toggle: () => (params.depthOfField = !params.depthOfField), disabled: xrayOn, why: WHY },
           params.night
@@ -1057,11 +1103,6 @@
     {/if}
   </div>
 </div>
-
-{#if scanning}
-  <!-- The sweep the view comes and goes under: a line of light across the screen, and a veil at its brightest. -->
-  <div class="scan {scanning}" class:night={params.night} aria-hidden="true"><span class="beam"></span></div>
-{/if}
 
 {#if learnOpen}
   <Learn onclose={() => (learnOpen = false)} onplant={plantLesson} />
@@ -1903,71 +1944,6 @@
    * the screen (upward going in, downward coming back), and a veil that is
    * thickest as the band crosses the middle, which is when the page changes.
    */
-  .scan {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    pointer-events: none;
-    overflow: hidden;
-    animation: veil 0.95s cubic-bezier(0.45, 0, 0.35, 1) both;
-    --veil: rgba(248, 243, 232, 0.92);
-    --beam: rgba(255, 250, 238, 0.95);
-    --edge: rgba(196, 180, 230, 0.75);
-  }
-  .scan.night {
-    --veil: rgba(16, 20, 34, 0.94);
-    --beam: rgba(214, 200, 255, 0.85);
-    --edge: rgba(150, 196, 210, 0.8);
-  }
-  .beam {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 34vh;
-    background: linear-gradient(to bottom, transparent, var(--edge) 46%, var(--beam) 50%, var(--edge) 54%, transparent);
-    filter: blur(2px);
-    mix-blend-mode: screen;
-  }
-  .scan.in .beam {
-    animation: rise 0.95s cubic-bezier(0.5, 0, 0.3, 1) both;
-  }
-  .scan.out .beam {
-    animation: fall 0.95s cubic-bezier(0.5, 0, 0.3, 1) both;
-  }
-  @keyframes veil {
-    0% {
-      background: transparent;
-    }
-    38%,
-    46% {
-      background: var(--veil);
-    }
-    100% {
-      background: transparent;
-    }
-  }
-  @keyframes rise {
-    from {
-      transform: translateY(110vh);
-    }
-    to {
-      transform: translateY(-45vh);
-    }
-  }
-  @keyframes fall {
-    from {
-      transform: translateY(-45vh);
-    }
-    to {
-      transform: translateY(110vh);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .scan .beam {
-      display: none;
-    }
-  }
-
   .keep {
     display: contents;
   }
