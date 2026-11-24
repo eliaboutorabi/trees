@@ -168,8 +168,8 @@ button {
  */
 .xray-theme {
   --x-ink: #2a2218;
-  --x-dim: rgba(42, 34, 24, 0.72);
-  --x-faint: rgba(42, 34, 24, 0.5);
+  --x-dim: rgba(42, 34, 24, 0.8);
+  --x-faint: rgba(42, 34, 24, 0.62);
   --x-line: rgba(60, 44, 28, 0.14);
   --x-glass: var(--sheen), linear-gradient(160deg, rgba(255, 252, 246, 0.74), rgba(250, 245, 236, 0.62));
   --x-rim: var(--rim);
@@ -194,8 +194,8 @@ button {
 
 .xray-theme.night {
   --x-ink: #ece6f6;
-  --x-dim: rgba(236, 230, 246, 0.74);
-  --x-faint: rgba(236, 230, 246, 0.5);
+  --x-dim: rgba(236, 230, 246, 0.8);
+  --x-faint: rgba(236, 230, 246, 0.6);
   --x-line: rgba(200, 190, 240, 0.16);
   --x-glass: linear-gradient(128deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 30%), linear-gradient(160deg, rgba(38, 44, 68, 0.78), rgba(20, 24, 40, 0.72));
   --x-rim: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(160, 150, 220, 0.14);

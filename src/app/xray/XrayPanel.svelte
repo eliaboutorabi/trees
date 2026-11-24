@@ -742,7 +742,7 @@
   .thumb .rest {
     fill: none;
     stroke: var(--x-thumb);
-    stroke-width: 0.55;
+    stroke-width: 0.7;
     stroke-linecap: round;
   }
   .thumb .trunk {

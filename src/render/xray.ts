@@ -53,13 +53,16 @@ import {
   mix,
   normalize,
   positionGeometry,
+  positionView,
   pow,
+  screenCoordinate,
   screenUV,
   smoothstep,
   uniform,
   uniformArray,
   uv,
   varying,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -158,6 +161,13 @@ function themeUniforms(front: XrayHost['front']) {
     night: uniform(0),
     /** How far something picked has drawn attention to itself, 0–1. */
     focus: uniform(0),
+    /**
+     * How far from the eye the tree's middle is, and how deep it is: what
+     * is behind the middle is drawn fainter, toward the page, as an
+     * illustrator lets the far side of a crown fall back.
+     */
+    cueMiddle: uniform(10),
+    cueDepth: uniform(3),
     /** How much each reading of colour is showing; they sum to one, and ease. */
     byDepth: uniform(1),
     byAge: uniform(0),
@@ -390,8 +400,12 @@ function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: FloatUniform
   const inked = col.mul(shade).mul(float(1).sub(rim.mul(0.35)));
   const glowing = col.mul(shade).add(rim.mul(0.32).mul(col.add(0.2)));
   let base = mix(inked, glowing, u.night);
-  // What is not picked recedes toward the page while something is.
   const page = mix(pick(u, u.bottom), pick(u, u.top), 0.5);
+  // The far side of the crown falls back toward the page, the near side
+  // stays inked: the crown reads as a volume, not a flat mass of twigs.
+  const behind = positionView.z.negate().sub(u.cueMiddle).div(u.cueDepth);
+  base = mix(base, page, smoothstep(0.05, 1.15, behind).mul(mix(float(0.36), float(0.42), u.night)));
+  // What is not picked recedes toward the page while something is.
   base = mix(base, page, u.focus.mul(mix(float(0.3), float(0.46), u.night)).mul(lit.not().select(float(1), float(0))));
   let glow = pick(u, u.lit).mul(float(0.85).add(lambert.mul(0.3))).add(rim.mul(0.35));
   // A lit tip is the lit colour's paler self, so a lit branch has its own buds.
@@ -707,7 +721,10 @@ export class XrayView {
 
   constructor(private readonly host: XrayHost) {
     const u = (this.uniforms = themeUniforms(host.front));
-    const page = mix(pick(u, u.bottom), pick(u, u.top), smoothstep(0.05, 1, screenHeight()));
+    // Paper has a tooth: a fine, still grain in its surface (by night, on
+    // the dark page, all but gone, since it scales with the light).
+    const grain = screenCoordinate.xy.dot(vec2(12.9898, 78.233)).sin().mul(43758.5453).fract().sub(0.5);
+    const page = mix(pick(u, u.bottom), pick(u, u.top), smoothstep(0.05, 1, screenHeight())).mul(float(1).add(grain.mul(0.028)));
     this.pageNode = page;
 
     // A soft shadow on the ground: where the tree stands.
@@ -748,6 +765,12 @@ export class XrayView {
     this.veil.frustumCulled = false;
     this.veil.renderOrder = ORDER.veil;
     this.group.add(this.veil, this.shadow);
+  }
+
+  /** Where the tree's middle is from the eye, and its depth (its radius), for drawing the far side fainter. */
+  setDepthCue(middle: number, depth: number): void {
+    this.uniforms.cueMiddle.value = middle;
+    this.uniforms.cueDepth.value = Math.max(0.5, depth);
   }
 
   /** Day (0) or night (1); eased. */

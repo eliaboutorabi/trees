@@ -1725,7 +1725,10 @@ export class TreeStudio {
     this.easeSky(dt);
     this.easeNight(dt);
     const x = this.xray;
-    if (x?.group.visible) x.tick(dt);
+    if (x?.group.visible) {
+      x.setDepthCue(this.camera.position.distanceTo(_v1.set(0, this.treeHeight * 0.45, 0)), this.treeRadius);
+      x.tick(dt);
+    }
     this.easeInset(dt);
     this.hear(dt);
     this.post.tick(dt);
