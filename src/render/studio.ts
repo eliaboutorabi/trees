@@ -1143,6 +1143,8 @@ export class TreeStudio {
   onXrayPick: ((node: number) => void) | null = null;
   /** The branch under the pointer in the L-system view changed. */
   onXrayHover: ((node: number) => void) | null = null;
+  /** The view's page has come to cover the top of the screen (true), or is leaving it (false): what is written there can change colour with it. */
+  onXrayPage: ((covering: boolean) => void) | null = null;
 
   get inXray(): boolean {
     return this.xrayOn;
@@ -1181,8 +1183,13 @@ export class TreeStudio {
       x.standIn(this.growth);
       x.cover(false);
       x.group.visible = true;
+      // The top of the screen is the last to be covered.
+      const top = window.setTimeout(() => this.xrayOn && this.onXrayPage?.(true), SCAN_SECONDS * 830);
       await x.scan(true, SCAN_SECONDS);
-      if (!this.xrayOn) return;
+      if (!this.xrayOn) {
+        clearTimeout(top);
+        return;
+      }
       this.garden.visible = false;
       x.letGo(1.4);
     } else {
@@ -1192,6 +1199,8 @@ export class TreeStudio {
       // The crown, where the wind moves it most, is where the scan starts: it is bending again first.
       await new Promise((r) => setTimeout(r, 420));
       if (this.xrayOn) return;
+      // And the first to be uncovered.
+      this.onXrayPage?.(false);
       await x.scan(false, SCAN_SECONDS);
       if (this.xrayOn) return;
       x.group.visible = false;

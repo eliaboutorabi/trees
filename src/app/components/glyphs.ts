@@ -352,22 +352,10 @@ export const GLYPHS = {
     { d: 'M16.3 9.3c.8.8 1.3 1.7 1.3 2.8 0 1-.4 2-1.2 2.8', k: 'ink' },
     { d: 'M18.7 6.9c1.5 1.4 2.4 3.2 2.4 5.2s-.8 3.7-2.3 5.1', k: 'ink' },
   ],
-  // The L-system view: a tree reduced to its graph. The trunk and three
-  // limbs as edges, a bead at every fork, a dot at every tip.
-  xray: [
-    { d: 'M12 21.2V13.6', k: 'ink' },
-    { d: 'M12 13.6L7.3 8.9M12 13.6L16.8 9.2M12 13.6L12.1 6.9', k: 'ink' },
-    { d: 'M7.3 8.9L4.7 6.4M7.3 8.9L8.5 5.2M16.8 9.2L19.4 6.9M16.8 9.2L15.8 5.4M12.1 6.9L12 3.9', k: 'ink', w: 0.8 },
-    { d: ring(12, 13.6, 1.55), k: 'both', c: 'sun' },
-    { d: ring(7.3, 8.9, 1.2), k: 'both', c: 'leaf' },
-    { d: ring(16.8, 9.2, 1.2), k: 'both', c: 'leaf' },
-    { d: ring(12.1, 6.9, 1.2), k: 'both', c: 'leaf' },
-    { d: ring(4.7, 6.4, 0.75), k: 'dot' },
-    { d: ring(8.5, 5.2, 0.75), k: 'dot' },
-    { d: ring(19.4, 6.9, 0.75), k: 'dot' },
-    { d: ring(15.8, 5.4, 0.75), k: 'dot' },
-    { d: ring(12, 3.9, 0.75), k: 'dot' },
-  ],
+  // The L-system view: a script L, inked. Lindenmayer's L, and the ℒ a
+  // grammar is written with in the theory of formal languages: ℒ(G), the
+  // words G generates, which is what the view shows a tree as.
+  xray: [{ d: 'M16.9 5.4c-.3-1.4-2-1.9-3.2-.9-1.7 1.4-2.2 4.8-2.6 7.7-.4 3-1.2 5.5-3.4 6.2-1.3.4-2.3-.4-1.7-1.3.8-1 2.7-.6 4.4.3 2 1 4.5 1.2 7.3.1', k: 'ink' }],
 
   // Music: two notes on one beam, the second with a leaf sprouting from its stem.
   music: [

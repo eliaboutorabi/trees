@@ -287,6 +287,8 @@
   let xrayBusy = false;
   let xc = $state.raw<XrayController | null>(null);
   let lens = $state<Lens>('depth');
+  /** The view's page is under the top of the screen: the name written there is inked, not chalked (by day; the night page is dark). */
+  let onPage = $state(false);
   /** The segment under the pointer, and where the pointer is, for its tag. */
   let xrayHover = $state(-1);
   let pointerAt = $state({ x: 0, y: 0 });
@@ -733,6 +735,7 @@
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).arbor = s;
     s.onStats = (v) => (stats = v);
     s.onXrayHover = (node) => (xrayHover = node);
+    s.onXrayPage = (covering) => (onPage = covering);
     s.onXrayPick = (node) => {
       if (!xc) return;
       void xc.pick(node);
@@ -954,7 +957,7 @@
     {/if}
 
     {#if ready}
-      <div class="brand" data-tour="brand">
+      <div class="brand" class:inked={onPage && !params.night} data-tour="brand">
         <button class="logo" onclick={() => (welcomeOpen = true)} aria-label="About Arbor" tabindex="-1">
           <Sapling variant="tall" />
         </button>
@@ -1484,6 +1487,31 @@
     color: var(--chalk);
     text-shadow: 0 1px 14px rgba(20, 14, 6, 0.45), 0 1px 2px rgba(20, 14, 6, 0.3);
     pointer-events: none;
+    transition:
+      color 0.5s ease,
+      text-shadow 0.5s ease;
+  }
+
+  /*
+   * On the L-system view's paper the name is written in its ink: chalk over
+   * a shadow is for the sky. A breath of paper behind the letters, rather
+   * than a shadow, keeps them crisp over the drawing if it comes close.
+   */
+  .brand.inked {
+    color: #2a2218;
+    text-shadow: 0 0 10px rgba(250, 246, 238, 0.9), 0 0 2px rgba(250, 246, 238, 0.7);
+  }
+  .brand.inked .logo {
+    filter: drop-shadow(0 0 4px rgba(250, 246, 238, 0.8));
+  }
+  .brand.inked .readout {
+    color: rgba(42, 34, 24, 0.62);
+  }
+  .brand.inked .readout b {
+    color: #2a2218;
+  }
+  .brand.inked .hello:focus-visible {
+    outline-color: #2a2218;
   }
 
   /*
@@ -1498,6 +1526,7 @@
     cursor: pointer;
     pointer-events: auto;
     filter: drop-shadow(0 1px 5px rgba(20, 14, 6, 0.45));
+    transition: filter 0.5s ease;
   }
 
   /* Sized outright: a width that follows from a stretched height collapses to
@@ -1557,11 +1586,13 @@
     font-weight: 500;
     color: rgba(251, 246, 236, 0.72);
     font-variant-numeric: tabular-nums;
+    transition: color 0.5s ease;
   }
 
   .readout b {
     color: var(--chalk);
     font-weight: 700;
+    transition: color 0.5s ease;
   }
 
   .readout .warn {
