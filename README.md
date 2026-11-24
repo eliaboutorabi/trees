@@ -952,38 +952,45 @@ information.
 
 ## The L-system view
 
-The pebble at the top of the left column, or the <kbd>L</kbd> key, puts the
-garden away and leaves the tree as its grammar drew it. A band of light
-sweeps the screen, the page changes under its brightest moment, and the
-tree grows back in from the root, every `F` a segment. What means nothing
-without the garden (seasons, weather, creatures, light, wind, focus blur,
-the rainbow) is laid aside, dimmed, and says why on hover. Species, shape
-and grammar stay, and the view follows them. It has a day page and a
-night one: paper and ink by day, candle gold through sea-glass to lavender
-by night.
+The pebble at the top of the left column, or the <kbd>L</kbd> key, scans
+the garden away and leaves the tree as its grammar drew it. The scan comes
+up the screen like a line of light: under it the page is laid over the
+garden and the bones are drawn over the wood, in exactly the place the
+wood was, grown as far and bending in the same wind; above it the garden
+is still there. Once it has passed the top, the bones let go of the wind,
+finish growing and hold still, and the notes come out beside them while
+the picture moves over to make room. Coming back runs the other way.
 
-- **Colour is depth**: how many brackets deep the turtle was when it drew
-  the segment, from the trunk out to the tips.
+What means nothing without the garden (seasons, weather, creatures, light,
+wind, focus blur, the rainbow) is laid aside, dimmed, and says why on
+hover. Species, shape and grammar stay, and the view follows them. It has
+a day page and a night one: paper and ink by day, dark blue by night.
+
+- **Colour is a reading**, one of three: how many brackets deep each
+  segment was drawn; how many rewrites ago its wood first appeared (rings,
+  from the heartwood out to this year's shoots); or which production drew
+  it, each its own colour, matched to its number in the grammar.
+- **Point at a production** and everything it drew is lit, with the rest
+  receding; click it to keep it lit.
 - **The ladder of rewrites** stands where the growth stem does. Pick a rung
-  to see the tree as it stood after that many rewrites, or play them all
-  and watch the derivation happen.
+  and the tree on show *turns into* the tree after that many rewrites:
+  forward, each new node starts where the module it descends from was, so
+  an apex sprouts its branches and an `F` that became two stretches into
+  them; back, the tree draws in onto its earlier self. Play runs the whole
+  derivation that way, from the axiom.
 - **Pick a branch** (thicker limbs win among twigs) and it, and everything
   grown from it, lights up: that is the bracketed group it is written in.
-  The page of notes on the left shows that group with the module that drew
-  your segment lit, measures the segment (its depth, its length, the angle
-  it leaves its parent at), and tells **how this branch grew**: its
-  ancestor at every step, back to the axiom, with the production that
-  rewrote it each time. Over the tree, the branch is called out with its
-  symbols, its first segments marked `F` and the angle at its fork drawn
-  in, as in a figure in a paper.
-- **The grammar** is typeset: italic letters, each family of symbols in
-  the Grammar card's colours, conditions as mathematics, the constants,
-  and a legend of only the symbols this tree uses. The rules a picked
-  branch was made by are lit.
+  The notes show that group with the module that drew your segment lit,
+  measure the segment (its depth, when it was first drawn and by which
+  production, its length, the angle it leaves its parent at), and tell
+  **how it grew**: its ancestor at every step, back to the axiom, with the
+  production that rewrote it each time. *Step out* climbs to the branch it
+  grows from. Pointing at any segment shows a small tag with the same at a
+  glance.
 - **The rewriting** is a list, one row per step, each with a small drawing
   of the tree at that step to the scale of the finished one, the word's
-  beginning and its size. With a branch picked, each row shows that
-  branch's ancestor instead.
+  beginning, its size, and a hairline showing that size on a log scale
+  (the rewriting is exponential, and this shows it).
 
 ### How it knows
 
@@ -991,35 +998,62 @@ The derivation can keep its history as it goes (same rewriting, same
 random draws): every word from the axiom on, and for each module the one
 it was rewritten from and the production that did it
 ([`lsystem/derive.ts`](src/engine/lsystem/derive.ts)). The turtle records
-which module drew each segment. Together they are an `Anatomy`
+which module drew each segment, and, for every module, where in the tree
+it stood. Together they are an `Anatomy`
 ([`lsystem/anatomy.ts`](src/engine/lsystem/anatomy.ts)), held on a worker
 ([`anatomy.worker.ts`](src/engine/anatomy.worker.ts)), which keeps the
 whole history (the willow's last word alone is 179,075 modules) and sends
 the page only what it is about to show. Walked again with the garden's
 own settings, its last step is the garden's tree to the last digit, node
-for node, for every species: that was checked before anything was drawn.
+for node, for every species.
+
+From those it answers three questions about any step. *Where did each
+node come from?* Follow its module back to an earlier step and take the
+node the turtle stood on when it read that ancestor: that is what a step
+turns into the next from. *When did its wood first appear?* Follow it back
+for as long as its ancestors were themselves drawn (an `F` carried over,
+or rewritten into another `F`, is the same wood growing on); the first one
+that drew nothing, an apex, is where it began. *And who made it?* The
+production that rewrote that apex.
 
 The drawing ([`render/xray.ts`](src/render/xray.ts)) is two merged meshes,
-tubes and beads, where every vertex knows where its segment starts. That
-is what lets a tree grow in along its own paths with one uniform, and a
-picked branch swell. It is shaded as a diagram, not a material: one soft
-light and a rim, inked by day and glowing by night, with the fog off.
+tubes and beads, every vertex carrying where it came from, where its
+growth starts, its depth, age, production and how it answers the wind.
+The bones are grown with the garden's own growth curve and bent with the
+garden's own sway (the same functions, the same clock), which is what lets
+them stand in for the wood. The scan is one full-screen quad drawn after
+everything of the garden: the page, faded in from the front down, with
+the line of light at the front, and the depth cleared under it so the
+bones are drawn over the bark rather than inside it. The picture's grade
+(exposure, colour, glow, night) passes from the garden's to the view's
+with the scan, so neither changes under the other.
 
 Things it taught:
 
-- **A bright page blooms.** The first day page came out grey. Not fog, as
-  first suspected, but the glow: its threshold sits in the mid-tones, so
-  the paper itself bloomed into everything drawn on it. By day the view
-  has no glow at all.
+- **An X-ray has to be in register.** The first version swept a band of
+  light over the screen, swapped the garden for the diagram under it and
+  reframed the camera: the bones appeared beside where the tree had been,
+  and grew in from the root. Nothing tied one to the other. Now the bones
+  arrive in the wood's place, in the wood's wind, and the camera moves
+  only once the garden has gone.
+- **Show the step, don't replay it.** Picking a rewrite used to grow that
+  tree from nothing. What you want to see is the difference a rewrite
+  makes, so the tree on show turns into the next one instead.
+- **A diagram needs no textbook dressing.** Call-outs with leader lines,
+  `F` labels beside segments, an angle drawn at the fork, an axis gizmo
+  and a legend of dots all came from imagining a figure in a paper, and
+  all were in the way. The tree itself says more when its colour can be
+  asked a question.
+- **A bright page blooms.** The first day page came out grey: the glow's
+  threshold sits in the mid-tones, so the paper itself bloomed into
+  everything drawn on it. By day the view has no glow at all.
 - **Don't switch a light's shadow off.** Turning the sun's shadows off for
   the view released its shadow map, and turning them back on then failed
   every frame. They stay on, and are simply never asked to redraw.
-- **A mark can hide what it marks.** The `F` on a picked twig sat exactly
-  over the twig. Marks now go beside their segment, and only where it is
-  long enough on screen to carry one; a breathing ring finds the rest.
 - **Pointing at a limb through twigs means the limb.** Nearest-to-the-ray
-  picked twigs every time. Thickness now counts, and *Step out* climbs from
-  a twig to the branch it grows from.
+  picked twigs every time. Thickness now counts. And what is lit is
+  thickened by a few hairs, not scaled: a lit twig shows, a lit limb
+  doesn't balloon.
 
 ## The Learn page
 

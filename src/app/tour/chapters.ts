@@ -121,7 +121,7 @@ export const CHAPTERS: TourChapter[] = [
         target: at('quick-xray'),
         side: 'right',
         title: 'The L-system view',
-        body: 'Put the garden away and see the tree as its grammar drew it: every *F* a segment, coloured by how deep in brackets it was drawn. Step through the rewrites one at a time, pick any branch to see the symbols that wrote it and how it grew from the axiom, rewrite by rewrite. The *L* key does the same.',
+        body: 'Scan the garden away and see the bones under the bark: the tree as its grammar drew it, every *F* a segment, in the very place the wood was. Colour it by depth, by age or by the production that drew it; point at a production to see everything it made. Step through the rewrites and watch each one turn into the next, or pick any branch to see the symbols that wrote it and how it grew from the axiom. The *L* key does the same.',
       },
       { target: at('quick-orbit'), side: 'right', title: 'Orbit', body: 'The camera drifts slowly round the tree by itself. Lovely to leave running.' },
       { target: at('quick-focus'), side: 'right', title: 'Focus blur', body: 'A camera’s shallow depth of field: the tree sharp, the hills behind it and the flowers in front soft.' },
