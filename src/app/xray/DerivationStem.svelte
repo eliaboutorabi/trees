@@ -2,9 +2,9 @@
   /**
    * The L-system view's stem, where the growth stem stands in the garden: a
    * ladder of the rewrites, the axiom at its foot and the finished tree at
-   * its top. Pick a rung, or run a finger up and down it, and the tree is
-   * shown as it stood after that many rewrites; play, and it grows through
-   * them all.
+   * its top, headed by the step on show. Pick a rung, or run a finger up and
+   * down it, and the tree turns into itself as it stood after that many
+   * rewrites; play, and it grows through them all, one into the next.
    */
   import Glyph from '../components/Glyph.svelte';
 
@@ -20,11 +20,17 @@
 
   let { step, steps, playing, night, onstep, onplay, onstop }: Props = $props();
 
-  // A long derivation (the willow's twenty-eight) gets a number every few rungs.
-  const every = $derived(steps <= 12 ? 1 : steps <= 24 ? 2 : 4);
-  const rungs = $derived(Array.from({ length: steps + 1 }, (_, i) => steps - i));
-
   let ladder = $state<HTMLElement>();
+  let tall = $state(240);
+
+  // A number on every rung there is room for one on (about sixteen pixels
+  // apart); a long derivation (the willow's twenty-eight), or a short ladder,
+  // gets one every few.
+  const every = $derived.by(() => {
+    const gap = tall / Math.max(1, steps);
+    return gap >= 16 ? 1 : gap >= 8 ? 2 : gap >= 4 ? 4 : 8;
+  });
+  const rungs = $derived(Array.from({ length: steps + 1 }, (_, i) => steps - i));
   let dragging = false;
 
   function at(e: PointerEvent): number {
@@ -58,12 +64,12 @@
 </script>
 
 <div class="stem xray-theme" class:night data-keep-clear data-tour="xray-steps">
-  <span class="label">Rewrite</span>
   <span class="n"><i>n</i> = {step}</span>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     class="ladder"
     bind:this={ladder}
+    bind:clientHeight={tall}
     role="slider"
     tabindex="0"
     aria-label="Rewrites"
@@ -121,16 +127,12 @@
     }
   }
 
-  .label {
-    font-family: var(--serif);
-    font-size: 0.86rem;
-    font-weight: 600;
-    font-variation-settings: 'SOFT' 100;
-  }
   .n {
-    margin: 0.15rem 0 0.5rem;
+    margin: 0.1rem 0 0.35rem;
     font-family: var(--serif);
-    font-size: 1rem;
+    font-size: 1.02rem;
+    font-weight: 560;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
@@ -258,7 +260,7 @@
       }
     }
     .ladder {
-      height: 20vh;
+      height: 15vh;
     }
   }
 </style>
