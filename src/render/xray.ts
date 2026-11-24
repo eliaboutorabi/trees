@@ -26,32 +26,32 @@
  */
 import {
   BufferAttribute,
-  BufferGeometry,
   CircleGeometry,
   Color,
   Group,
   IcosahedronGeometry,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
   Mesh,
   PlaneGeometry,
   Ray,
   Vector3,
 } from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 // `three/webgpu` re-exports the concrete node classes but not the base `Node`.
 import type Node from 'three/src/nodes/core/Node.js';
 import {
   abs,
   attribute,
+  cameraViewMatrix,
   clamp,
   dot,
   float,
   int,
   max,
   mix,
-  normalGeometry,
   normalize,
-  normalView,
-  normalWorld,
   positionGeometry,
   pow,
   screenUV,
@@ -59,15 +59,25 @@ import {
   uniform,
   uniformArray,
   uv,
+  varying,
   vec3,
   vec4,
 } from 'three/tsl';
 import type { SkeletonData } from '../engine';
 import { rotateAboutAxis, type TreeUniforms } from '../engine/materials/shared';
 import { pack, PEND_UNIT } from '../engine/sway';
+import { VEIL_EDGE } from './post';
 
-/** What the view borrows from the garden's tree: its wind, and the shape of its growth. */
-export type XrayHost = Pick<TreeUniforms, 'windPhase' | 'wind' | 'windDir' | 'windBend' | 'growthWindow'>;
+/**
+ * What the view borrows: the garden's wind and the shape of its growth, and
+ * the scan's front, which the picture's grade follows too (see `post.ts`).
+ */
+export type XrayHost = Pick<TreeUniforms, 'windPhase' | 'wind' | 'windDir' | 'windBend' | 'growthWindow'> & {
+  front: FloatUniform;
+};
+
+const floatUniform = (v: number) => uniform(v);
+type FloatUniform = ReturnType<typeof floatUniform>;
 
 /** What colour says: bracket depth, age in rewrites, or the production that made it. */
 export type Lens = 'depth' | 'age' | 'rule';
@@ -143,7 +153,7 @@ const pair = (day: number, night: number): Pair => ({ day: colour(day), night: c
 const palette = (hexes: number[]) => uniformArray(hexes.map((h) => new Color(h)), 'color');
 
 /** Uniforms shared by everything the view draws. */
-function themeUniforms() {
+function themeUniforms(front: XrayHost['front']) {
   return {
     night: uniform(0),
     /** How far something picked has drawn attention to itself, 0–1. */
@@ -164,9 +174,10 @@ function themeUniforms() {
     scan: pair(DAY.scan, NIGHT.scan),
     /**
      * The scan's front, as a fraction of the screen's height from the
-     * bottom: below it the view, above it the garden. Past the top, all view.
+     * bottom: below it the view, above it the garden. Past the top, all
+     * view; below the bottom, none.
      */
-    front: uniform(2),
+    front,
     /** The view's own growth, as the garden's tree counts it: 0 seed, 1 grown. */
     growth: uniform(1),
     /** How much the drawing bends with the garden's wind, 0–1. */
@@ -200,84 +211,67 @@ const ease = (t: number) => {
 
 /** Tubes this many sides round: enough to read as round, little enough to be ten thousand of. */
 const SIDES = 7;
-const BEAD = new IcosahedronGeometry(1, 1);
 
-/** A drawing's two meshes share one set of attribute names (see `material`). */
-interface Parts {
-  position: Float32Array;
-  normal: Float32Array;
-  origin: Float32Array;
-  from: Float32Array;
-  /** depth, width, width it starts at, birth. */
-  node: Float32Array;
-  /** sway (flex and pendulum, packed), tip, age (0–1), production. */
-  more: Float32Array;
-  mark: Float32Array;
-  /** Which skeleton node each vertex belongs to. */
-  owner: Int32Array;
+/**
+ * The one tube every segment is an instance of: a ring at each end, as a
+ * strip of quads. Each vertex is (cos, sin, end); the shader turns the ring
+ * to face along its segment and sizes it.
+ */
+function ringTemplate(): { position: Float32Array; index: Uint16Array } {
+  const position = new Float32Array(SIDES * 2 * 3);
+  for (let end = 0; end < 2; end++) {
+    for (let k = 0; k < SIDES; k++) {
+      const a = (k / SIDES) * Math.PI * 2;
+      const v = end * SIDES + k;
+      position[v * 3] = Math.cos(a);
+      position[v * 3 + 1] = Math.sin(a);
+      position[v * 3 + 2] = end;
+    }
+  }
+  const index = new Uint16Array(SIDES * 6);
+  for (let k = 0, t = 0; k < SIDES; k++) {
+    const k2 = (k + 1) % SIDES;
+    index[t++] = k;
+    index[t++] = SIDES + k;
+    index[t++] = k2;
+    index[t++] = k2;
+    index[t++] = SIDES + k;
+    index[t++] = SIDES + k2;
+  }
+  return { position, index };
 }
+const RING = ringTemplate();
 
-function parts(verts: number): Parts {
-  return {
-    position: new Float32Array(verts * 3),
-    normal: new Float32Array(verts * 3),
-    origin: new Float32Array(verts * 3),
-    from: new Float32Array(verts * 3),
-    node: new Float32Array(verts * 4),
-    more: new Float32Array(verts * 4),
-    mark: new Float32Array(verts),
-    owner: new Int32Array(verts),
-  };
-}
+/** The one bead every fork, tip and root is an instance of: a unit sphere, shared corners and all (its position is its normal). */
+const SPHERE = (() => {
+  const g = new IcosahedronGeometry(1, 1);
+  g.deleteAttribute('uv');
+  g.deleteAttribute('normal');
+  const m = mergeVertices(g);
+  return { position: m.attributes.position.array as Float32Array, index: (m.index!.array as Uint16Array | Uint32Array) };
+})();
 
-function geometryOf(p: Parts, index: Uint32Array): BufferGeometry {
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(p.position, 3));
-  g.setAttribute('normal', new BufferAttribute(p.normal, 3));
-  g.setAttribute('aOrigin', new BufferAttribute(p.origin, 3));
-  g.setAttribute('aFrom', new BufferAttribute(p.from, 3));
-  g.setAttribute('aNode', new BufferAttribute(p.node, 4));
-  g.setAttribute('aMore', new BufferAttribute(p.more, 4));
-  g.setAttribute('aMark', new BufferAttribute(p.mark, 1));
-  g.setIndex(new BufferAttribute(index, 1));
+/** An instanced mesh's geometry: its own copy of the template (shared buffers are released with any one of their geometries), and room for `count` instances. */
+function instanced(template: { position: Float32Array; index: Uint16Array | Uint32Array }, count: number, attributes: Record<string, Float32Array>): InstancedBufferGeometry {
+  const g = new InstancedBufferGeometry();
+  g.setAttribute('position', new BufferAttribute(template.position.slice(), 3));
+  g.setIndex(new BufferAttribute(template.index.slice(), 1));
+  for (const [name, array] of Object.entries(attributes)) g.setAttribute(name, new InstancedBufferAttribute(array, 4));
+  g.instanceCount = count;
   return g;
 }
 
-/**
- * The bones' look: flat, lit by one soft light from above and a little in
- * front, with a brighter rim (the glassy edge the night theme glows at). A
- * diagram, not a material; but placed, grown and bent exactly as the
- * garden's wood is, so it can stand in its place.
- */
-function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: Drawing['morph']; fade: Drawing['fade']; hair: Drawing['hair'] }, beads: boolean): MeshBasicNodeMaterial {
-  const m = new MeshBasicNodeMaterial();
-  const node = attribute<'vec4'>('aNode', 'vec4');
-  const more = attribute<'vec4'>('aMore', 'vec4');
-  const origin = attribute<'vec3'>('aOrigin', 'vec3');
-  const from = attribute<'vec3'>('aFrom', 'vec3');
-  const mark = attribute<'float'>('aMark', 'float');
-  const rest = attribute<'vec3'>('position', 'vec3');
-  const width = node.y;
-  const birth = node.w;
+type V3 = Node<'vec3'>;
+type F1 = Node<'float'>;
 
-  // From the step it came from to its own place.
-  const centre = rest.sub(normalGeometry.mul(width));
-  const c = mix(from, centre, d.morph);
-  const w = mix(node.z, width, d.morph);
-
-  // Grown as the garden's tree is grown (see `growthPosition`).
+/** How far a point born at `birth` has grown, as the garden's tree counts it (see `growthPosition`). */
+function extendAt(u: ThemeUniforms, host: XrayHost, birth: F1): F1 {
   const win = host.growthWindow;
-  const extend = smoothstep(0, 1, u.growth.mul(float(1).add(win)).sub(birth).div(win).clamp(0, 1));
-  const fill = extend.mul(float(0.34).add(u.growth.mul(0.66)));
-  const grown = mix(origin, c, extend);
-  // What is lit is thickened by a few hairs, so a picked twig reads as surely
-  // as a limb, and a limb (already plain to see) hardly changes; what is
-  // under the pointer, by one.
-  const extra = mark.greaterThan(0.75).select(w.mul(0.1).add(d.hair.mul(1.7)), mark.greaterThan(0.25).select(w.mul(0.05).add(d.hair.mul(0.8)), float(0)));
-  const placed = grown.add(normalGeometry.mul(w.add(extra).mul(fill)));
+  return smoothstep(0, 1, u.growth.mul(float(1).add(win)).sub(birth).div(win).clamp(0, 1));
+}
 
-  // And bent by the garden's wind as its wood is, while it stands in for it.
-  const packed = more.x;
+/** A point bent by the garden's wind as its wood is, while the drawing stands in for it (see `growthPosition`). */
+function swayed(u: ThemeUniforms, host: XrayHost, placed: V3, centre: V3, packed: F1, extend: F1): V3 {
   const pairs = packed.mul(0.5).floor();
   const flex = packed.sub(pairs.mul(2));
   const pend = pairs.mul(PEND_UNIT);
@@ -293,26 +287,102 @@ function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: Drawing['mor
   const bend = gust.mul(0.62).add(0.38).mul(host.wind).mul(flex).mul(extend).mul(host.windBend).mul(u.sway);
   const bendAxis = vec3(0, 1, 0).cross(windDir).normalize();
   const across = vec3(windDir.z.negate(), 0, windDir.x);
-  const beat = t.mul(0.83).add(c.x.mul(1.7)).add(c.z.mul(2.3)).sin();
+  const beat = t.mul(0.83).add(centre.x.mul(1.7)).add(centre.z.mul(2.3)).sin();
   const hang = windDir
     .mul(bend.mul(pend).mul(1.6))
     .add(across.mul(beat.mul(pend).mul(host.wind).mul(host.windBend).mul(extend).mul(0.12).mul(u.sway)));
-  m.positionNode = rotateAboutAxis(placed, bendAxis, bend).add(hang);
+  return rotateAboutAxis(placed, bendAxis, bend).add(hang);
+}
+
+/**
+ * The bones' look: flat, lit by one soft light from above and a little in
+ * front, with a brighter rim (the glassy edge the night theme glows at). A
+ * diagram, not a material; but placed, grown and bent exactly as the
+ * garden's wood is, so it can stand in its place.
+ *
+ * Instanced: a segment, or a bead, is one instance, carrying where it is,
+ * where it came from (for a morph), where it grows from, when, how it
+ * sways, and what it is (depth, age, production, mark) in a few vec4s.
+ * A tree of six thousand segments is a megabyte, not the sixty its beads
+ * alone took as plain geometry, and a new step builds and uploads at once.
+ */
+function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: FloatUniform; fade: FloatUniform; hair: FloatUniform }, beads: boolean): MeshBasicNodeMaterial {
+  const m = new MeshBasicNodeMaterial();
+  const v4 = (name: string) => attribute<'vec4'>(name, 'vec4');
+  const kind = v4('iKind'); // age (0–1), production slot, mark, —
+  const mark = kind.z;
+  // What is lit is thickened by a few hairs, so a picked twig reads as surely
+  // as a limb, and a limb (already plain to see) hardly changes; what is
+  // under the pointer, by one.
+  const thicker = (w: F1) => mark.greaterThan(0.75).select(w.mul(1.1).add(d.hair.mul(1.7)), mark.greaterThan(0.25).select(w.mul(1.05).add(d.hair.mul(0.8)), w));
+  const fillOf = (extend: F1) => extend.mul(float(0.34).add(u.growth.mul(0.66)));
+
+  let normal: V3;
+  let depth: F1;
+  let tip: F1 = float(0);
+  if (!beads) {
+    const a = v4('iA'); // foot: centre, width
+    const b = v4('iB'); // tip
+    const fa = v4('iFA'); // where the foot came from (a morph), and its width then
+    const fb = v4('iFB');
+    const o = v4('iO'); // where the foot grows out of, and when it is born
+    const more = v4('iM'); // tip's birth, foot's and tip's sway, depth
+    const ring = attribute<'vec3'>('position', 'vec3');
+    const end = ring.z;
+    const ca = mix(fa.xyz, a.xyz, d.morph);
+    const cb = mix(fb.xyz, b.xyz, d.morph);
+    const extA = extendAt(u, host, o.w);
+    const extB = extendAt(u, host, more.x);
+    const ga = mix(o.xyz, ca, extA);
+    const gb = mix(ca, cb, extB);
+    // The ring turned to face along the segment as it now lies.
+    const seg = cb.sub(ca);
+    const dir = seg.length().greaterThan(1e-6).select(seg.normalize(), vec3(0, 1, 0));
+    const s0 = vec3(0, 1, 0).cross(dir);
+    const side = s0.length().greaterThan(1e-4).select(s0.normalize(), vec3(1, 0, 0).cross(dir).normalize());
+    const up = dir.cross(side);
+    const out = side.mul(ring.x).add(up.mul(ring.y));
+    const atTip = end.greaterThan(0.5);
+    const centre = atTip.select(gb, ga);
+    const rest = atTip.select(cb, ca);
+    const w = mix(mix(fa.w, a.w, d.morph), mix(fb.w, b.w, d.morph), end);
+    const extend = atTip.select(extB, extA);
+    const placed = centre.add(out.mul(thicker(w).mul(fillOf(extend))));
+    m.positionNode = swayed(u, host, placed, rest, atTip.select(more.z, more.y), extend);
+    normal = varying(out, 'vBoneNormal');
+    depth = more.w;
+  } else {
+    const a = v4('iA'); // centre, size
+    const fa = v4('iFA');
+    const o = v4('iO');
+    const more = v4('iM'); // sway, tip, depth, —
+    const unit = attribute<'vec3'>('position', 'vec3');
+    const c = mix(fa.xyz, a.xyz, d.morph);
+    const w = mix(fa.w, a.w, d.morph);
+    const extend = extendAt(u, host, o.w);
+    const grown = mix(o.xyz, c, extend);
+    const placed = grown.add(unit.mul(thicker(w).mul(fillOf(extend))));
+    m.positionNode = swayed(u, host, placed, c, more.x, extend);
+    normal = varying(unit, 'vBoneNormal');
+    depth = more.z;
+    tip = more.y;
+  }
 
   // Colour: one of three readings, eased between.
-  const tip = more.y;
-  const byDepth = ramp4(u, u.ramp, node.x);
-  const byAge = ramp4(u, u.ages, more.z);
-  const slot = int(more.w);
+  const byDepth = ramp4(u, u.ramp, depth);
+  const byAge = ramp4(u, u.ages, kind.x);
+  const slot = int(kind.y);
   const element = (a: typeof u.rules.day) => a.element(slot) as unknown as Node<'vec3'>;
   const byRule = mix(element(u.rules.day), element(u.rules.night), u.night);
   let col = byDepth.mul(u.byDepth).add(byAge.mul(u.byAge)).add(byRule.mul(u.byRule));
   // A tip is paler, as a bud is; not when colour is naming productions, where it would be a lie.
   if (beads) col = mix(col, pick(u, u.tip), tip.mul(0.55).mul(float(1).sub(u.byRule)));
 
+  const n = normal.normalize();
   const light = normalize(vec3(0.35, 0.85, 0.45));
-  const lambert = max(dot(normalWorld, light), 0);
-  const rim = pow(float(1).sub(abs(normalView.z)), 2.2);
+  const lambert = max(dot(n, light), 0);
+  const nView = cameraViewMatrix.mul(vec4(n, 0)).xyz.normalize();
+  const rim = pow(float(1).sub(abs(nView.z)), 2.2);
   const shade = mix(float(0.62), float(0.5), u.night).add(lambert.mul(mix(float(0.42), float(0.36), u.night)));
   const lit = mark.greaterThan(0.75);
   const hovered = mark.greaterThan(0.25).and(lit.not());
@@ -338,22 +408,68 @@ function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: Drawing['mor
   return m;
 }
 
+/**
+ * A drawing's two materials, with the uniforms only that drawing moves.
+ * Kept, and lent to the next drawing when this one is done with them: a
+ * material is a shader to build, and a step of the derivation should cost
+ * none (see `XrayView.lend`).
+ */
+class Slot {
+  /** 0 where it came from, 1 where it is: eased. */
+  readonly morph = floatUniform(1);
+  readonly fade = floatUniform(1);
+  /** The finest width drawn, in world units: what a lit twig is thickened by. */
+  readonly hair = floatUniform(0.01);
+  readonly tubes: MeshBasicNodeMaterial;
+  readonly beads: MeshBasicNodeMaterial;
+  busy = false;
+
+  constructor(u: ThemeUniforms, host: XrayHost) {
+    this.tubes = boneMaterial(u, host, this, false);
+    this.beads = boneMaterial(u, host, this, true);
+  }
+
+  dispose(): void {
+    this.tubes.dispose();
+    this.beads.dispose();
+  }
+}
+
+/** A tube's instance data: foot, tip, where each came from, where the foot grows out of, the rest, and what it is. */
+interface TubeData {
+  iA: Float32Array;
+  iB: Float32Array;
+  iFA: Float32Array;
+  iFB: Float32Array;
+  iO: Float32Array;
+  iM: Float32Array;
+  iK: Float32Array;
+}
+interface BeadData {
+  iA: Float32Array;
+  iFA: Float32Array;
+  iO: Float32Array;
+  iM: Float32Array;
+  iK: Float32Array;
+}
+
 /** A drawing of one skeleton: its tubes and its beads. */
 class Drawing {
   readonly group = new Group();
-  /** 0 where it came from, 1 where it is: eased. */
-  readonly morph = uniform(1);
-  readonly fade = uniform(1);
-  /** The finest width drawn, in world units: what a lit twig is thickened by. */
-  readonly hair: Drawing['fade'];
-  /** The morph's progress, unseased, and which way it is going (0: still). */
+  readonly morph: FloatUniform;
+  readonly fade: FloatUniform;
+  /** The morph's progress, uneased, and which way it is going (0: still). */
   morphT = 1;
   morphDir: 1 | -1 | 0 = 0;
   morphSeconds = 0.6;
   private readonly tubes: Mesh;
   private readonly beads: Mesh;
-  private readonly tube: Parts;
-  private readonly bead: Parts;
+  private readonly tube: TubeData;
+  private readonly bead: BeadData;
+  /** Each tube's two nodes, and each bead's node. */
+  private readonly segFoot: Int32Array;
+  private readonly segTip: Int32Array;
+  private readonly beadNode: Int32Array;
   private readonly hairWidth: number;
   private readonly minWidth: number;
 
@@ -362,13 +478,17 @@ class Drawing {
     readonly arc: Float32Array,
     readonly children: Uint16Array,
     readonly width: Float32Array,
-    u: ThemeUniforms,
-    host: XrayHost,
+    private readonly slot: Slot,
     hair: number,
   ) {
     const { count, pos, parent, order, age, rule, flex, pend } = data;
+    slot.busy = true;
+    this.morph = slot.morph;
+    this.fade = slot.fade;
+    this.morph.value = 1;
+    this.fade.value = 1;
+    slot.hair.value = hair;
     this.hairWidth = hair;
-    this.hair = uniform(hair);
     let maxOrder = 1;
     let maxArc = 1e-3;
     let maxAge = 1;
@@ -381,128 +501,61 @@ class Drawing {
     }
     this.minWidth = Number.isFinite(minWidth) ? minWidth : 0.01;
     const slots = DAY.rules.length;
-    const describe = (p: Parts, v: number, i: number, w: number, birth: number, tip: boolean) => {
-      const o = parent[i] >= 0 ? parent[i] : i;
-      p.origin[v * 3] = pos[o * 3];
-      p.origin[v * 3 + 1] = pos[o * 3 + 1];
-      p.origin[v * 3 + 2] = pos[o * 3 + 2];
-      p.from[v * 3] = pos[i * 3];
-      p.from[v * 3 + 1] = pos[i * 3 + 1];
-      p.from[v * 3 + 2] = pos[i * 3 + 2];
-      p.node[v * 4] = order[i] / maxOrder;
-      p.node[v * 4 + 1] = w;
-      p.node[v * 4 + 2] = w;
-      p.node[v * 4 + 3] = birth;
-      p.more[v * 4] = pack(flex[i] ?? 0, pend[i] ?? 0);
-      p.more[v * 4 + 1] = tip ? 1 : 0;
-      p.more[v * 4 + 2] = age[i] / maxAge;
-      p.more[v * 4 + 3] = (rule[i] + 1) % slots;
-      p.owner[v] = i;
+    const put = (to: Float32Array, at: number, x: number, y: number, z: number, w: number) => {
+      to[at * 4] = x;
+      to[at * 4 + 1] = y;
+      to[at * 4 + 2] = z;
+      to[at * 4 + 3] = w;
     };
+    const P = (i: number, c: number) => pos[i * 3 + c];
 
-    // ---- tubes: one ring at each end of every segment, as a strip of quads.
+    // ---- tubes: one instance per segment.
     let segs = 0;
     for (let i = 1; i < count; i++) if (parent[i] >= 0) segs++;
-    const tube = parts(segs * SIDES * 2);
-    const index = new Uint32Array(segs * SIDES * 6);
-    const a = new Vector3();
-    const b = new Vector3();
-    const dir = new Vector3();
-    const side = new Vector3();
-    const up = new Vector3();
-    const ring = new Vector3();
-    let v = 0;
-    let t = 0;
-    for (let i = 1; i < count; i++) {
+    const T: TubeData = { iA: new Float32Array(segs * 4), iB: new Float32Array(segs * 4), iFA: new Float32Array(segs * 4), iFB: new Float32Array(segs * 4), iO: new Float32Array(segs * 4), iM: new Float32Array(segs * 4), iK: new Float32Array(segs * 4) };
+    this.segFoot = new Int32Array(segs);
+    this.segTip = new Int32Array(segs);
+    for (let i = 1, s = 0; i < count; i++) {
       const p = parent[i];
       if (p < 0) continue;
-      a.fromArray(pos, p * 3);
-      b.fromArray(pos, i * 3);
-      dir.subVectors(b, a);
-      const len = dir.length();
-      if (len < 1e-6) dir.set(0, 1, 0);
-      else dir.divideScalar(len);
-      side.set(0, 1, 0).cross(dir);
-      if (side.lengthSq() < 1e-6) side.set(1, 0, 0).cross(dir);
-      side.normalize();
-      up.crossVectors(dir, side).normalize();
-      for (let end = 0; end < 2; end++) {
-        const n = end === 0 ? p : i;
-        const centre = end === 0 ? a : b;
-        const r = width[n];
-        for (let k = 0; k < SIDES; k++) {
-          const ang = (k / SIDES) * Math.PI * 2;
-          ring.copy(side).multiplyScalar(Math.cos(ang)).addScaledVector(up, Math.sin(ang));
-          tube.position[v * 3] = centre.x + ring.x * r;
-          tube.position[v * 3 + 1] = centre.y + ring.y * r;
-          tube.position[v * 3 + 2] = centre.z + ring.z * r;
-          tube.normal[v * 3] = ring.x;
-          tube.normal[v * 3 + 1] = ring.y;
-          tube.normal[v * 3 + 2] = ring.z;
-          describe(tube, v, n, r, Math.min(1, arc[n] / maxArc), false);
-          // The ring at a segment's foot is that segment's, in colour and in what it is marked.
-          tube.node[v * 4] = order[i] / maxOrder;
-          v++;
-        }
-      }
-      const base = v - SIDES * 2;
-      for (let k = 0; k < SIDES; k++) {
-        const k2 = (k + 1) % SIDES;
-        index[t++] = base + k;
-        index[t++] = base + SIDES + k;
-        index[t++] = base + k2;
-        index[t++] = base + k2;
-        index[t++] = base + SIDES + k;
-        index[t++] = base + SIDES + k2;
-      }
-      // The foot ring takes the segment's own story too: when it was made, and by what.
-      for (let k = base; k < base + SIDES; k++) {
-        tube.more[k * 4 + 2] = age[i] / maxAge;
-        tube.more[k * 4 + 3] = (rule[i] + 1) % slots;
-      }
+      const o = parent[p] >= 0 ? parent[p] : p;
+      this.segFoot[s] = p;
+      this.segTip[s] = i;
+      put(T.iA, s, P(p, 0), P(p, 1), P(p, 2), width[p]);
+      put(T.iB, s, P(i, 0), P(i, 1), P(i, 2), width[i]);
+      put(T.iFA, s, P(p, 0), P(p, 1), P(p, 2), width[p]);
+      put(T.iFB, s, P(i, 0), P(i, 1), P(i, 2), width[i]);
+      put(T.iO, s, P(o, 0), P(o, 1), P(o, 2), Math.min(1, arc[p] / maxArc));
+      put(T.iM, s, Math.min(1, arc[i] / maxArc), pack(flex[p] ?? 0, pend[p] ?? 0), pack(flex[i] ?? 0, pend[i] ?? 0), order[i] / maxOrder);
+      put(T.iK, s, age[i] / maxAge, (rule[i] + 1) % slots, 0, 0);
+      s++;
     }
-    this.tube = tube;
-    this.tubes = new Mesh(geometryOf(tube, index), boneMaterial(u, host, this, false));
+    this.tube = T;
+    this.tubes = new Mesh(instanced(RING, segs, { ...T }), slot.tubes);
     this.tubes.frustumCulled = false;
     this.tubes.renderOrder = ORDER.bones;
 
     // ---- beads: at the root, at every fork, at every tip.
     let beads = 0;
     for (let i = 0; i < count; i++) if (i === 0 || children[i] !== 1) beads++;
-    const bv = BEAD.attributes.position.count;
-    const bead = parts(beads * bv);
-    const bidx = BEAD.index ? BEAD.index.array : null;
-    const bindex = new Uint32Array(beads * (bidx ? bidx.length : bv));
-    const src = BEAD.attributes.position.array as Float32Array;
-    let w = 0;
-    let bi = 0;
-    for (let i = 0; i < count; i++) {
+    const B: BeadData = { iA: new Float32Array(beads * 4), iFA: new Float32Array(beads * 4), iO: new Float32Array(beads * 4), iM: new Float32Array(beads * 4), iK: new Float32Array(beads * 4) };
+    this.beadNode = new Int32Array(beads);
+    for (let i = 0, b = 0; i < count; i++) {
       if (!(i === 0 || children[i] !== 1)) continue;
       const tip = children[i] === 0 && i !== 0;
       const r = this.beadSize(i, width[i]);
-      const cx = pos[i * 3];
-      const cy = pos[i * 3 + 1];
-      const cz = pos[i * 3 + 2];
-      for (let k = 0; k < bv; k++) {
-        const nx = src[k * 3];
-        const ny = src[k * 3 + 1];
-        const nz = src[k * 3 + 2];
-        const o = w + k;
-        bead.position[o * 3] = cx + nx * r;
-        bead.position[o * 3 + 1] = cy + ny * r;
-        bead.position[o * 3 + 2] = cz + nz * r;
-        bead.normal[o * 3] = nx;
-        bead.normal[o * 3 + 1] = ny;
-        bead.normal[o * 3 + 2] = nz;
-        // A bead appears a moment after the segment reaching it.
-        describe(bead, o, i, r, Math.min(1, arc[i] / maxArc + 0.02), tip);
-      }
-      if (bidx) for (let k = 0; k < bidx.length; k++) bindex[bi++] = (bidx[k] as number) + w;
-      else for (let k = 0; k < bv; k++) bindex[bi++] = w + k;
-      w += bv;
+      const o = parent[i] >= 0 ? parent[i] : i;
+      this.beadNode[b] = i;
+      put(B.iA, b, P(i, 0), P(i, 1), P(i, 2), r);
+      put(B.iFA, b, P(i, 0), P(i, 1), P(i, 2), r);
+      // A bead appears a moment after the segment reaching it.
+      put(B.iO, b, P(o, 0), P(o, 1), P(o, 2), Math.min(1, arc[i] / maxArc + 0.02));
+      put(B.iM, b, pack(flex[i] ?? 0, pend[i] ?? 0), tip ? 1 : 0, order[i] / maxOrder, 0);
+      put(B.iK, b, age[i] / maxAge, (rule[i] + 1) % slots, 0, 0);
+      b++;
     }
-    this.bead = bead;
-    this.beads = new Mesh(geometryOf(bead, bindex), boneMaterial(u, host, this, true));
+    this.bead = B;
+    this.beads = new Mesh(instanced(SPHERE, beads, { ...B }), slot.beads);
     this.beads.frustumCulled = false;
     this.beads.renderOrder = ORDER.bones + 1;
 
@@ -527,24 +580,28 @@ class Drawing {
    * for its own place: what a morph runs from.
    */
   setFrom(pos: Float32Array | null, radius: Float32Array | null): void {
-    const own = this.data.pos;
-    const fill = (p: Parts, beads: boolean) => {
-      for (let v = 0; v < p.owner.length; v++) {
-        const i = p.owner[v];
-        const src = pos ?? own;
-        p.from[v * 3] = src[i * 3];
-        p.from[v * 3 + 1] = src[i * 3 + 1];
-        p.from[v * 3 + 2] = src[i * 3 + 2];
-        const w = radius ? this.widthOf(radius[i]) : this.width[i];
-        p.node[v * 4 + 2] = beads ? this.beadSize(i, w) : w;
-      }
+    const src = pos ?? this.data.pos;
+    const widthAt = (i: number) => (radius ? this.widthOf(radius[i]) : this.width[i]);
+    const put = (to: Float32Array, at: number, i: number, w: number) => {
+      to[at * 4] = src[i * 3];
+      to[at * 4 + 1] = src[i * 3 + 1];
+      to[at * 4 + 2] = src[i * 3 + 2];
+      to[at * 4 + 3] = w;
     };
-    fill(this.tube, false);
-    fill(this.bead, true);
-    for (const mesh of [this.tubes, this.beads]) {
-      (mesh.geometry.getAttribute('aFrom') as BufferAttribute).needsUpdate = true;
-      (mesh.geometry.getAttribute('aNode') as BufferAttribute).needsUpdate = true;
+    for (let s = 0; s < this.segFoot.length; s++) {
+      put(this.tube.iFA, s, this.segFoot[s], widthAt(this.segFoot[s]));
+      put(this.tube.iFB, s, this.segTip[s], widthAt(this.segTip[s]));
     }
+    for (let b = 0; b < this.beadNode.length; b++) {
+      const i = this.beadNode[b];
+      put(this.bead.iFA, b, i, this.beadSize(i, widthAt(i)));
+    }
+    this.touch(this.tubes, 'iFA', 'iFB');
+    this.touch(this.beads, 'iFA');
+  }
+
+  private touch(mesh: Mesh, ...names: string[]): void {
+    for (const name of names) (mesh.geometry.getAttribute(name) as InstancedBufferAttribute).needsUpdate = true;
   }
 
   /** Run toward its own place (1) or back to where it came from (-1). */
@@ -564,25 +621,19 @@ class Drawing {
     return !done;
   }
 
-  /** Mark nodes: 1 lit, 0.5 hovered, 0 neither. A segment takes its child node's mark, at both ends. */
+  /** Mark nodes: 1 lit, 0.5 hovered, 0 neither. A segment takes its tip node's mark. */
   mark(marks: Float32Array): void {
-    const t = this.tube;
-    for (let v = 0; v < t.owner.length; v += SIDES * 2) {
-      // The tip ring's owner is the segment's child node.
-      const child = t.owner[v + SIDES];
-      t.mark.fill(marks[child], v, v + SIDES * 2);
-    }
-    const b = this.bead;
-    for (let v = 0; v < b.owner.length; v++) b.mark[v] = marks[b.owner[v]];
-    (this.tubes.geometry.getAttribute('aMark') as BufferAttribute).needsUpdate = true;
-    (this.beads.geometry.getAttribute('aMark') as BufferAttribute).needsUpdate = true;
+    for (let s = 0; s < this.segTip.length; s++) this.tube.iK[s * 4 + 2] = marks[this.segTip[s]];
+    for (let b = 0; b < this.beadNode.length; b++) this.bead.iK[b * 4 + 2] = marks[this.beadNode[b]];
+    this.touch(this.tubes, 'iK');
+    this.touch(this.beads, 'iK');
   }
 
+  /** Let go of its geometry, and give its materials back to be lent again. */
   dispose(): void {
     this.tubes.geometry.dispose();
     this.beads.geometry.dispose();
-    (this.tubes.material as MeshBasicNodeMaterial).dispose();
-    (this.beads.material as MeshBasicNodeMaterial).dispose();
+    this.slot.busy = false;
   }
 }
 
@@ -629,9 +680,11 @@ class Glide {
 
 export class XrayView {
   readonly group = new Group();
-  readonly uniforms = themeUniforms();
+  readonly uniforms: ThemeUniforms;
   /** The page behind the tree: paper by day, ink by night, a touch lighter toward the top. */
-  readonly backgroundNode;
+  readonly pageNode;
+  private readonly slots: Slot[] = [];
+  private warm: Drawing[] = [];
   private current: Drawing | null = null;
   /** Fading out, after a tree that is not one step of this one replaced it. */
   private leaving: Drawing[] = [];
@@ -653,9 +706,9 @@ export class XrayView {
   private scanning: { into: boolean; t: number; seconds: number; done: () => void } | null = null;
 
   constructor(private readonly host: XrayHost) {
-    const u = this.uniforms;
+    const u = (this.uniforms = themeUniforms(host.front));
     const page = mix(pick(u, u.bottom), pick(u, u.top), smoothstep(0.05, 1, screenHeight()));
-    this.backgroundNode = page;
+    this.pageNode = page;
 
     // A soft shadow on the ground: where the tree stands.
     const shadowMat = new MeshBasicNodeMaterial();
@@ -670,13 +723,16 @@ export class XrayView {
     this.shadow.position.y = 0.002;
     this.shadow.renderOrder = ORDER.shadow;
 
-    // The scan: the page laid over the garden from its front down, with a
-    // fine line of light at the front. It also clears the depth there, so the
+    // The page, laid over the garden from the scan's front down, with a fine
+    // line of light at the front; it also clears the depth there, so the
     // bones are drawn over the wood they stand in for rather than inside it.
+    // Once the scan has passed it is simply the page, and it stays up for as
+    // long as the view is on screen: the garden is put back under it before
+    // a scan uncovers it, never in front of it.
     const veilMat = new MeshBasicNodeMaterial();
     veilMat.vertexNode = vec4(positionGeometry.x, positionGeometry.y, 0.99999, 1);
     const behind = u.front.sub(screenHeight());
-    const cover = smoothstep(0, 0.26, behind);
+    const cover = smoothstep(0, VEIL_EDGE, behind);
     // A hairline, and a faint glow either side of it.
     const core = behind.div(0.0016).pow(2).negate().exp();
     const halo = behind.div(0.018).pow(2).negate().exp().mul(0.22);
@@ -691,7 +747,6 @@ export class XrayView {
     this.veil = new Mesh(new PlaneGeometry(2, 2), veilMat);
     this.veil.frustumCulled = false;
     this.veil.renderOrder = ORDER.veil;
-    this.veil.visible = false;
     this.group.add(this.veil, this.shadow);
   }
 
@@ -734,7 +789,7 @@ export class XrayView {
     const width = new Float32Array(count);
     for (let i = 0; i < count; i++) width[i] = Math.max(hair, radius[i] * 0.34);
 
-    const drawing = new Drawing(data, arc, children, width, this.uniforms, this.host, hair);
+    const drawing = new Drawing(data, arc, children, width, this.lend(), hair);
     const old = this.current;
     const m = data.morph;
     const related = !!(m && old && old.data.step === m.from);
@@ -769,6 +824,54 @@ export class XrayView {
 
     const r = Math.max(footprint?.radius ?? data.radiusXZ, 0.5);
     this.shadow.scale.setScalar(r * 1.05);
+  }
+
+  /** A pair of materials no drawing is using, made if there is none. */
+  private lend(): Slot {
+    let slot = this.slots.find((s) => !s.busy);
+    if (!slot) {
+      slot = new Slot(this.uniforms, this.host);
+      this.slots.push(slot);
+    }
+    return slot;
+  }
+
+  /**
+   * Drawings to compile the view's shaders on before it is first wanted: a
+   * few tiny trees, in materials that are then lent to real ones. Shown
+   * (masked out by the scan) until `endWarmUp`.
+   */
+  beginWarmUp(): Group {
+    const twig: SkeletonData = {
+      step: -1,
+      count: 3,
+      pos: new Float32Array([0, 0, 0, 0, 1, 0, 0.3, 1.6, 0]),
+      parent: new Int32Array([-1, 0, 1]),
+      radius: new Float32Array([0.1, 0.06, 0.03]),
+      order: new Uint8Array([0, 0, 1]),
+      module: new Int32Array([-1, 0, 1]),
+      age: new Uint8Array([0, 0, 1]),
+      rule: new Int16Array([-1, -1, 0]),
+      flex: new Float32Array(3),
+      pend: new Float32Array(3),
+      height: 1.6,
+      radiusXZ: 0.3,
+    };
+    const arc = new Float32Array([0, 1, 1.7]);
+    const children = new Uint16Array([1, 1, 0]);
+    const width = new Float32Array([0.034, 0.02, 0.01]);
+    // As many as are ever on screen at once: the one shown, one going, one more on a quick scrub.
+    for (let i = 0; i < 3; i++) {
+      const d = new Drawing(twig, arc, children, width, this.lend(), 0.005);
+      this.warm.push(d);
+      this.group.add(d.group);
+    }
+    return this.group;
+  }
+
+  endWarmUp(): void {
+    for (const d of this.warm) this.drop(d);
+    this.warm = [];
   }
 
   private drop(d: Drawing): void {
@@ -926,19 +1029,20 @@ export class XrayView {
    */
   scan(into: boolean, seconds: number): Promise<void> {
     this.scanning?.done();
-    this.veil.visible = true;
     return new Promise((done) => {
       this.scanning = { into, t: 0, seconds, done };
-      this.uniforms.front.value = into ? -0.02 : SCAN_TOP;
+      this.uniforms.front.value = into ? SCAN_BOTTOM : SCAN_TOP;
     });
   }
 
-  /** How much of the screen is the view's, 0–1, while a scan runs; else 0 or 1. */
-  get coverage(): number {
-    const s = this.scanning;
-    if (!s) return this.uniforms.front.value > 1 ? 1 : 0;
-    const e = ease(s.t);
-    return s.into ? e : 1 - e;
+  /** Cover the whole screen with the page at once (nothing of the garden showing), or none of it. */
+  cover(all: boolean): void {
+    this.uniforms.front.value = all ? COVERED : UNCOVERED;
+  }
+
+  /** The page covers everything: nothing of the garden is on screen. */
+  get covering(): boolean {
+    return this.uniforms.front.value >= SCAN_TOP;
   }
 
   get scanRunning(): boolean {
@@ -973,11 +1077,10 @@ export class XrayView {
     if (s) {
       s.t = Math.min(1, s.t + dt / s.seconds);
       const e = ease(s.t);
-      u.front.value = s.into ? -0.02 + (SCAN_TOP + 0.02) * e : SCAN_TOP - (SCAN_TOP + 0.02) * e;
+      u.front.value = s.into ? SCAN_BOTTOM + (SCAN_TOP - SCAN_BOTTOM) * e : SCAN_TOP - (SCAN_TOP - SCAN_BOTTOM) * e;
       if (s.t >= 1) {
         this.scanning = null;
-        this.veil.visible = false;
-        u.front.value = s.into ? 2 : -1;
+        u.front.value = s.into ? COVERED : UNCOVERED;
         s.done();
       }
     }
@@ -988,10 +1091,20 @@ export class XrayView {
     this.current?.dispose();
     this.collapsing?.old.dispose();
     for (const old of this.leaving) old.dispose();
+    this.endWarmUp();
+    for (const slot of this.slots) slot.dispose();
     this.shadow.geometry.dispose();
     this.veil.geometry.dispose();
   }
 }
 
-/** Where the scan's front has to reach for its softened edge to have cleared the top of the screen. */
-const SCAN_TOP = 1.3;
+/**
+ * Where the scan's front has to reach for its softened edge to have cleared
+ * the top of the screen, and where it starts from below the bottom so that
+ * not even its glow shows.
+ */
+const SCAN_TOP = 1 + VEIL_EDGE + 0.04;
+const SCAN_BOTTOM = -0.06;
+/** The front, once the scan has passed one way or the other. */
+export const COVERED = 2;
+export const UNCOVERED = -1;

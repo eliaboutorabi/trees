@@ -11,9 +11,15 @@
  */
 import { Vector3, type Camera, type Scene } from 'three';
 import { RenderPipeline, type WebGPURenderer } from 'three/webgpu';
-import { float, pass, saturation, screenCoordinate, screenUV, smoothstep, time, uniform, vec3, vec4, vibrance } from 'three/tsl';
+import { float, mix, pass, saturation, screenCoordinate, screenUV, smoothstep, time, uniform, vec3, vec4, vibrance } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { stableDepthOfField } from './dof';
+
+/** The L-system view's grade: the colour slider's natural setting (see `applyColour`), no night. */
+const VIEW_VIBRANCE = 0.45;
+const VIEW_SATURATION = 1.1;
+/** The soft edge of the view's page behind its scan's front, as a fraction of the screen's height. */
+export const VEIL_EDGE = 0.26;
 
 export interface PostToggles {
   bloom: boolean;
@@ -44,7 +50,32 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     grainAmount: uniform(1),
     /** A cool cast for night: the eye in moonlight sees blue, and little colour. */
     tint: uniform(new Vector3(1, 1, 1)),
+    /**
+     * The exposure, applied here rather than by the renderer's output (it is
+     * the same multiply, at the same place: last, before the tone curve), so
+     * that it can be one thing for the garden and another for the L-system
+     * view on the same frame.
+     */
+    exposure: uniform(1),
+    /**
+     * Where the L-system view's scan has reached, as a fraction of the
+     * screen's height from the bottom: below it the view's own plain grade,
+     * above it the garden's. -1, none of the screen; 2, all of it. Shared
+     * with the view, which draws its page to the same front.
+     */
+    xrayFront: uniform(-1),
+    /** How much of its own light the view's drawing gives off: none on the paper by day, a little on the dark page. */
+    xrayGlow: uniform(0),
   };
+
+  /**
+   * How much of each pixel is the L-system view's: 1 below its scan's front,
+   * 0 above, over the same soft edge its page is laid down with (see
+   * `XrayView`). Everything that differs between the garden's picture and
+   * the view's is mixed by it, per pixel, so the scan carries the change
+   * across the screen and nothing changes anywhere else.
+   */
+  const veiled = smoothstep(0, VEIL_EDGE, uniforms.xrayFront.sub(screenUV.y.oneMinus()));
 
   const pipeline = new RenderPipeline(renderer);
   const toggles: PostToggles = { bloom: true, dof: true, grain: true, antialias: true };
@@ -102,7 +133,8 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     scenePass = pass(scene, camera, { samples });
     sceneColor = scenePass.getTextureNode('output');
     viewZ = scenePass.getViewZNode();
-    bloomPass = bloom(sceneColor, uniforms.bloomStrength, uniforms.bloomRadius, uniforms.bloomThreshold);
+    // What the view covers glows only as much as the view says: the paper not at all.
+    bloomPass = bloom(sceneColor.mul(mix(float(1), uniforms.xrayGlow, veiled)), uniforms.bloomStrength, uniforms.bloomRadius, uniforms.bloomThreshold);
     applyScale();
     applyGlow();
   }
@@ -114,12 +146,18 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
     const asColor = (n: unknown) => n as typeof sceneColor;
 
     let node = toggles.bloom ? sceneColor.add(bloomPass) : sceneColor;
+    // In the L-system view there is no focus blur: its drawing is all in one plane of interest.
     if (toggles.dof) {
-      node = asColor(stableDepthOfField(node, viewZ, uniforms.focusDistance, uniforms.focalLength, uniforms.dofAmount));
+      node = asColor(stableDepthOfField(node, viewZ, uniforms.focusDistance, uniforms.focalLength, uniforms.dofAmount.mul(veiled.oneMinus())));
     }
 
     // Grading works on colour only — `vibrance` and `saturation` return vec3.
-    let rgb = saturation(vibrance(node.rgb, uniforms.vibrance), uniforms.saturation).mul(uniforms.tint);
+    // The garden's grade (the Look card's colour, the night's cast), and the
+    // view's plain one (colour at its natural setting, no night), each where
+    // its picture is.
+    const garden = saturation(vibrance(node.rgb, uniforms.vibrance), uniforms.saturation).mul(uniforms.tint);
+    const plain = saturation(vibrance(node.rgb, VIEW_VIBRANCE), VIEW_SATURATION);
+    let rgb = mix(garden, plain, veiled);
 
     const falloff = screenUV.sub(0.5).length().mul(uniforms.vignette);
     rgb = rgb.mul(float(1).sub(falloff.mul(falloff)).clamp(0, 1));
@@ -162,9 +200,11 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
       // Eased off in the highlights too — blown film has no grain left to show.
       const lum = rgb.dot(vec3(0.2126, 0.7152, 0.0722));
       const rolloff = smoothstep(2.2, 0.5, lum).mul(0.75).add(0.25);
-      rgb = rgb.mul(float(1).add(noise.mul(uniforms.grain).mul(uniforms.grainAmount).mul(2.2).mul(rolloff)));
+      rgb = rgb.mul(float(1).add(noise.mul(uniforms.grain).mul(uniforms.grainAmount).mul(veiled.oneMinus()).mul(2.2).mul(rolloff)));
     }
 
+    // Exposure last, as the output would have applied it: the garden's, or plain.
+    rgb = rgb.mul(mix(uniforms.exposure, float(1), veiled));
     pipeline.outputNode = vec4(rgb, 1);
     pipeline.needsUpdate = true;
   }
@@ -261,6 +301,10 @@ export function createPostPipeline(renderer: WebGPURenderer, scene: Scene, camer
         }
       }
       if (rebuildNeeded) rebuild();
+    },
+    /** The scene pass's target, so materials can be compiled ahead for it (see `TreeStudio.warmXray`). */
+    sceneTarget() {
+      return scenePass.renderTarget;
     },
     render(): Promise<void> | void {
       return pipeline.render();
