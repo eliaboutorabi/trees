@@ -1016,17 +1016,24 @@ or rewritten into another `F`, is the same wood growing on); the first one
 that drew nothing, an apex, is where it began. *And who made it?* The
 production that rewrote that apex.
 
-The drawing ([`render/xray.ts`](src/render/xray.ts)) is two merged meshes,
-tubes and beads, every vertex carrying where it came from, where its
-growth starts, its depth, age, production and how it answers the wind.
-The bones are grown with the garden's own growth curve and bent with the
-garden's own sway (the same functions, the same clock), which is what lets
-them stand in for the wood. The scan is one full-screen quad drawn after
-everything of the garden: the page, faded in from the front down, with
-the line of light at the front, and the depth cleared under it so the
-bones are drawn over the bark rather than inside it. The picture's grade
-(exposure, colour, glow, night) passes from the garden's to the view's
-with the scan, so neither changes under the other.
+The drawing ([`render/xray.ts`](src/render/xray.ts)) is two instanced
+meshes: every segment one instance of a seven-sided ring tube, turned to
+face along it in the shader, and every fork, tip and the root one instance
+of a small sphere. Each instance carries where it is, where it came from,
+where its growth starts, its depth, age, production and how it answers the
+wind, in a few vec4s. The bones are grown with the garden's own growth
+curve and bent with the garden's own sway (the same functions, the same
+clock), which is what lets them stand in for the wood.
+
+The scan is one full-screen quad drawn after everything of the garden: the
+page, laid down from the front, with the line of light at the front and the
+depth cleared under it, so the bones are drawn over the bark rather than
+inside it. It stays up as the page for as long as the view is on screen.
+The post chain reads the same front and mixes, per pixel, everything that
+differs between the two pictures: exposure, the night's cast, colour, focus
+blur, grain, what glows. So the garden keeps its own look right up to the
+line, and nothing anywhere else changes. The background is one node for
+good: the sky, or nothing where the page covers the screen.
 
 Things it taught:
 
@@ -1036,6 +1043,18 @@ Things it taught:
   and grew in from the root. Nothing tied one to the other. Now the bones
   arrive in the wood's place, in the wood's wind, and the camera moves
   only once the garden has gone.
+- **Switch nothing that shows.** The first in-place version still flashed
+  on the way back and stalled on the way in. The garden was put back in
+  front of the page for the moment before the scan began; the grade of the
+  whole screen slid from one look to the other as the scan passed; focus
+  blur and grain switched back on at the end, rebuilding the post chain;
+  swapping the background rebuilt the sky's shader; and the render scale,
+  talked up by the light drawing, brought the garden back too big to keep
+  up. Now the change is only ever where the scan is.
+- **Measure the geometry.** Every bead was an unindexed icosahedron with
+  twenty-one floats a vertex: sixty megabytes for the oak, rebuilt and
+  uploaded at every step. Instanced, it is one megabyte and a step costs a
+  few milliseconds.
 - **Show the step, don't replay it.** Picking a rewrite used to grow that
   tree from nothing. What you want to see is the difference a rewrite
   makes, so the tree on show turns into the next one instead.
