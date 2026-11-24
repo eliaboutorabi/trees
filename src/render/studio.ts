@@ -31,7 +31,7 @@ import { Flock } from './birds';
 import { aerialPerspective } from './materials/ground';
 import { createFireflies } from './fireflies';
 import type { SceneEvent } from './events';
-import { XrayView } from './xray';
+import { XrayView, type Lens } from './xray';
 import type { SkeletonData } from '../engine';
 import type { Ears, Soundscape, SoundPlaces, SoundState } from './sound/soundscape';
 
@@ -147,6 +147,8 @@ const MAX_ORNAMENTS = 1_800;
 const NEUTRAL_LIFT = 1.18;
 /** How much the L-system view's night page lets its tips glow. */
 const XRAY_NIGHT_GLOW = 0.3;
+/** How long the scan takes to cross the screen, either way. */
+const SCAN_SECONDS = 1.15;
 /** Moonlight, and the blues of a night sky and the distance under it. */
 const MOONLIGHT = new Color(0.62, 0.72, 1.0);
 const NIGHT_FILL = new Color(0.32, 0.42, 0.72);
@@ -710,18 +712,12 @@ export class TreeStudio {
     this.pond.setDucks(params.ducklings, params.duckSize);
 
     if (!this.renderer) return;
-    // The L-system view keeps its own clean picture; the look is applied on the way back.
-    if (this.xrayOn) {
-      this.orbitTarget = params.autoRotate ? ORBIT_SPEED : 0;
-      this.applyQuality(params.quality);
-      return;
-    }
     this.userExposure = params.exposure;
-    this.updateExposure();
-    this.post.setGlow(params.bloom);
-    this.post.setColour(params.colour);
-    this.post.setFocusBlur(params.depthOfField);
-    this.post.setGrain(params.grain);
+    // The L-system view keeps its own clean picture: no focus blur, no grain,
+    // and its own grade (see `applyGrade`). The look comes back with the garden.
+    this.post.setFocusBlur(params.depthOfField && !this.xrayOn);
+    this.post.setGrain(params.grain && !this.xrayOn);
+    this.applyGrade();
     if (!this.lookShown) {
       this.lookShown = true;
       this.post.settleFades();
@@ -808,16 +804,29 @@ export class TreeStudio {
    */
   private updateExposure(): void {
     if (!this.renderer) return;
-    if (this.xrayOn) {
-      this.renderer.toneMappingExposure = 1;
-      return;
-    }
     const follow = Math.pow(5 / Math.max(0.5, this.sunPower), 0.32);
     // Neutral sits a little darker in the mid-tones than AgX did; this puts
     // the default picture back where it was in brightness, with its colour.
     // At night the eye opens up: a moonlit garden is dark, but you can see it.
     const adapt = 1 + 0.45 * this.nightness;
-    this.renderer.toneMappingExposure = NEUTRAL_LIFT * this.userExposure * follow * adapt;
+    const garden = NEUTRAL_LIFT * this.userExposure * follow * adapt;
+    // The L-system view is drawn at plain exposure; between the two, part way.
+    this.renderer.toneMappingExposure = garden + (1 - garden) * this.xrayBlend;
+  }
+
+  /**
+   * The picture's grade: the Look card's colour and glow and the night's
+   * cast for the garden, the L-system view's own plain grade for it, and,
+   * while the scan passes, part of each, so neither changes under the other.
+   */
+  private applyGrade(): void {
+    if (!this.renderer) return;
+    const b = this.xrayBlend;
+    const look = this.lastLook;
+    this.post.setNight(this.nightness * (1 - b));
+    this.post.setColour((look?.colour ?? 1) * (1 - b) + b);
+    this.post.setGlow((look?.bloom ?? 0.5) * (1 - b) + this.xrayGlow() * b);
+    this.updateExposure();
   }
 
   /** Show or hide the rainbow; it fades either way. */
@@ -1072,9 +1081,9 @@ export class TreeStudio {
   /** Day or night; the change takes a few seconds, like a dusk. */
   setNight(on: boolean): void {
     this.xray?.setNight(on ? 1 : 0);
-    if (this.xrayOn) this.post.setGlow(on ? XRAY_NIGHT_GLOW : 0);
     if ((on ? 1 : 0) !== this.nightTarget) this.emit({ kind: on ? 'nightfall' : 'daybreak', x: 0, y: 0, z: 0 });
     this.nightTarget = on ? 1 : 0;
+    if (this.xrayBlend > 0) this.applyGrade();
     this.flock.roost(on);
   }
 
@@ -1083,7 +1092,7 @@ export class TreeStudio {
     this.nightness += (this.nightTarget - this.nightness) * (1 - Math.exp(-dt / 1.3));
     if (Math.abs(this.nightTarget - this.nightness) < 2e-3) this.nightness = this.nightTarget;
     this.tree.uniforms.night.value = this.nightness;
-    if (!this.xrayOn) this.post.setNight(this.nightness);
+    this.post.setNight(this.nightness * (1 - this.xrayBlend));
     this.fireflies.visible = this.nightness > 0.01;
     if (this.skyNow) this.applySkyNow(this.skyNow);
   }
@@ -1091,7 +1100,12 @@ export class TreeStudio {
   // ------------------------------------------------------- the L-system view
 
   private xray: XrayView | null = null;
+  /** The L-system view is wanted (it may still be coming in, or going). */
   private xrayOn = false;
+  /** The garden is on screen, all of it or above the scan: everything it needs drawing is drawn. */
+  private gardenShown = true;
+  /** How much of the grade is the view's, 0–1 (see `applyGrade`); it follows the scan. */
+  private xrayBlend = 0;
   /**
    * Room kept clear at the sides for panels, in pixels: the picture is
    * framed into what is left, and its centre moved there.
@@ -1114,39 +1128,62 @@ export class TreeStudio {
     return this.xrayOn;
   }
 
+  /** The view is all there is on screen, and can be pointed at. */
+  private get xrayReady(): boolean {
+    return this.xrayOn && !this.gardenShown && !(this.xray?.scanRunning ?? false);
+  }
+
   /**
-   * The garden, or only its tree's structure. Everything of the garden is
-   * put away at once (it is one group); the background becomes a plain page,
-   * the picture loses its focus blur, grain and night grading, and the water,
-   * the sky's light probe and the shadows stop being drawn, since there is
-   * nothing to show them. Coming back puts the look back as it was.
+   * The garden, or only its tree's structure: the change made in place.
+   *
+   * Going in, the bones are put exactly where the garden's wood is, grown as
+   * far and bending in the same wind, and a scan passes up the screen: below
+   * it the page is laid over the garden and the bones drawn over the wood,
+   * above it the garden is still there. The picture's grade passes from the
+   * garden's to the view's with it. When it has gone over the top, the
+   * garden is put away (it is one group), and the bones let go of the wind
+   * and finish growing.
+   *
+   * Coming back is the same the other way: the bones take up the garden's
+   * growth and wind again, the garden is put back under the page, and the
+   * scan passes down, uncovering it. Resolves when the scan has passed.
    */
-  setXray(on: boolean): void {
+  async setXray(on: boolean): Promise<void> {
     if (!this.renderer || on === this.xrayOn) return;
     this.xrayOn = on;
     const x = this.ensureXray();
-    x.group.visible = on;
-    this.garden.visible = !on;
-    // (The sun keeps casting: switching a light's shadow off releases its
-    // map, and switching it back on then fails. Nothing in the view takes a
-    // shadow, and the map is only redrawn when asked, which the view does not.)
-    this.scene.backgroundNode = on ? x.backgroundNode : this.sky.backgroundNode;
+    this.canvas.style.cursor = '';
+    this.settle(2500);
     if (on) {
       x.setNight(this.nightTarget);
       x.settleTheme();
+      x.standIn(this.growth);
+      x.group.visible = true;
       this.post.setFocusBlur(false);
       this.post.setGrain(false);
-      this.post.setNight(0);
-      this.post.setColour(1);
-      this.post.setGlow(this.xrayGlow());
-      this.canvas.style.cursor = '';
+      await x.scan(true, SCAN_SECONDS);
+      if (!this.xrayOn) return;
+      this.gardenShown = false;
+      this.garden.visible = false;
+      this.scene.backgroundNode = x.backgroundNode;
+      this.xrayBlend = 1;
+      this.applyGrade();
+      x.letGo(1.4);
     } else {
-      this.canvas.style.cursor = '';
+      x.takeUp(this.growth, 0.5);
+      this.gardenShown = true;
+      this.garden.visible = true;
+      this.scene.backgroundNode = this.sky.backgroundNode;
+      // The crown, where the wind moves it most, is where the scan starts: it is bending again first.
+      await new Promise((r) => setTimeout(r, 420));
+      if (this.xrayOn) return;
+      await x.scan(false, SCAN_SECONDS);
+      if (this.xrayOn) return;
+      x.group.visible = false;
+      this.xrayBlend = 0;
       if (this.lastLook) this.applyLook(this.lastLook);
-      this.post.setNight(this.nightness);
+      else this.applyGrade();
     }
-    this.updateExposure();
-    this.settle(1500);
   }
 
   /**
@@ -1161,7 +1198,7 @@ export class TreeStudio {
   /** The view, made the first time it is wanted: it may be handed a tree before it is shown. */
   private ensureXray(): XrayView {
     if (!this.xray) {
-      this.xray = new XrayView();
+      this.xray = new XrayView(this.tree.uniforms);
       this.xray.group.visible = this.xrayOn;
       this.xray.setNight(this.nightTarget);
       this.xray.settleTheme();
@@ -1170,9 +1207,21 @@ export class TreeStudio {
     return this.xray;
   }
 
-  /** Show the tree after some rewrites, grown in over `seconds`. */
-  showSkeleton(data: SkeletonData, seconds = 1.2): void {
+  /** Show the tree after some rewrites, turned into from the one on show over `seconds` (see `XrayView.setSkeleton`). */
+  showSkeleton(data: SkeletonData, seconds = 0.6): void {
     this.ensureXray().setSkeleton(data, seconds, { radius: this.treeRadius });
+  }
+
+  /** What colour says in the L-system view. */
+  setXrayLens(lens: Lens): void {
+    this.ensureXray().setLens(lens);
+  }
+
+  /** Light, for a while, everything one production drew (its index; -1 the axiom), or put the pick back with null. */
+  showMadeBy(rule: number | null): void {
+    const x = this.xray;
+    if (!x) return;
+    x.show(rule === null ? null : x.madeBy(rule));
   }
 
   /** Light a branch in the L-system view, by the node at the end of one of its segments (-1: none). */
@@ -1188,12 +1237,6 @@ export class TreeStudio {
   /** The nodes of the branch a node belongs to, as the view lights it. */
   branchNodes(node: number): number[] {
     return this.xray ? [...this.xray.branchOf(node)] : [];
-  }
-
-  /** The skeleton on show, and each node's path length from the root. */
-  get xraySkeleton(): { data: SkeletonData; arc: Float32Array } | null {
-    const x = this.xray;
-    return x?.skeleton && x.arcs ? { data: x.skeleton, arc: x.arcs } : null;
   }
 
   /** Leave room for panels this many pixels wide at the left and the right: the picture slides to stay centred in what is left. */
@@ -1275,7 +1318,7 @@ export class TreeStudio {
   private readonly onCanvasUp = (e: PointerEvent): void => {
     const at = this.pressAt;
     this.pressAt = null;
-    if (!this.xrayOn || !at || Math.hypot(e.clientX - at.x, e.clientY - at.y) > 6) return;
+    if (!this.xrayReady || !at || Math.hypot(e.clientX - at.x, e.clientY - at.y) > 6) return;
     const rect = this.canvas.getBoundingClientRect();
     const ndc = new Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.onXrayPick?.(this.pickAt(ndc));
@@ -1634,8 +1677,8 @@ export class TreeStudio {
     }
     // One clock for anything the CPU and the shader both have to agree on.
     this.tree.tick(dt);
-    if (this.xrayOn) this.updateXrayHover();
-    else this.updateHover(dt);
+    if (this.xrayReady) this.updateXrayHover();
+    else if (!this.xrayOn) this.updateHover(dt);
     this.flock.update(dt);
     this.meadow.update(dt);
     this.pond.update(dt, this.seasonTarget.ducks, this.pointOnWater());
@@ -1644,7 +1687,15 @@ export class TreeStudio {
 
     this.easeSky(dt);
     this.easeNight(dt);
-    if (this.xrayOn) this.xray?.tick(dt);
+    const x = this.xray;
+    if (x?.group.visible) {
+      x.tick(dt);
+      // The grade follows the scan across the screen.
+      if (x.scanRunning) {
+        this.xrayBlend = x.coverage;
+        this.applyGrade();
+      }
+    }
     this.easeInset(dt);
     this.hear(dt);
     this.post.tick(dt);
@@ -1678,13 +1729,13 @@ export class TreeStudio {
 
     // Re-render the environment cube before the frame that needs it, and only
     // when the sun has actually moved.
-    if (!this.xrayOn) this.sky.refresh(this.renderer);
+    if (this.gardenShown) this.sky.refresh(this.renderer);
     // The shadow map is redrawn at most thirty times a second. It does not
     // depend on the view — it is fitted to the tree and the sun — so turning
     // the camera never needs a new one; only the swaying crown does, and at
     // thirty a second that is smooth. At sixty frames a second it halves the
     // work of drawing the whole tree a second time, which is battery.
-    if (!this.xrayOn && timeMs - this.shadowDrawnAt >= 1000 / 30 - 3) {
+    if (this.gardenShown && timeMs - this.shadowDrawnAt >= 1000 / 30 - 3) {
       this.sun.shadow.needsUpdate = true;
       this.shadowDrawnAt = timeMs;
     }
@@ -1692,15 +1743,21 @@ export class TreeStudio {
     // The aurora's small picture is drawn for this frame's view first, and
     // not at all while there is none to see.
     const aurora = this.auroraSky;
-    if (aurora && this.auroraReady && !this.xrayOn) {
+    if (aurora && this.auroraReady && this.gardenShown) {
       aurora.dome.visible = this.aurora > 0.002;
       if (aurora.dome.visible) {
         aurora.dome.position.copy(this.camera.position);
         aurora.update(this.camera);
       }
     }
-    // The L-system view has no water to mirror anything in.
-    if (!this.xrayOn) this.pond.reflect(this.renderer, this.scene, this.camera);
+    // The L-system view has no water to mirror anything in; and the garden's
+    // water does not mirror the view while the scan is passing over it.
+    if (this.gardenShown) {
+      const shown = x?.group.visible ?? false;
+      if (x) x.group.visible = false;
+      this.pond.reflect(this.renderer, this.scene, this.camera);
+      if (x) x.group.visible = shown;
+    }
     this.post.render();
 
     if (this.pendingCapture) {
