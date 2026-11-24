@@ -54,6 +54,7 @@ import {
   normalize,
   positionGeometry,
   positionView,
+  positionWorld,
   pow,
   screenCoordinate,
   screenUV,
@@ -101,6 +102,8 @@ interface Theme {
   shadow: number;
   /** The scan's line. */
   scan: number;
+  /** The light along the drawing's edges: by night, the moon's. */
+  edge: number;
 }
 
 const DAY: Theme = {
@@ -116,20 +119,33 @@ const DAY: Theme = {
   bottom: 0xeee5d3,
   shadow: 0x9c8a66,
   scan: 0x9d88d8,
+  edge: 0xffffff,
 };
 
+/*
+ * Night is not the day drawing inverted (pale lines lit from inside on a
+ * dark page, the trunk the brightest thing there): it is a tree by
+ * moonlight. The wood keeps deep colours, darkest at the trunk; the moon,
+ * high and to one side, silvers its edges; the sky is lighter toward the
+ * horizon behind the trunk, so the tree stands against it; and the only
+ * warm light is a lantern's, on whatever is picked.
+ */
 const NIGHT: Theme = {
-  // Candle gold at the trunk, through sea-glass, to lavender at the tips.
-  ramp: [0xe8c98a, 0x8fbcc4, 0x7fb59a, 0xb7a2e0],
-  ages: [0xf0c07a, 0xe2988a, 0xa3a7ee, 0x8ee2c4],
-  rules: [0xe7dabd, 0xf29f7f, 0xb5dc8a, 0x8ec5ef, 0xd5a5ea, 0xf1d17a, 0x84dbca, 0xf19eae],
-  tip: 0xd9c9f2,
-  lit: 0xf6b354,
-  hover: 0xd7a868,
-  top: 0x1c2336,
-  bottom: 0x0c1019,
+  // Dark mauve slate at the trunk, through slate blue and moonlit sage, to mist at the tips.
+  ramp: [0x4a4459, 0x4a6280, 0x56807a, 0x93aeb4],
+  // Heartwood violet to this year's shoots, pale green in the moonlight.
+  ages: [0x523f68, 0x5f5f98, 0x4893a2, 0x93d8b8],
+  // Jewels, not pastels: silver for the axiom, then coral, jade, sapphire, amethyst, amber, aqua, rose.
+  rules: [0xaaa6c0, 0xd97a60, 0x6cc47c, 0x5b9de0, 0xb184e0, 0xddb355, 0x55c4b6, 0xdc7d9e],
+  tip: 0xb9c6dc,
+  lit: 0xffb45a,
+  hover: 0xd9a86a,
+  // The page is dark at the top and lightens toward the horizon.
+  top: 0x070a14,
+  bottom: 0x1b2139,
   shadow: 0x000000,
   scan: 0xc9b8ff,
+  edge: 0xc4d3ff,
 };
 
 const hex = (h: number) => `#${h.toString(16).padStart(6, '0')}`;
@@ -182,6 +198,7 @@ function themeUniforms(front: XrayHost['front']) {
     bottom: pair(DAY.bottom, NIGHT.bottom),
     shadow: pair(DAY.shadow, NIGHT.shadow),
     scan: pair(DAY.scan, NIGHT.scan),
+    edge: pair(DAY.edge, NIGHT.edge),
     /**
      * The scan's front, as a fraction of the screen's height from the
      * bottom: below it the view, above it the garden. Past the top, all
@@ -386,20 +403,33 @@ function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: FloatUniform
   const byRule = mix(element(u.rules.day), element(u.rules.night), u.night);
   let col = byDepth.mul(u.byDepth).add(byAge.mul(u.byAge)).add(byRule.mul(u.byRule));
   // A tip is paler, as a bud is; not when colour is naming productions, where it would be a lie.
-  if (beads) col = mix(col, pick(u, u.tip), tip.mul(0.55).mul(float(1).sub(u.byRule)));
+  if (beads) col = mix(col, pick(u, u.tip), tip.mul(mix(float(0.55), float(0.22), u.night)).mul(float(1).sub(u.byRule)));
 
   const n = normal.normalize();
-  const light = normalize(vec3(0.35, 0.85, 0.45));
-  const lambert = max(dot(n, light), 0);
+  // By day one soft light from above and a little in front; by night the
+  // moon, high and off to the left, and less light everywhere it is not.
+  const sun = normalize(vec3(0.35, 0.85, 0.45));
+  const moon = normalize(vec3(-0.55, 0.72, 0.42));
+  const lambert = max(dot(n, mix(sun, moon, u.night).normalize()), 0);
   const nView = cameraViewMatrix.mul(vec4(n, 0)).xyz.normalize();
   const rim = pow(float(1).sub(abs(nView.z)), 2.2);
-  const shade = mix(float(0.62), float(0.5), u.night).add(lambert.mul(mix(float(0.42), float(0.36), u.night)));
+  const shade = mix(float(0.62), float(0.3), u.night).add(lambert.mul(mix(float(0.42), float(0.62), u.night)));
   const lit = mark.greaterThan(0.75);
   const hovered = mark.greaterThan(0.25).and(lit.not());
-  // By day the edges are inked, darker, as a drawing's are; by night they glow.
+  // By day the edges are inked, darker, as a drawing's are; by night the
+  // moon silvers them, more on the side it is on.
   const inked = col.mul(shade).mul(float(1).sub(rim.mul(0.35)));
-  const glowing = col.mul(shade).add(rim.mul(0.32).mul(col.add(0.2)));
-  let base = mix(inked, glowing, u.night);
+  const moonward = float(0.45).add(max(dot(n, moon), 0).mul(0.75));
+  // And the crown as a whole has a lit side and a shadowed one: the side
+  // toward the moon brighter, the far side darker, whatever way each twig faces.
+  const across = positionWorld.xz.dot(moon.xz.normalize()).div(u.cueDepth).clamp(-1, 1);
+  const crownLight = float(1).add(across.mul(0.28));
+  const moonlit = col
+    .mul(shade)
+    .add(pick(u, u.edge).mul(rim.mul(moonward).mul(0.5)))
+    .add(col.mul(rim.mul(0.1)))
+    .mul(crownLight);
+  let base = mix(inked, moonlit, u.night);
   const page = mix(pick(u, u.bottom), pick(u, u.top), 0.5);
   // The far side of the crown falls back toward the page, the near side
   // stays inked: the crown reads as a volume, not a flat mass of twigs.
