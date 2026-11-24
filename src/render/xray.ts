@@ -319,7 +319,7 @@ function swayed(u: ThemeUniforms, host: XrayHost, placed: V3, centre: V3, packed
 function boneMaterial(u: ThemeUniforms, host: XrayHost, d: { morph: FloatUniform; fade: FloatUniform; hair: FloatUniform }, beads: boolean): MeshBasicNodeMaterial {
   const m = new MeshBasicNodeMaterial();
   const v4 = (name: string) => attribute<'vec4'>(name, 'vec4');
-  const kind = v4('iKind'); // age (0–1), production slot, mark, —
+  const kind = v4('iK'); // age (0–1), production slot, mark, —
   const mark = kind.z;
   // What is lit is thickened by a few hairs, so a picked twig reads as surely
   // as a limb, and a limb (already plain to see) hardly changes; what is
