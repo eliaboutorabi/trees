@@ -7,10 +7,11 @@
  */
 import { TAPER, type TreeStructure } from './build';
 import { Anatomy } from './lsystem';
+import { computeSway } from './sway';
 
 export type AnatomyRequest =
   | { id: number; kind: 'load'; params: TreeStructure; maxModules: number }
-  | { id: number; kind: 'skeleton'; n: number }
+  | { id: number; kind: 'skeleton'; n: number; from?: number }
   | { id: number; kind: 'branch'; n: number; node: number };
 
 let anatomy: Anatomy | null = null;
@@ -49,10 +50,46 @@ self.onmessage = (event: MessageEvent<AnatomyRequest>) => {
       const radius = s.radius.slice();
       const order = s.order.slice();
       const module = s.module.slice();
-      reply(
-        { id: req.id, result: { step: req.n, count: s.count, pos, parent, radius, order, module, height: s.height, radiusXZ: s.radiusXZ } },
-        [pos.buffer, parent.buffer, radius.buffer, order.buffer, module.buffer],
-      );
+      const { age, rule } = anatomy.provenance(req.n);
+      const { flex, pend } = computeSway(s);
+      const result = {
+        step: req.n,
+        count: s.count,
+        pos,
+        parent,
+        radius,
+        order,
+        module,
+        age: age.slice(),
+        rule: rule.slice(),
+        flex,
+        pend,
+        height: s.height,
+        radiusXZ: s.radiusXZ,
+        morph: undefined as undefined | { from: number; grow: boolean; pos: Float32Array; radius: Float32Array },
+      };
+      const transfer: Transferable[] = [pos.buffer, parent.buffer, radius.buffer, order.buffer, module.buffer, result.age.buffer, result.rule.buffer, flex.buffer, pend.buffer];
+      // From another step of the same derivation: where each node was, or is going.
+      const from = req.from;
+      if (from !== undefined && from !== req.n && from >= 0 && from <= anatomy.steps) {
+        const grow = from < req.n;
+        const big = grow ? req.n : from;
+        const small = grow ? from : req.n;
+        const map = anatomy.ancestors(big, small);
+        const there = anatomy.skeleton(small);
+        const mpos = new Float32Array(map.length * 3);
+        const mradius = new Float32Array(map.length);
+        for (let i = 0; i < map.length; i++) {
+          const j = map[i];
+          mpos[i * 3] = there.pos[j * 3];
+          mpos[i * 3 + 1] = there.pos[j * 3 + 1];
+          mpos[i * 3 + 2] = there.pos[j * 3 + 2];
+          mradius[i] = there.radius[j];
+        }
+        result.morph = { from, grow, pos: mpos, radius: mradius };
+        transfer.push(mpos.buffer, mradius.buffer);
+      }
+      reply({ id: req.id, result }, transfer);
       return;
     }
     if (req.kind === 'branch') {

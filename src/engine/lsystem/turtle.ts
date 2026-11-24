@@ -25,6 +25,12 @@ export interface Skeleton {
   arc: Float32Array;
   /** Which module of the word drew each node (its `F`), or -1 for the root and gaps. */
   module: Int32Array;
+  /**
+   * The node the turtle stood on after reading each module of the word, when
+   * asked for (`recordAt`): where a module that draws nothing (an apex, a
+   * turn) is in the tree. -1 for any module past where drawing stopped.
+   */
+  at?: Int32Array;
   count: number;
 
   leaves: LeafPlacement[];
@@ -72,6 +78,8 @@ export interface TurtleOptions {
   taper?: number;
   rng: Rng;
   maxSegments?: number;
+  /** Keep, for every module, the node the turtle stood on after it (see `Skeleton.at`). */
+  recordAt?: boolean;
 }
 
 const DEG = Math.PI / 180;
@@ -117,6 +125,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
   const leaves: LeafPlacement[] = [];
   /** The module being read, so each node can say which one drew it. */
   let reading = -1;
+  const at = opts.recordAt ? new Int32Array(word.length).fill(-1) : undefined;
 
   const pushNode = (p: Vector3, parentIndex: number, r: number, o: number, a: number, width = 0): number => {
     source.push(reading);
@@ -311,6 +320,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
         break;
     }
     if (truncated) break;
+    if (at) at[w] = state.node;
   }
 
   const count = parent.length;
@@ -341,6 +351,7 @@ export function interpret(word: Module[], opts: TurtleOptions): Skeleton {
     order: Uint8Array.from(order),
     arc: Float32Array.from(arc),
     module: Int32Array.from(source),
+    at,
     count,
     leaves,
     maxArc: maxArc || 1,

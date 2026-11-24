@@ -7,7 +7,7 @@ import { interpret, type Skeleton } from './turtle';
 export type { Module, Production } from './grammar';
 export type { Skeleton, LeafPlacement } from './turtle';
 export { Anatomy } from './anatomy';
-export type { BranchDetail, LineageStep, StepSummary, Token } from './anatomy';
+export type { BranchDetail, LineageStep, Provenance, StepSummary, Token } from './anatomy';
 export * from './presets';
 
 export interface TreeConfig {

@@ -67,6 +67,16 @@ export interface BranchDetail {
   lineage: LineageStep[];
 }
 
+/** Where each segment of a tree came from: when its wood was first drawn, and by which production. */
+export interface Provenance {
+  /** The rewrite after which the segment's wood was first drawn (0: it is in the axiom). */
+  age: Uint8Array;
+  /** The production that first drew it (an index into the productions), or -1 for the axiom. */
+  rule: Int16Array;
+}
+
+const draws = (s: string | undefined) => s === 'F' || s === 'G';
+
 const round = (v: number) => Math.round(v * 100) / 100;
 const tokenOf = (m: Module): Token => ({ s: m.s, p: m.p.map(round) });
 
@@ -80,6 +90,7 @@ export class Anatomy {
   readonly issues: GrammarIssue[];
   readonly truncated: boolean;
   private readonly skeletons = new Map<number, Skeleton>();
+  private readonly provenances = new Map<number, Provenance>();
 
   constructor(private readonly cfg: TreeConfig) {
     this.issues = [];
@@ -128,10 +139,71 @@ export class Anatomy {
         taper: cfg.taper ?? 0,
         rng: mulberry32(cfg.seed + 1),
         maxSegments: cfg.maxSegments,
+        recordAt: true,
       });
       this.skeletons.set(step, s);
     }
     return s;
+  }
+
+  /**
+   * For every segment of the tree after `n` rewrites, when its wood first
+   * appeared and which production put it there. A segment is followed back
+   * through its module's ancestors for as long as they were themselves drawn
+   * (an `F` carried over, or rewritten into another `F`, is the same wood
+   * growing on); the first ancestor that drew nothing (an apex) is where it
+   * began, and the production that rewrote that apex is what made it.
+   */
+  provenance(n: number): Provenance {
+    const step = Math.max(0, Math.min(this.steps, n));
+    let p = this.provenances.get(step);
+    if (p) return p;
+    const sk = this.skeleton(step);
+    const { words, origin, rule: made } = this.history;
+    const age = new Uint8Array(sk.count);
+    const rule = new Int16Array(sk.count).fill(-1);
+    for (let i = 0; i < sk.count; i++) {
+      let a = sk.module[i];
+      if (a < 0) continue;
+      let k = step;
+      while (k > 0) {
+        const prev = origin[k - 1][a];
+        if (draws(words[k - 1][prev]?.s)) {
+          a = prev;
+          k--;
+          continue;
+        }
+        rule[i] = made[k - 1][a];
+        break;
+      }
+      age[i] = Math.min(255, k);
+    }
+    p = { age, rule };
+    this.provenances.set(step, p);
+    return p;
+  }
+
+  /**
+   * Where each node of the tree after `n` rewrites stood after `m` (fewer):
+   * the node of that earlier tree the turtle was on when it read the module
+   * this one descends from. A rewritten apex sprouts from where the apex
+   * was; an `F` that became two starts as the one it was. This is what lets
+   * one step of the derivation turn into the next in front of you.
+   */
+  ancestors(n: number, m: number): Int32Array {
+    const big = this.skeleton(n);
+    const small = this.skeleton(m);
+    const { origin } = this.history;
+    const at = small.at;
+    const out = new Int32Array(big.count);
+    for (let i = 0; i < big.count; i++) {
+      let a = big.module[i];
+      if (a < 0) continue;
+      for (let k = n; k > m && a >= 0; k--) a = origin[k - 1][a];
+      const node = at && a >= 0 ? at[a] : -1;
+      out[i] = node >= 0 ? node : 0;
+    }
+    return out;
   }
 
   /** Every step summed up, with its small drawing, all to the scale of the finished tree. */

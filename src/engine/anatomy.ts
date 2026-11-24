@@ -34,8 +34,22 @@ export interface SkeletonData {
   order: Uint8Array;
   /** Which module of the word drew each node. */
   module: Int32Array;
+  /** The rewrite after which each node's wood was first drawn (see `Anatomy.provenance`). */
+  age: Uint8Array;
+  /** The production that first drew it, or -1 for the axiom. */
+  rule: Int16Array;
+  /** How each node answers the wind, as the garden's tree does (see `sway.ts`). */
+  flex: Float32Array;
+  pend: Float32Array;
   height: number;
   radiusXZ: number;
+  /**
+   * Asked for from another step: where each node came from (`grow`, the
+   * earlier step's node it descends from, one per node of this tree) or,
+   * going back, where each node of that later tree goes in this one (one per
+   * node of that tree). Positions and radii.
+   */
+  morph?: { from: number; grow: boolean; pos: Float32Array; radius: Float32Array };
 }
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
@@ -69,9 +83,9 @@ export class AnatomyClient {
     return this.ask({ kind: 'load', params: { ...params }, maxModules });
   }
 
-  /** The tree after `n` rewrites. */
-  skeleton(n: number): Promise<SkeletonData> {
-    return this.ask({ kind: 'skeleton', n });
+  /** The tree after `n` rewrites; and, given the step on show, how to turn that one into it. */
+  skeleton(n: number, from?: number): Promise<SkeletonData> {
+    return this.ask({ kind: 'skeleton', n, from });
   }
 
   /** Everything about the segment `node` of the tree after `n` rewrites: its symbols, and how it came to be. */
