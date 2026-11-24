@@ -7,6 +7,8 @@
    * branch is picked, the branch: the symbols it is written in, what it
    * measures, and how it came to be, rewrite by rewrite, back to the axiom.
    */
+  import { fly } from 'svelte/transition';
+  import { cubicIn } from 'svelte/easing';
   import type { LineageStep, StepSummary } from '../../engine';
   import type { Lens } from '../../render/xray';
   import type { XrayController } from './controller.svelte';
@@ -153,7 +155,7 @@
   <span class="mark" class:coloured={lens === 'rule'} style="--c: {ruleColour(i)}">{i < 0 ? 'ω' : i + 1}</span>
 {/snippet}
 
-<aside class="xray-panel xray-theme" class:night aria-label="The L-system">
+<aside class="xray-panel xray-theme" class:night aria-label="The L-system" out:fly|global={{ x: -18, duration: 260, easing: cubicIn }}>
   <header>
     <h2>L-system</h2>
     <p class="sub">

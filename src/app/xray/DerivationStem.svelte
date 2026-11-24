@@ -6,6 +6,8 @@
    * down it, and the tree turns into itself as it stood after that many
    * rewrites; play, and it grows through them all, one into the next.
    */
+  import { fly } from 'svelte/transition';
+  import { cubicIn } from 'svelte/easing';
   import Glyph from '../components/Glyph.svelte';
 
   interface Props {
@@ -63,7 +65,7 @@
   }
 </script>
 
-<div class="stem xray-theme" class:night data-keep-clear data-tour="xray-steps">
+<div class="stem xray-theme" class:night data-keep-clear data-tour="xray-steps" out:fly|global={{ x: 16, duration: 260, easing: cubicIn }}>
   <span class="n"><i>n</i> = {step}</span>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div

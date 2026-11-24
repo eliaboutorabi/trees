@@ -316,6 +316,8 @@
   }
 
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /** Seconds the picture takes to move over for the notes, or back: the camera and the framing as one glide. */
+  const MAKE_ROOM = 1.3;
 
   async function setXray(on: boolean) {
     if (on === xrayOn || xrayBusy || !studio) return;
@@ -335,8 +337,8 @@
         await s.setXray(true);
         xrayReady = true;
         const phone = window.innerWidth <= 640;
-        s.setInset(panelInset(), phone ? 0 : 88, phone ? window.innerHeight * 0.38 + 90 : 0);
-        s.frameTree(true);
+        s.setInset(panelInset(), phone ? 0 : 88, phone ? window.innerHeight * 0.38 + 90 : 0, MAKE_ROOM);
+        s.frameTree(true, MAKE_ROOM);
       } else {
         const x = xc;
         xrayReady = false;
@@ -347,8 +349,8 @@
         sonic.xrayOut();
         sound?.setXray(false);
         xrayOn = false;
-        s.setInset(0, 0, 0);
-        s.frameTree(true);
+        s.setInset(0, 0, 0, MAKE_ROOM);
+        s.frameTree(true, MAKE_ROOM);
         // The garden's tree is the last step: the view turns back into it before it goes.
         if (x && x.step !== x.steps) {
           await x.show(x.steps);
@@ -1055,8 +1057,8 @@
           onstop={() => xc?.stop()}
         />
       {/if}
-      <!-- Kept, only hidden, in the L-system view, so it remembers its hints were seen. -->
-      <div class="keep" class:away={xrayReady}>
+      <!-- Kept, only faded out, in the L-system view, so it remembers its hints were seen. -->
+      <div class="keep" class:away={xrayOn}>
         <GrowthStem value={growth} onscrub={scrub} bind:holding={scrubbing} onreplay={replay} onregrow={redraw} onhelp={(part) => startTour(['grow'], `grow-${part}`)} />
       </div>
       <QuickBar
@@ -1947,7 +1949,12 @@
   .keep {
     display: contents;
   }
-  .keep.away {
-    display: none;
+  /* The growth stem steps aside as the view comes in, and back as it goes: faded, not removed. */
+  .keep > :global(*) {
+    transition: opacity 0.45s ease;
+  }
+  .keep.away > :global(*) {
+    opacity: 0;
+    pointer-events: none;
   }
 </style>
